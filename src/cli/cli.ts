@@ -1264,6 +1264,11 @@ program
     "Write command output to a file instead of stdout",
   )
   .option(
+    "-f, --file <path>",
+    "Attach a local file to the prompt for `agent run` (repeatable)",
+    (value: string, previous: string[] = []) => [...previous, value],
+  )
+  .option(
     "--stream",
     "Stream response tokens to stdout as they arrive (default: true)",
     true,

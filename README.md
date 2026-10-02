@@ -59,6 +59,9 @@ npx shadow-claw agent --workspace ./my-project run "list the files in this direc
 # Pipe plain text into an agent tool (auto-mapped to tool schema)
 echo "how are you doing today" | npx shadow-claw agent tool rewrite_text
 
+# Attach local files (repeatable) without sharing a workspace
+npx shadow-claw agent run "Compare these" -f a.png -f b.png
+
 # Combine CLI prompt with piped document content and save to file
 cat doc.txt | npx shadow-claw agent run "Summarize this" -o summary.txt
 
@@ -332,6 +335,7 @@ npx shadow-claw agent model set [modelId]            # Configure default headles
 npx shadow-claw agent model remote --query <search>  # Search Hugging Face onnx-community repository
 npx shadow-claw agent run "prompt"                   # Run agent prompt (streams stdout, logs to stderr)
 cat doc.txt | npx shadow-claw agent run -o sum.txt   # Pipe document into agent prompt and write to file
+npx shadow-claw agent run "Describe" -f a.png -f b.pdf # Attach one or more local files (repeatable)
 npx shadow-claw agent skills                         # List discovered workspace skills
 npx shadow-claw agent tools                          # List tools with capability matrix
 npx shadow-claw agent tool <name> [jsonArgs]         # Inspect tool schema or execute directly

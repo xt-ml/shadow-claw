@@ -381,13 +381,17 @@ Instructions for make-file
 
   describe("agent run", () => {
     let originalExitCode;
+    let cwdSpy;
 
     beforeEach(() => {
       originalExitCode = process.exitCode;
       process.exitCode = undefined;
+      // Keep the repo's own shadow-claw.config.json out of config resolution.
+      cwdSpy = jest.spyOn(process, "cwd").mockReturnValue(tmpDir);
     });
 
     afterEach(() => {
+      cwdSpy.mockRestore();
       process.exitCode = originalExitCode;
     });
 
@@ -1270,6 +1274,32 @@ describe("runAgentRun — stdin piping", () => {
 
     // Fails on API key — NOT on prompt required
     expect(result.error).not.toMatch(/prompt required/i);
+  });
+});
+
+describe("runAgentRun — --file attachments", () => {
+  let tmpDir;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(path.join(tmpdir(), "sc-agent-file-run-"));
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("returns an error when an attached file does not exist", async () => {
+    const { runAgentRun } = await import("./agent.js");
+
+    const result = await runAgentRun("Describe", {
+      workspace: tmpDir,
+      quiet: true,
+      file: [path.join(tmpDir, "nope.png")],
+      _stdinData: null,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/nope\.png/);
   });
 });
 

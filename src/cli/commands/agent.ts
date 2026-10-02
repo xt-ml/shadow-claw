@@ -27,6 +27,11 @@ import type {
 import { bootstrapHeadlessAgent } from "./agent-bootstrap.js";
 import { handleNativeAiTaskMessage } from "./native-ai-task-handler.js";
 import { readStdin, mapTextToToolInput } from "../utils/stdin.js";
+import {
+  loadCliAttachments,
+  normalizeFileOption,
+} from "../utils/load-cli-attachments.js";
+import { persistMessageAttachments } from "../../content/message-attachments.js";
 
 const BROWSER_ONLY_TOOLS = new Set([
   "ask_user",
@@ -473,7 +478,8 @@ export async function resolveAgentProvider(
   workspaceDir: string,
   options: any = {},
 ): Promise<any> {
-  const contentRoot = options.contentRoot;
+  // Headless runs use an isolated sandbox workspace, so fall back to cwd for config.
+  const contentRoot = options.contentRoot ?? process.cwd();
   const workspaceConfigData = await loadWorkspaceConfig(
     workspaceDir,
     contentRoot,
@@ -493,6 +499,15 @@ export async function resolveAgentProvider(
       db,
       core.CONFIG_KEYS?.PROVIDER || "provider",
     );
+  }
+
+  if (!providerId && options.model) {
+    const { isLlamafile } = await import("../utils/local-models.js");
+    if (isLlamafile(options.model)) {
+      providerId = "llamafile";
+    } else if (/onnx/i.test(options.model)) {
+      providerId = "transformers_js_local";
+    }
   }
 
   if (!providerId) {
@@ -961,6 +976,16 @@ export async function runAgentRun(
     return { success: false, error: errorMsg };
   }
 
+  let attachments: any[] = [];
+  try {
+    const loaded = await loadCliAttachments(normalizeFileOption(options.file));
+    attachments = await persistMessageAttachments(db, groupId, loaded);
+  } catch (err: any) {
+    if (!options.quiet) console.error(err.message);
+    process.exitCode = 1;
+    return { success: false, error: err.message };
+  }
+
   let providerId,
     providerConfig,
     apiKey,
@@ -1042,8 +1067,13 @@ export async function runAgentRun(
     id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     groupId,
     role: "user",
+    sender: "user",
+    channel: "chat",
+    isFromMe: false,
+    isTrigger: true,
     content: prompt,
     timestamp: Date.now(),
+    ...(attachments.length > 0 ? { attachments } : {}),
   };
 
   if (typeof core.saveMessage === "function") {

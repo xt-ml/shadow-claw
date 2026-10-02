@@ -468,6 +468,7 @@ npm run e2e -- --reporter=html
 The build, CLI, prerender, and headless agent test suites live under `src/cli/` and `src/` and run through the project Jest configuration. Coverage includes:
 
 - **CLI Commands & Utilities**: `build`, `dev`, `run`, `serve`, `server`, `init`, `clients`, `send` (`src/cli/commands/send.test.ts` covering prompts, file attachments, and remote replies), `send-file` (`src/cli/commands/send-file.test.ts` covering direct P2P transfers and prompt execution), `backup`, `tasks`, `mcp`, `skills:index`, `webrtc` / `webrtc listen` (`src/cli/commands/webrtc-listen.test.ts` covering orchestration loop dispatch, transfer handling, and ping), `peer-id`, `--version`, `agent` (`src/cli/commands/agent.test.ts` covering init, models, tools, skills, tool execution, remote RFC v0.2.0 imports, and `agent listen`), `agent model` (`src/cli/commands/agent-models.test.ts`), and native AI tasks (`src/cli/commands/native-ai-task-handler.test.ts`).
+- **Agent File Attachments (`agent run -f`)**: Repeatable `-f, --file` loading and MIME inference (`src/cli/utils/load-cli-attachments.test.ts`), missing-file errors (`src/cli/commands/agent.test.ts`), and attachment persistence on the saved user message (`src/cli/commands/agent-file-attachments.test.ts`).
 - **Model Download & Progress Bar Utilities**: Hugging Face ONNX model querying, downloading, and local caching (`src/cli/utils/local-models.test.ts`), terminal progress bar (`src/cli/utils/progress-bar.test.ts`), and cache directory resolution (`src/cli/utils/resolve-cache-dir.test.ts`).
 - **Headless Agent Subsystems**: SQLite database implementation (`src/db/sqlite/*.test.ts`), Node.js filesystem directory handle polyfill (`src/storage/node-fs-handle.test.ts`), headless tool execution, guards, and capability matrix (`src/worker/utils/executeTool.headless.test.ts`, `src/worker/utils/declarativeToolExecutor.test.ts`, `src/worker/utils/guards.test.ts`, `src/worker/tools/builtin-ai/builtin-ai.headless.test.ts`), peer collaboration tools (`src/worker/tools/peer/prompt-peer.test.ts`, `src/worker/tools/workspace/send-file.test.ts`), shared cross-cutting utilities (`src/utils/*.test.ts`), and default provider/model configuration (`src/config/headless.test.ts`).
 - **Host-Native Offline Model Executors**: In-process Node.js Transformers.js execution (`src/worker/tools/node-transformers-executor.test.ts`, `src/server/services/transformers-runtime.test.ts`), Llamafile manager & executor (`src/worker/tools/node-llamafile-executor.test.ts`, `src/server/services/llamafile-manager.test.ts`), and agent invocation loop (`src/worker/utils/handleInvoke.test.ts`).
@@ -477,6 +478,8 @@ NODE_OPTIONS="--no-warnings --experimental-vm-modules" \
   npx jest --runInBand src/cli/cli.test.ts \
   src/cli/commands/agent.test.ts \
   src/cli/commands/agent-models.test.ts \
+  src/cli/commands/agent-file-attachments.test.ts \
+  src/cli/utils/load-cli-attachments.test.ts \
   src/cli/commands/native-ai-task-handler.test.ts \
   src/cli/commands/send.test.ts \
   src/cli/commands/send-file.test.ts \

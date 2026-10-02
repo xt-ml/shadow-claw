@@ -198,34 +198,35 @@ npx shadow-claw agent import https://xt-ml.github.io/shadow-claw-agent-cli-weath
 
 #### Options
 
-| Option                               | Type    | Description                                                                          | Default                                   |
-| :----------------------------------- | :------ | :----------------------------------------------------------------------------------- | :---------------------------------------- |
-| `--workspace <dir>`                  | string  | Workspace directory for file I/O and configuration                                   | isolated sandbox in `tmpdir()`            |
-| `--database-dir <dir>`               | string  | Directory where SQLite databases (`shadow-claw.db`) are stored                       | `<workspace>/database`                    |
-| `--cache-dir <dir>`                  | string  | Custom cache directory for databases, models, and logs                               | `undefined`                               |
-| `--tmp, --temp`                      | boolean | Store cache, token, and databases in OS temporary directory (`tmpdir()`)             | `false`                                   |
-| `-y, --yes`                          | boolean | Skip interactive prompts and accept defaults                                         | `false`                                   |
-| `--group <groupId>`                  | string  | Conversation group identifier                                                        | `"server:main"`                           |
-| `--provider <provider>`              | string  | LLM provider ID (`transformers_js_local`, `openrouter`, `llamafile`, `gemini`, etc.) | auto-resolved (`"transformers_js_local"`) |
-| `--model <model>`                    | string  | Model identifier (e.g. `onnx-community/gemma-3-1b-it-ONNX-GQA`)                      | auto-resolved (curated local default)     |
-| `--download`                         | boolean | Prewarm and download the model during agent init or before execution                 | `false`                                   |
-| `--api-key <key>`                    | string  | API key for cloud providers                                                          | auto-resolved from env                    |
-| `--stream` / `--no-stream`           | boolean | Stream response tokens to stdout as they arrive                                      | `true`                                    |
-| `--progress` / `--no-progress`       | boolean | Show terminal progress bar during model downloads                                    | `true`                                    |
-| `--system-prompt <text>`             | string  | Override system prompt with inline text                                              | `undefined`                               |
-| `--system-prompt-file <file>`        | string  | Load system prompt from a text or markdown file                                      | `undefined`                               |
-| `--tools <tools>`                    | string  | Comma-separated list of tools to enable or import (e.g. `bash,read_file`)            | `undefined`                               |
-| `--skills <skills>`                  | string  | Comma-separated list of skills to filter or import                                   | `undefined`                               |
-| `--scripts <scripts>`                | string  | Comma-separated list of companion scripts to import                                  | `undefined`                               |
-| `--all`                              | boolean | Import all tools, skills, and scripts from discovery manifest                        | `false`                                   |
-| `--overwrite`                        | boolean | Overwrite existing skills, tools, or scripts during import                           | `false`                                   |
-| `--auto-enable` / `--no-auto-enable` | boolean | Automatically enable imported declarative tools in database                          | `true`                                    |
-| `--tools-profile <name>`             | string  | Tools profile to activate (e.g. `__builtin_default`)                                 | `undefined`                               |
-| `-r, --remote`, `--hf`               | boolean | List or search available models from Hugging Face `onnx-community` repository        | `false`                                   |
-| `--query <query>`                    | string  | Filter remote or local models by search query                                        | `undefined`                               |
-| `-v, --verbose`                      | boolean | Enable verbose tool activity and diagnostic logging                                  | `false`                                   |
-| `-o, --output <file>`                | string  | Write command output to a file instead of stdout                                     | `undefined`                               |
-| `-q, --quiet`                        | boolean | Suppress all non-error output                                                        | `false`                                   |
+| Option                               | Type    | Description                                                                             | Default                                   |
+| :----------------------------------- | :------ | :-------------------------------------------------------------------------------------- | :---------------------------------------- |
+| `--workspace <dir>`                  | string  | Workspace directory for file I/O and configuration                                      | isolated sandbox in `tmpdir()`            |
+| `--database-dir <dir>`               | string  | Directory where SQLite databases (`shadow-claw.db`) are stored                          | `<workspace>/database`                    |
+| `--cache-dir <dir>`                  | string  | Custom cache directory for databases, models, and logs                                  | `undefined`                               |
+| `--tmp, --temp`                      | boolean | Store cache, token, and databases in OS temporary directory (`tmpdir()`)                | `false`                                   |
+| `-y, --yes`                          | boolean | Skip interactive prompts and accept defaults                                            | `false`                                   |
+| `--group <groupId>`                  | string  | Conversation group identifier                                                           | `"server:main"`                           |
+| `--provider <provider>`              | string  | LLM provider ID (`transformers_js_local`, `openrouter`, `llamafile`, `gemini`, etc.)    | auto-resolved (`"transformers_js_local"`) |
+| `--model <model>`                    | string  | Model identifier (e.g. `onnx-community/gemma-3-1b-it-ONNX-GQA`)                         | auto-resolved (curated local default)     |
+| `--download`                         | boolean | Prewarm and download the model during agent init or before execution                    | `false`                                   |
+| `--api-key <key>`                    | string  | API key for cloud providers                                                             | auto-resolved from env                    |
+| `--stream` / `--no-stream`           | boolean | Stream response tokens to stdout as they arrive                                         | `true`                                    |
+| `--progress` / `--no-progress`       | boolean | Show terminal progress bar during model downloads                                       | `true`                                    |
+| `--system-prompt <text>`             | string  | Override system prompt with inline text                                                 | `undefined`                               |
+| `--system-prompt-file <file>`        | string  | Load system prompt from a text or markdown file                                         | `undefined`                               |
+| `--tools <tools>`                    | string  | Comma-separated list of tools to enable or import (e.g. `bash,read_file`)               | `undefined`                               |
+| `--skills <skills>`                  | string  | Comma-separated list of skills to filter or import                                      | `undefined`                               |
+| `--scripts <scripts>`                | string  | Comma-separated list of companion scripts to import                                     | `undefined`                               |
+| `--all`                              | boolean | Import all tools, skills, and scripts from discovery manifest                           | `false`                                   |
+| `--overwrite`                        | boolean | Overwrite existing skills, tools, or scripts during import                              | `false`                                   |
+| `--auto-enable` / `--no-auto-enable` | boolean | Automatically enable imported declarative tools in database                             | `true`                                    |
+| `--tools-profile <name>`             | string  | Tools profile to activate (e.g. `__builtin_default`)                                    | `undefined`                               |
+| `-r, --remote`, `--hf`               | boolean | List or search available models from Hugging Face `onnx-community` repository           | `false`                                   |
+| `--query <query>`                    | string  | Filter remote or local models by search query                                           | `undefined`                               |
+| `-v, --verbose`                      | boolean | Enable verbose tool activity and diagnostic logging                                     | `false`                                   |
+| `-o, --output <file>`                | string  | Write command output to a file instead of stdout                                        | `undefined`                               |
+| `-f, --file <path>`                  | string  | Attach a local file to `agent run` (repeatable; images/documents sent as native blocks) | `undefined`                               |
+| `-q, --quiet`                        | boolean | Suppress all non-error output                                                           | `false`                                   |
 
 > **First-Run Cache Directory Wizard:** When running the agent without an explicit `--workspace`, `--cache-dir`, or `--tmp` in a directory where no `.cache` or database exists, ShadowClaw prompts interactively (identical to `dev` and `serve`) to let you choose between the current directory (`.cache`), system temporary storage (`tmpdir()`), or a custom path. Pass `-y`, `--yes`, `--tmp`, or `--workspace <dir>` to skip the prompt.
 
@@ -306,6 +307,21 @@ echo "Summarize: ..." | npx shadow-claw agent run -o summary.txt
 ```
 
 #### Process Interruption & Clean Termination
+
+##### Attaching files to `agent run`
+
+Use `-f, --file <path>` to attach local files without sharing a workspace.
+The flag is repeatable, so multiple files can be attached to a single prompt.
+
+```bash
+npx shadow-claw agent run "Describe these" -f photo.png -f report.pdf
+```
+
+- Each file is read from disk and copied into the conversation group's `attachments/` folder.
+- Attachments are saved on the user message and delivered through the same pipeline as browser attachments.
+- Images, audio, and documents are sent as native blocks when the model supports them, otherwise as metadata placeholders.
+- A missing or unreadable file prints an error to `stderr` and exits with code `1` before the model is called.
+- Combines with the prompt argument and piped stdin.
 
 The CLI runtime installs central termination signal handlers (`SIGINT` code 130, `SIGTERM` code 143, and `exit`) via `registerTerminationCleanup` in `src/cli/cli.ts`. When an agent run or server session is interrupted (e.g. Ctrl+C), all active child processes, Llamafile daemons, and temporary descriptors are terminated cleanly without leaving orphan processes behind.
 

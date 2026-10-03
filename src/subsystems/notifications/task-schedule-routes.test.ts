@@ -95,6 +95,30 @@ describe("task-schedule-routes", () => {
       app._routes.post["/schedule/tasks"](req, res);
       expect(res._status).toBe(400);
     });
+
+    it("stores push_enabled as 1 when pushNotifications is true", () => {
+      const postReq = mockReq({ ...TASK, pushNotifications: true });
+      const postRes = mockRes();
+      app._routes.post["/schedule/tasks"](postReq, postRes);
+      expect(postRes._status).toBe(201);
+
+      const getRes = mockRes();
+      app._routes.get["/schedule/tasks"](mockReq({} as any, {}, {}), getRes);
+      expect(getRes._json).toHaveLength(1);
+      expect(getRes._json[0].push_enabled).toBe(1);
+    });
+
+    it("stores push_enabled as 0 when pushNotifications is omitted or false", () => {
+      const postReq = mockReq(TASK);
+      const postRes = mockRes();
+      app._routes.post["/schedule/tasks"](postReq, postRes);
+      expect(postRes._status).toBe(201);
+
+      const getRes = mockRes();
+      app._routes.get["/schedule/tasks"](mockReq({} as any, {}, {}), getRes);
+      expect(getRes._json).toHaveLength(1);
+      expect(getRes._json[0].push_enabled).toBe(0);
+    });
   });
 
   describe("GET /schedule/tasks", () => {

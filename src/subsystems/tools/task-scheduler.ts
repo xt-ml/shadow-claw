@@ -12,6 +12,10 @@ export interface TaskRunner {
   (task: Task): Promise<void>;
 }
 
+export interface ShouldDeferPredicate {
+  (task: Task): boolean | Promise<boolean>;
+}
+
 /**
  * ShadowClaw — Task Scheduler
  *
@@ -23,10 +27,16 @@ export class TaskScheduler {
   interval: ReturnType<typeof setInterval> | null = null;
   onTaskChange?: () => void;
   runner: TaskRunner;
+  shouldDefer?: ShouldDeferPredicate;
 
-  constructor(runner: TaskRunner, onTaskChange?: () => void) {
+  constructor(
+    runner: TaskRunner,
+    onTaskChange?: () => void,
+    shouldDefer?: ShouldDeferPredicate,
+  ) {
     this.runner = runner;
     this.onTaskChange = onTaskChange;
+    this.shouldDefer = shouldDefer;
   }
 
   /**
@@ -88,6 +98,10 @@ export class TaskScheduler {
           matchesCron(taskSchedule, now) &&
           !this.ranThisMinute(task, now)
         ) {
+          if (this.shouldDefer && (await this.shouldDefer(task))) {
+            continue;
+          }
+
           // Mark as run immediately to prevent double-firing
           await updateTaskLastRun(task.id, now.getTime());
           this.onTaskChange?.();

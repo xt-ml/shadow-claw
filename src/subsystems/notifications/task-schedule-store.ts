@@ -28,6 +28,7 @@ export interface ScheduledTaskRow {
   subscriber_id: string | null;
   name: string | null;
   task_order: number | null;
+  push_enabled: number;
 }
 
 export interface ScheduledTaskInput {
@@ -44,6 +45,7 @@ export interface ScheduledTaskInput {
   subscriberId?: string;
   name?: string;
   order?: number;
+  pushNotifications?: boolean;
 }
 
 function mapRow(row: any): ScheduledTaskRow {
@@ -61,6 +63,7 @@ function mapRow(row: any): ScheduledTaskRow {
     subscriber_id: row.subscriber_id ? `${row.subscriber_id}` : null,
     name: row.name ? `${row.name}` : null,
     task_order: row.task_order == null ? null : Number(row.task_order),
+    push_enabled: Number(row.push_enabled ?? 0),
   };
 }
 
@@ -90,7 +93,8 @@ export function openTaskScheduleStore(
       channel TEXT,
       subscriber_id TEXT,
       name TEXT,
-      task_order INTEGER
+      task_order INTEGER,
+      push_enabled INTEGER NOT NULL DEFAULT 0
     )
   `);
 
@@ -131,6 +135,14 @@ export function openTaskScheduleStore(
     // column already exists
   }
 
+  try {
+    db.exec(
+      "ALTER TABLE scheduled_tasks ADD COLUMN push_enabled INTEGER NOT NULL DEFAULT 0",
+    );
+  } catch {
+    // column already exists
+  }
+
   return db;
 }
 
@@ -156,8 +168,8 @@ export function saveScheduledTask(task: ScheduledTaskInput): void {
 
   db.prepare(
     `INSERT OR REPLACE INTO scheduled_tasks
-       (id, group_id, schedule, type, prompt, tools, enabled, last_run, created_at, channel, subscriber_id, name, task_order)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, group_id, schedule, type, prompt, tools, enabled, last_run, created_at, channel, subscriber_id, name, task_order, push_enabled)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     task.id,
     task.groupId,
@@ -172,6 +184,7 @@ export function saveScheduledTask(task: ScheduledTaskInput): void {
     task.subscriberId ?? null,
     task.name ?? null,
     task.order ?? null,
+    task.pushNotifications ? 1 : 0,
   );
 }
 

@@ -550,6 +550,10 @@ export class OrchestratorStore {
     return this._activityLog.get();
   }
 
+  get taskServerEnabled(): boolean {
+    return this.orchestrator?.taskServerEnabled ?? false;
+  }
+
   /**
    * Get the latest AG-UI event for the active conversation, or null.
    */

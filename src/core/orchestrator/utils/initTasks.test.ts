@@ -64,10 +64,14 @@ const mockRunTaskAsScheduled = jest
 const mockShouldStartLocalScheduler = jest
   .fn<() => Promise<boolean>>()
   .mockResolvedValue(true);
+const mockShouldDeferTaskToServer = jest
+  .fn<(task: Task, state: any) => Promise<boolean>>()
+  .mockResolvedValue(false);
 jest.unstable_mockModule("./operations/task.js", () => ({
   deleteTaskFromServer: jest.fn(),
   runTaskAsScheduled: mockRunTaskAsScheduled,
   shouldStartLocalScheduler: mockShouldStartLocalScheduler,
+  shouldDeferTaskToServer: mockShouldDeferTaskToServer,
   syncTaskToServer: jest.fn(),
   warnIfNoPushSubscription: jest.fn(),
 }));
@@ -126,17 +130,20 @@ const mockSetWebMcpMode = jest.fn<(mode: string) => void>();
 const mockTaskSchedulerStart = jest.fn<() => void>();
 let capturedTaskExecutor: ((task: Task) => Promise<void>) | null = null;
 let capturedTaskOnExecuted: (() => void) | null = null;
+let capturedShouldDefer: ((task: Task) => Promise<boolean>) | null = null;
 
 const mockTaskScheduler = jest
   .fn<
     (
       executor: (task: Task) => Promise<void>,
       onExecuted: () => void,
+      shouldDefer?: (task: Task) => Promise<boolean>,
     ) => { start: () => void; stop: () => void }
   >()
-  .mockImplementation((executor, onExecuted) => {
+  .mockImplementation((executor, onExecuted, shouldDefer) => {
     capturedTaskExecutor = executor;
     capturedTaskOnExecuted = onExecuted;
+    capturedShouldDefer = shouldDefer ?? null;
     return {
       start: mockTaskSchedulerStart,
       stop: jest.fn(),
@@ -1161,9 +1168,9 @@ describe("initTasks", () => {
       );
     });
 
-    it("should not start scheduler when shouldStartLocalScheduler returns false and skip storage when absent", async () => {
+    it("should start scheduler, wire shouldDefer predicate, and skip storage when absent", async () => {
       mockGetConfig.mockResolvedValueOnce(undefined); // no storage handle
-      mockShouldStartLocalScheduler.mockResolvedValueOnce(false);
+      mockTaskSchedulerStart.mockClear();
 
       await initWorkerAndScheduler(
         mockOrchestrator as unknown as Orchestrator,
@@ -1171,7 +1178,25 @@ describe("initTasks", () => {
       );
       await Promise.resolve();
 
-      expect(mockTaskSchedulerStart).not.toHaveBeenCalled();
+      expect(mockTaskSchedulerStart).toHaveBeenCalled();
+      expect(capturedShouldDefer).not.toBeNull();
+
+      const sampleTask: Task = {
+        id: "sample-1",
+        groupId: "g1",
+        schedule: "* * * * *",
+        lastRun: null,
+        prompt: "test",
+        enabled: true,
+        createdAt: 1,
+      };
+
+      await capturedShouldDefer!(sampleTask);
+      expect(mockShouldDeferTaskToServer).toHaveBeenCalledWith(
+        sampleTask,
+        mockOrchestrator,
+      );
+
       expect(mockOrchestrator.agentWorker?.postMessage).not.toHaveBeenCalled();
     });
   });

@@ -152,12 +152,14 @@ flowchart TD
   A[Tick every 60s] --> B[Load enabled tasks from IndexedDB]
   B --> C{For each task}
   C --> D{"Due? cronMatches(now, expression)"}
-  D -->|yes| E{"lastRun < current minute?"}
-  E -->|yes| F[Update lastRun in DB]
-  F --> G[POST to server to record run time]
-  G --> H[Invoke agent: SCHEDULED TASK prefix + task prompt]
-  D -->|no| I[Skip]
-  E -->|no| J[Skip duplicate]
+  D -->|yes| E{"Server deferral eligible?<br>(push opt-in + subscribed + server enabled)"}
+  E -->|yes| F[Skip local run; deferred to server push]
+  E -->|no| G{"lastRun < current minute?"}
+  G -->|yes| H[Update lastRun in DB]
+  H --> I[POST to server to record run time]
+  I --> J[Invoke agent: SCHEDULED TASK prefix + task prompt]
+  D -->|no| K[Skip]
+  G -->|no| L[Skip duplicate]
 ```
 
 **Cron matching** (`src/subsystems/tools/cron.ts`) — shared module evaluating standard 5-field cron expressions:
@@ -171,6 +173,10 @@ min   hour  dom   month  dow
 
 Supports: `*`, `*/n` (step), `n-m` (range), `n,m` (list).
 
+### Task Deferral to Server
+
+The client scheduler runs continuously while the application is open. However, if a scheduled task has explicitly opted into push notifications (`pushNotifications === true`), the browser has an active push subscription, and Server Task Scheduling is enabled in Settings, the client scheduler defers execution of that task to the server scheduler to prevent duplicate local execution. Unchecked tasks (the default) always execute locally while the application or tab is open.
+
 ## Server-Side Task Scheduler
 
 **File:** `src/subsystems/notifications/task-scheduler-server.ts`
@@ -179,40 +185,42 @@ Runs on the Express/Electron server and fires even when no browser tab is open:
 
 1. Ticks every 60 seconds
 2. Queries SQLite for enabled tasks with due cron expressions
-3. For each due task: sends a Web Push notification **scoped strictly to the task's owning `subscriber_id`** (never broadcast globally across all subscribers).
+3. Filters for tasks that have opted in to push notifications (`push_enabled === 1`). Tasks without push enabled are skipped from server broadcast (their `last_run` timestamp is updated to avoid re-evaluating in subsequent ticks).
+4. For each due, opted-in task: sends a Web Push notification **scoped strictly to the task's owning `subscriber_id`** (never broadcast globally across all subscribers).
    - If a task has no `subscriber_id`, the scheduler skips dispatch and logs a warning.
    - If the task's subscriber has no active push subscription, the scheduler skips dispatch without broadcasting to other subscribers.
-4. Service worker receives push, relays to open tabs with `subscriberId`, or shows OS notification
-5. Open tab receives relay → validates that `subscriberId` matches its local subscriber identity, then triggers agent invocation with the task prompt
+5. Service worker receives push, relays to open tabs with `subscriberId`, or shows OS notification
+6. Open tab receives relay → validates that `subscriberId` matches its local subscriber identity, then triggers agent invocation with the task prompt
 
-The server scheduler and client scheduler can both fire for the same task. The `lastRun` timestamp guard (rounded to the minute) prevents double-firing in the common case where a tab is open.
+The server scheduler and client scheduler coordinate via task opt-in: tasks opted into push notifications run via the server, while standard scheduled tasks execute locally when a client session is active.
 
 ## Scheduled Task Store (Client)
 
 Tasks are stored in IndexedDB via `src/db/`:
 
-| Field          | Type          | Purpose                              |
-| -------------- | ------------- | ------------------------------------ |
-| `id`           | string (ULID) | Unique identifier                    |
-| `groupId`      | string        | Owning conversation                  |
-| `name`         | string        | Task display name                    |
-| `type`         | string        | `"prompt"` or `"tools"`              |
-| `prompt`       | string        | Instruction sent to the agent        |
-| `tools`        | string        | JSON serialized tool sequence        |
-| `schedule`     | string        | 5-field cron schedule                |
-| `enabled`      | boolean       | Active/paused                        |
-| `lastRun`      | number        | Unix timestamp of last execution     |
-| `createdAt`    | number        | Unix timestamp                       |
-| `freshContext` | boolean       | Skip history (blank slate) execution |
-| `subagent`     | boolean       | Isolated background execution        |
-| `order`        | number        | Reorder index within the group       |
+| Field               | Type          | Purpose                                                      |
+| ------------------- | ------------- | ------------------------------------------------------------ |
+| `id`                | string (ULID) | Unique identifier                                            |
+| `groupId`           | string        | Owning conversation                                          |
+| `name`              | string        | Task display name                                            |
+| `type`              | string        | `"prompt"` or `"tools"`                                      |
+| `prompt`            | string        | Instruction sent to the agent                                |
+| `tools`             | string        | JSON serialized tool sequence                                |
+| `schedule`          | string        | 5-field cron schedule                                        |
+| `enabled`           | boolean       | Active/paused                                                |
+| `lastRun`           | number        | Unix timestamp of last execution                             |
+| `createdAt`         | number        | Unix timestamp                                               |
+| `freshContext`      | boolean       | Skip history (blank slate) execution                         |
+| `subagent`          | boolean       | Isolated background execution                                |
+| `pushNotifications` | boolean       | Opt-in to receive scheduled task as Web Push (default false) |
+| `order`             | number        | Reorder index within the group                               |
 
 ## Scheduled Task Store (Server)
 
 Mirrored to SQLite on the Express/Electron server for server-side scheduling. Routes:
 
 ```text
-POST   /schedule/tasks                 Create/Update task on server (accepts subscriberId)
+POST   /schedule/tasks                 Create/Update task on server (accepts subscriberId, pushNotifications)
 POST   /schedule/tasks/reorder         Reorder tasks in a group (accepts subscriberId)
 GET    /schedule/tasks                 List all tasks (accepts subscriberId)
 GET    /schedule/tasks/:id             Get single task
@@ -220,6 +228,8 @@ DELETE /schedule/tasks/:id             Delete task (enforces subscriberId owners
 PATCH  /schedule/tasks/:id/enable      Enable task
 PATCH  /schedule/tasks/:id/disable     Disable task
 ```
+
+The server SQLite `scheduled_tasks` table includes a `push_enabled INTEGER NOT NULL DEFAULT 0` column.
 
 Tasks are synced to the server whenever the agent creates/updates/deletes/reorders a scheduled task (guarded by recursion check). The server sync can be globally disabled via the `TASK_SERVER_ENABLED` config flag (managed in Settings). When disabled, tasks only execute locally when the browser tab is open.
 

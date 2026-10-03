@@ -92,7 +92,8 @@ export function openSqliteDatabase(
       freshContext INTEGER,
       subagent INTEGER,
       name TEXT,
-      task_order INTEGER
+      task_order INTEGER,
+      pushNotifications INTEGER
     )
   `);
 
@@ -127,6 +128,7 @@ export function openSqliteDatabase(
   addColumn(raw, "tasks", "subagent", "INTEGER");
   addColumn(raw, "tasks", "name", "TEXT");
   addColumn(raw, "tasks", "task_order", "INTEGER");
+  addColumn(raw, "tasks", "pushNotifications", "INTEGER");
   addColumn(raw, "messages", "freshContext", "INTEGER");
   addColumn(raw, "messages", "subagent", "INTEGER");
 

@@ -89,6 +89,7 @@ export interface Task {
   subagent?: boolean;
   name?: string;
   order?: number;
+  pushNotifications?: boolean;
 }
 
 export interface TaskToolCall {

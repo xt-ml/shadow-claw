@@ -28,6 +28,7 @@ const {
   getTaskFetchOptions,
   runTaskAsScheduled,
   shouldStartLocalScheduler,
+  shouldDeferTaskToServer,
   syncTaskToServer,
   warnIfNoPushSubscription,
 } = await import("./task.js");
@@ -226,6 +227,35 @@ describe("task operations", () => {
 
       consoleError.mockRestore();
     });
+
+    it("sends pushNotifications: false when task.pushNotifications is omitted or false", async () => {
+      await syncTaskToServer(defaultState, scheduledTask);
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:8888/tasks",
+        expect.objectContaining({
+          body: JSON.stringify({
+            ...scheduledTask,
+            pushNotifications: false,
+          }),
+        }),
+      );
+    });
+
+    it("sends pushNotifications: true when task.pushNotifications is true", async () => {
+      await syncTaskToServer(defaultState, {
+        ...scheduledTask,
+        pushNotifications: true,
+      });
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:8888/tasks",
+        expect.objectContaining({
+          body: JSON.stringify({
+            ...scheduledTask,
+            pushNotifications: true,
+          }),
+        }),
+      );
+    });
   });
 
   describe("deleteTaskFromServer", () => {
@@ -397,6 +427,85 @@ describe("task operations", () => {
         configurable: true,
       });
       expect(await shouldStartLocalScheduler()).toBe(true);
+    });
+  });
+
+  describe("shouldDeferTaskToServer", () => {
+    const taskWithPush: Task = {
+      id: "t-push",
+      groupId: "br:main",
+      prompt: "hello",
+      schedule: "*/5 * * * *",
+      enabled: true,
+      lastRun: null,
+      createdAt: 1,
+      pushNotifications: true,
+    };
+
+    const taskWithoutPush: Task = {
+      id: "t-no-push",
+      groupId: "br:main",
+      prompt: "hello",
+      schedule: "*/5 * * * *",
+      enabled: true,
+      lastRun: null,
+      createdAt: 1,
+      pushNotifications: false,
+    };
+
+    it("returns false if taskServerEnabled is false", async () => {
+      const state = { taskServerEnabled: false };
+      expect(await shouldDeferTaskToServer(taskWithPush, state)).toBe(false);
+    });
+
+    it("returns false if task does not have pushNotifications enabled", async () => {
+      const state = { taskServerEnabled: true };
+      expect(await shouldDeferTaskToServer(taskWithoutPush, state)).toBe(false);
+    });
+
+    it("returns false if navigator or serviceWorker is missing", async () => {
+      Object.defineProperty(globalThis, "navigator", {
+        value: undefined,
+        configurable: true,
+      });
+      const state = { taskServerEnabled: true };
+      expect(await shouldDeferTaskToServer(taskWithPush, state)).toBe(false);
+    });
+
+    it("returns false if no active push subscription exists", async () => {
+      Object.defineProperty(globalThis, "navigator", {
+        value: {
+          serviceWorker: {
+            ready: Promise.resolve({
+              pushManager: {
+                getSubscription: async () => null,
+              },
+            }),
+          },
+        },
+        configurable: true,
+      });
+      const state = { taskServerEnabled: true };
+      expect(await shouldDeferTaskToServer(taskWithPush, state)).toBe(false);
+    });
+
+    it("returns true when task has pushNotifications, taskServerEnabled is true, and push subscription exists", async () => {
+      Object.defineProperty(globalThis, "navigator", {
+        value: {
+          serviceWorker: {
+            ready: Promise.resolve({
+              pushManager: {
+                getSubscription: async () => ({
+                  endpoint: "https://push.example.com",
+                }),
+              },
+            }),
+          },
+        },
+        configurable: true,
+      });
+      const state = { taskServerEnabled: true };
+      expect(await shouldDeferTaskToServer(taskWithPush, state)).toBe(true);
     });
   });
 

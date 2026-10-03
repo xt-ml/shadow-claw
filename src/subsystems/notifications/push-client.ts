@@ -6,6 +6,7 @@
 import { CONFIG_KEYS } from "../../config/config.js";
 import { getDb } from "../../db/db.js";
 import { getConfig } from "../../db/getConfig.js";
+import { getOrCreateSubscriberId } from "../../db/getOrCreateSubscriberId.js";
 
 /**
  * Resolve a push route URL, optionally using a configured proxy.
@@ -136,9 +137,6 @@ export async function subscribeToPush(
 
   if (!resolvedSubscriberId) {
     try {
-      const { getDb } = await import("../../db/db.js");
-      const { getOrCreateSubscriberId } =
-        await import("../../db/getOrCreateSubscriberId.js");
       const db = await Promise.race([
         getDb(),
         new Promise<null>((resolve) => setTimeout(() => resolve(null), 500)),
@@ -213,9 +211,6 @@ export async function syncExistingPushSubscription(
 
     if (!resolvedSubscriberId) {
       try {
-        const { getDb } = await import("../../db/db.js");
-        const { getOrCreateSubscriberId } =
-          await import("../../db/getOrCreateSubscriberId.js");
         const db = await Promise.race([
           getDb(),
           new Promise<null>((resolve) => setTimeout(() => resolve(null), 500)),

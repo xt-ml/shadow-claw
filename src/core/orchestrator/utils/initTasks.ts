@@ -36,7 +36,7 @@ import { handleRoomInvite } from "./operations/room.js";
 
 import {
   runTaskAsScheduled,
-  shouldStartLocalScheduler,
+  shouldDeferTaskToServer,
 } from "./operations/task.js";
 
 import { parseDirectToolCommandPolicy } from "./parseDirectToolCommandPolicy.js";
@@ -426,9 +426,9 @@ export async function initWorkerAndScheduler(
   syncProxyConfigToServiceWorker(orchestrator);
 
   // Set up task scheduler.
-  // When push scheduling is available, the server-side scheduler should be
-  // authoritative. The local client scheduler is only used as a fallback
-  // when push background execution is unavailable.
+  // The local scheduler runs for tasks that have not opted into push notifications,
+  // or when push scheduling is unavailable. Tasks opted into push with an active subscription
+  // defer to the server scheduler.
   orchestrator.scheduler = new TaskScheduler(
     async (task) => {
       await runTaskAsScheduled(orchestrator, task);
@@ -436,17 +436,10 @@ export async function initWorkerAndScheduler(
     () => {
       orchestrator.events.emit("task-change", { type: "executed" });
     },
+    (task) => shouldDeferTaskToServer(task, orchestrator),
   );
 
-  // Start the task scheduler in the background — shouldStartLocalScheduler()
-  // is an async IDB read that doesn't need to block UI readiness.
-  // The scheduler starting one microtask-tick late is harmless because no
-  // scheduled task can fire before the app is fully initialized anyway.
-  void shouldStartLocalScheduler().then((should) => {
-    if (should) {
-      orchestrator.scheduler?.start();
-    }
-  });
+  orchestrator.scheduler.start();
 
   setupPushTaskListener(orchestrator, db);
 }

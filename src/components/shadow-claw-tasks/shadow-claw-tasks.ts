@@ -10,6 +10,7 @@ import { Task } from "../../db/types.js";
 import { setSanitizedHtml } from "../../security/trusted-types.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
+import { getCurrentSubscription } from "../../subsystems/notifications/push-client.js";
 
 import { showError, showInfo, showSuccess } from "../../ui/toast.js";
 import { isTruthyConfigValue } from "../../utils/parseBooleanConfig.js";
@@ -171,6 +172,11 @@ export class ShadowClawTasks extends ShadowClawElement {
 
     promptTextarea?.addEventListener("input", updatePreview);
 
+    const scheduleInput = root.querySelector("input[name='schedule']");
+    scheduleInput?.addEventListener("input", () => {
+      this.updatePushNotificationsCheckboxState();
+    });
+
     typeRadios.forEach((radio) => {
       radio.addEventListener("change", (e) => {
         const val = (e.target as HTMLInputElement).value;
@@ -268,6 +274,50 @@ export class ShadowClawTasks extends ShadowClawElement {
   }
 
   /**
+   * Update the disabled/checked state of the push notifications checkbox
+   */
+  async updatePushNotificationsCheckboxState(
+    preserveCheckedIfEnabled?: boolean,
+  ): Promise<void> {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const pushInput = root.querySelector(
+      "#tasksPushNotificationsInput",
+    ) as HTMLInputElement | null;
+    if (!pushInput) {
+      return;
+    }
+
+    const scheduleInput = root.querySelector(
+      "input[name='schedule']",
+    ) as HTMLInputElement | null;
+    const scheduleVal = scheduleInput?.value.trim() ?? "";
+
+    let hasSubscription = false;
+    try {
+      const sub = await getCurrentSubscription();
+      hasSubscription = !!sub;
+    } catch {
+      hasSubscription = false;
+    }
+
+    const canEnablePush =
+      scheduleVal.length > 0 &&
+      orchestratorStore.taskServerEnabled &&
+      hasSubscription;
+
+    pushInput.disabled = !canEnablePush;
+    if (!canEnablePush) {
+      pushInput.checked = false;
+    } else if (preserveCheckedIfEnabled !== undefined) {
+      pushInput.checked = preserveCheckedIfEnabled;
+    }
+  }
+
+  /**
    * Open dialog to add a new task
    */
   handleAdd() {
@@ -314,6 +364,14 @@ export class ShadowClawTasks extends ShadowClawElement {
     }
 
     this.renderToolsEditor();
+
+    const pushInput = form.querySelector(
+      "#tasksPushNotificationsInput",
+    ) as HTMLInputElement | null;
+    if (pushInput) {
+      pushInput.checked = false;
+    }
+    this.updatePushNotificationsCheckboxState(false);
 
     // Reset preview
     const previewDiv = root.querySelector(".tasks__preview");
@@ -381,6 +439,14 @@ export class ShadowClawTasks extends ShadowClawElement {
     if (subagentInput instanceof HTMLInputElement) {
       subagentInput.checked = !!task.subagent;
     }
+
+    const pushInput = form.querySelector(
+      "#tasksPushNotificationsInput",
+    ) as HTMLInputElement | null;
+    if (pushInput) {
+      pushInput.checked = !!task.pushNotifications;
+    }
+    this.updatePushNotificationsCheckboxState(!!task.pushNotifications);
 
     const typeRadio = form.querySelector(
       `input[name='taskType'][value='${task.type || "prompt"}']`,
@@ -769,6 +835,13 @@ export class ShadowClawTasks extends ShadowClawElement {
 
     const freshContext = !!formData.get("freshContext");
     const subagent = !!formData.get("subagent");
+    const pushInput = form.querySelector(
+      "#tasksPushNotificationsInput",
+    ) as HTMLInputElement | null;
+    const pushNotifications =
+      pushInput instanceof HTMLInputElement
+        ? !pushInput.disabled && pushInput.checked
+        : false;
 
     try {
       let taskToSave;
@@ -784,6 +857,7 @@ export class ShadowClawTasks extends ShadowClawElement {
           tools: JSON.parse(JSON.stringify(this.editingTools)),
           freshContext,
           subagent,
+          pushNotifications,
         };
       } else {
         // Create new task
@@ -803,6 +877,7 @@ export class ShadowClawTasks extends ShadowClawElement {
           createdAt: Date.now(),
           freshContext,
           subagent,
+          pushNotifications,
         };
       }
 
@@ -1090,6 +1165,9 @@ export class ShadowClawTasks extends ShadowClawElement {
       }
       if (task.subagent) {
         badges.push("Subagent");
+      }
+      if (task.pushNotifications) {
+        badges.push("Push");
       }
       const badgesDisplay = badges.join(" · ");
 

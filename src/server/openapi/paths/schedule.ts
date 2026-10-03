@@ -43,6 +43,12 @@ export const schedulePaths: Record<string, OpenApiPathItem> = {
                     prompt: { type: "string" },
                     enabled: { type: "boolean" },
                     created_at: { type: "integer" },
+                    push_enabled: {
+                      type: "integer",
+                      enum: [0, 1],
+                      description:
+                        "Whether push notifications are enabled for this task",
+                    },
                   },
                 },
               },
@@ -78,6 +84,12 @@ export const schedulePaths: Record<string, OpenApiPathItem> = {
                 channel: { type: "string" },
                 subscriberId: { type: "string" },
                 name: { type: "string" },
+                pushNotifications: {
+                  type: "boolean",
+                  default: false,
+                  description:
+                    "Opt-in flag to enable server-side push notifications for this scheduled task",
+                },
               },
             },
           },

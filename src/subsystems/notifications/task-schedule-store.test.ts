@@ -233,4 +233,38 @@ describe("task-schedule-store", () => {
       ]);
     });
   });
+
+  describe("pushNotifications opt-in (push_enabled)", () => {
+    it("defaults push_enabled to 0 when pushNotifications is omitted", () => {
+      saveScheduledTask(MOCK_TASK);
+      const task = getScheduledTask(MOCK_TASK.id);
+      expect(task).toBeDefined();
+      expect(task!.push_enabled).toBe(0);
+    });
+
+    it("stores push_enabled as 1 when pushNotifications is true", () => {
+      saveScheduledTask({ ...MOCK_TASK, pushNotifications: true });
+      const task = getScheduledTask(MOCK_TASK.id);
+      expect(task).toBeDefined();
+      expect(task!.push_enabled).toBe(1);
+    });
+
+    it("stores push_enabled as 0 when pushNotifications is false", () => {
+      saveScheduledTask({ ...MOCK_TASK, pushNotifications: false });
+      const task = getScheduledTask(MOCK_TASK.id);
+      expect(task).toBeDefined();
+      expect(task!.push_enabled).toBe(0);
+    });
+
+    it("updates push_enabled when upserting an existing task", () => {
+      saveScheduledTask({ ...MOCK_TASK, pushNotifications: false });
+      expect(getScheduledTask(MOCK_TASK.id)!.push_enabled).toBe(0);
+
+      saveScheduledTask({ ...MOCK_TASK, pushNotifications: true });
+      expect(getScheduledTask(MOCK_TASK.id)!.push_enabled).toBe(1);
+
+      saveScheduledTask({ ...MOCK_TASK, pushNotifications: false });
+      expect(getScheduledTask(MOCK_TASK.id)!.push_enabled).toBe(0);
+    });
+  });
 });

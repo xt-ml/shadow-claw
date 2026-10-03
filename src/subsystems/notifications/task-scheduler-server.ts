@@ -99,6 +99,12 @@ export class ServerTaskScheduler {
             continue;
           }
 
+          if (task.push_enabled !== 1) {
+            // Task has not opted into push notifications — server scheduler skips broadcast.
+            // It will execute locally in the client browser when the app is open.
+            continue;
+          }
+
           // Send push notification to trigger task on client
           this._broadcastTaskTrigger({
             id: task.id,

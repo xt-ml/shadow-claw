@@ -36,6 +36,7 @@ jest.unstable_mockModule("../../stores/orchestrator.js", () => ({
     activeGroupId: "default",
     db: {},
     orchestrator: null,
+    taskServerEnabled: false,
     tasks: [],
     runTask: jest.fn(),
     getTasksForBackup: jest.fn(() => []),
@@ -49,6 +50,14 @@ jest.unstable_mockModule("../../stores/orchestrator.js", () => ({
     restoreTasksFromBackup: jest.fn(),
   },
 }));
+
+const mockGetCurrentSubscription = jest.fn<any>().mockResolvedValue(null);
+jest.unstable_mockModule(
+  "../../subsystems/notifications/push-client.js",
+  () => ({
+    getCurrentSubscription: mockGetCurrentSubscription,
+  }),
+);
 
 jest.unstable_mockModule("../../ui/toast.js", () => ({
   showError: jest.fn(),
@@ -689,6 +698,115 @@ describe("shadow-claw-tasks", () => {
 
       el.cleanup = jest.fn();
       document.body.removeChild(el);
+    });
+  });
+
+  describe("push notifications opt-in checkbox", () => {
+    it("disables push notifications checkbox by default", async () => {
+      const component = new ShadowClawTasks();
+      const pushInput = component.shadowRoot?.querySelector(
+        "#tasksPushNotificationsInput",
+      ) as HTMLInputElement;
+
+      expect(pushInput).toBeDefined();
+      expect(pushInput.disabled).toBe(true);
+      expect(pushInput.checked).toBe(false);
+    });
+
+    it("enables push checkbox only when schedule, push subscription, and taskServerEnabled are all active", async () => {
+      const component = new ShadowClawTasks();
+      const pushInput = component.shadowRoot?.querySelector(
+        "#tasksPushNotificationsInput",
+      ) as HTMLInputElement;
+      const scheduleInput = component.shadowRoot?.querySelector(
+        "input[name='schedule']",
+      ) as HTMLInputElement;
+
+      // Case 1: no schedule
+      (orchestratorStore as any).taskServerEnabled = true;
+      mockGetCurrentSubscription.mockResolvedValue({
+        endpoint: "https://push.example",
+      });
+      await component.updatePushNotificationsCheckboxState();
+      expect(pushInput.disabled).toBe(true);
+
+      // Case 2: schedule present, but no subscription
+      scheduleInput.value = "*/5 * * * *";
+      mockGetCurrentSubscription.mockResolvedValue(null);
+      await component.updatePushNotificationsCheckboxState();
+      expect(pushInput.disabled).toBe(true);
+
+      // Case 3: schedule present, subscription present, but taskServerEnabled is false
+      mockGetCurrentSubscription.mockResolvedValue({
+        endpoint: "https://push.example",
+      });
+      (orchestratorStore as any).taskServerEnabled = false;
+      await component.updatePushNotificationsCheckboxState();
+      expect(pushInput.disabled).toBe(true);
+
+      // Case 4: all three present -> enabled!
+      (orchestratorStore as any).taskServerEnabled = true;
+      await component.updatePushNotificationsCheckboxState();
+      expect(pushInput.disabled).toBe(false);
+
+      // Preserve checked state if specified
+      await component.updatePushNotificationsCheckboxState(true);
+      expect(pushInput.checked).toBe(true);
+
+      // If schedule cleared -> disables and unchecks
+      scheduleInput.value = "";
+      await component.updatePushNotificationsCheckboxState();
+      expect(pushInput.disabled).toBe(true);
+      expect(pushInput.checked).toBe(false);
+    });
+
+    it("saves pushNotifications boolean upon form submit", async () => {
+      const component = new ShadowClawTasks();
+      const form = component.shadowRoot?.querySelector(
+        ".tasks__dialog-form",
+      ) as HTMLFormElement;
+      const promptInput = component.shadowRoot?.querySelector(
+        "textarea[name='prompt']",
+      ) as HTMLTextAreaElement;
+      const pushInput = component.shadowRoot?.querySelector(
+        "#tasksPushNotificationsInput",
+      ) as HTMLInputElement;
+
+      promptInput.value = "Run my weather task";
+      pushInput.disabled = false;
+      pushInput.checked = true;
+
+      await component.handleEditSubmit({} as any, form);
+
+      expect(orchestratorStore.upsertTask).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          prompt: "Run my weather task",
+          pushNotifications: true,
+        }),
+      );
+    });
+
+    it("renders Push badge when task has pushNotifications set to true", async () => {
+      const component = new ShadowClawTasks();
+      const list = component.shadowRoot?.querySelector(
+        ".tasks__list",
+      ) as HTMLElement;
+
+      (orchestratorStore as any).tasks = [
+        {
+          id: "task-push-1",
+          name: "Push Alert Task",
+          schedule: "0 9 * * *",
+          prompt: "Echo alert",
+          pushNotifications: true,
+          enabled: true,
+        },
+      ];
+
+      await component.updateTaskList({} as any);
+
+      expect(list.innerHTML).toContain("Push");
     });
   });
 });

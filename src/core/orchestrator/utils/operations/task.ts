@@ -57,14 +57,11 @@ export async function syncTaskToServer(
     const res = await fetch(
       url,
       getTaskFetchOptions(url, {
-        body: JSON.stringify(
-          subscriberId
-            ? {
-                ...task,
-                subscriberId,
-              }
-            : task,
-        ),
+        body: JSON.stringify({
+          ...task,
+          pushNotifications: !!task.pushNotifications,
+          ...(subscriberId ? { subscriberId } : {}),
+        }),
         headers: { "Content-Type": "application/json" },
         method: "POST",
       }),
@@ -143,6 +140,40 @@ export async function shouldStartLocalScheduler(): Promise<boolean> {
     return !sub;
   } catch {
     return true;
+  }
+}
+
+/**
+ * Determine if a specific task should defer its execution to the server scheduler
+ * (which triggers via Web Push).
+ *
+ * Only defers if:
+ * 1. Server task scheduling is enabled on the client.
+ * 2. This specific task has pushNotifications enabled.
+ * 3. The browser has an active push subscription.
+ */
+export async function shouldDeferTaskToServer(
+  task: Task,
+  state: Pick<OrchestratorState, "taskServerEnabled">,
+): Promise<boolean> {
+  if (!state.taskServerEnabled) {
+    return false;
+  }
+
+  if (!task.pushNotifications) {
+    return false;
+  }
+
+  if (typeof navigator === "undefined" || !navigator.serviceWorker) {
+    return false;
+  }
+
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    return !!sub;
+  } catch {
+    return false;
   }
 }
 

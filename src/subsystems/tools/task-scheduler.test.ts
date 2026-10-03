@@ -100,4 +100,47 @@ describe("TaskScheduler", () => {
 
     jest.useRealTimers();
   });
+
+  describe("shouldDefer predicate", () => {
+    it("skips task execution when shouldDefer returns true", async () => {
+      const runner = (jest.fn() as any).mockResolvedValue(undefined);
+      const shouldDefer = (jest.fn() as any).mockResolvedValue(true);
+      const scheduler = new TaskScheduler(runner, undefined, shouldDefer);
+
+      (getEnabledTasks as any).mockResolvedValue([
+        { id: "t-deferred", schedule: "* * * * *", lastRun: null },
+      ]);
+
+      await scheduler.tick();
+
+      expect(shouldDefer).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "t-deferred" }),
+      );
+      expect(updateTaskLastRun).not.toHaveBeenCalled();
+      expect(runner).not.toHaveBeenCalled();
+    });
+
+    it("runs task when shouldDefer returns false", async () => {
+      const runner = (jest.fn() as any).mockResolvedValue(undefined);
+      const shouldDefer = (jest.fn() as any).mockResolvedValue(false);
+      const scheduler = new TaskScheduler(runner, undefined, shouldDefer);
+
+      (getEnabledTasks as any).mockResolvedValue([
+        { id: "t-local", schedule: "* * * * *", lastRun: null },
+      ]);
+
+      await scheduler.tick();
+
+      expect(shouldDefer).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "t-local" }),
+      );
+      expect(updateTaskLastRun).toHaveBeenCalledWith(
+        "t-local",
+        expect.any(Number),
+      );
+      expect(runner).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "t-local" }),
+      );
+    });
+  });
 });

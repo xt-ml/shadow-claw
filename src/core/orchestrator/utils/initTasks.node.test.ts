@@ -54,6 +54,7 @@ jest.unstable_mockModule("./operations/task.js", () => ({
   deleteTaskFromServer: jest.fn(),
   runTaskAsScheduled: jest.fn(),
   shouldStartLocalScheduler: jest.fn(),
+  shouldDeferTaskToServer: jest.fn(),
   syncTaskToServer: jest.fn(),
   warnIfNoPushSubscription: jest.fn(),
 }));

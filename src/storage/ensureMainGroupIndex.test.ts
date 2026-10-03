@@ -136,18 +136,31 @@ describe("ensureMainGroupIndex", () => {
     );
   });
 
-  it("resolves static main group index url with and without window.location.origin", () => {
-    const url = resolveStaticMainGroupIndexUrl();
-    expect(url).toContain(STATIC_MAIN_GROUP_INDEX_PATH);
+  it("resolves the static main group index URL correctly", () => {
+    const expected =
+      typeof window !== "undefined" && window.location?.origin
+        ? new URL(
+            `/${STATIC_MAIN_GROUP_INDEX_PATH}`,
+            window.location.origin,
+          ).toString()
+        : `/${STATIC_MAIN_GROUP_INDEX_PATH}`;
+    expect(resolveStaticMainGroupIndexUrl()).toBe(expected);
+  });
 
-    const originalLocation = window.location;
+  it("falls back to targetPath if URL construction fails", () => {
+    const originalUrl = globalThis.URL;
     try {
-      delete (window as any).location;
+      (globalThis as any).URL = class extends originalUrl {
+        constructor(url: string | URL, base?: string | URL) {
+          super(url, base);
+          throw new Error("Invalid URL");
+        }
+      };
       expect(resolveStaticMainGroupIndexUrl()).toContain(
         STATIC_MAIN_GROUP_INDEX_PATH,
       );
     } finally {
-      (window as any).location = originalLocation;
+      globalThis.URL = originalUrl;
     }
   });
 });

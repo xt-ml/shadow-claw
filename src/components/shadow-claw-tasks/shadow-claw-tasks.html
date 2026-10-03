@@ -127,6 +127,27 @@
             </button>
           </div>
 
+          <div class="tasks__form-group tasks__push-option-group">
+            <div class="tasks__checkbox-option">
+              <label>
+                <input
+                  type="checkbox"
+                  name="pushNotifications"
+                  id="tasksPushNotificationsInput"
+                  aria-describedby="tasksPushNotificationsHint"
+                  disabled
+                />
+                Enable push notifications for this task
+              </label>
+            </div>
+            <div class="tasks__form-hint" id="tasksPushNotificationsHint">
+              Requires a schedule, push notifications enabled in Settings &gt;
+              Notifications, and Server Task Scheduling enabled in Settings &gt;
+              Integrations. Without this, the task runs only while the app is
+              open.
+            </div>
+          </div>
+
           <div class="tasks__form-group tasks__execution-options-group">
             <label class="tasks__form-label">Context & Execution Options</label>
             <div class="tasks__checkbox-option">

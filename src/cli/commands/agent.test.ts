@@ -1591,6 +1591,7 @@ describe("runAgentRun — internet access options and configuration", () => {
       apiKey: "sk-test",
       allowInternet: true,
       invokeHandler: mockInvokeHandler,
+      quiet: true,
     });
 
     expect(result.success).toBe(true);
@@ -1631,6 +1632,7 @@ describe("runAgentRun — internet access options and configuration", () => {
       provider: "openrouter",
       apiKey: "sk-test",
       invokeHandler: mockInvokeHandler,
+      quiet: true,
     });
 
     expect(result.success).toBe(true);

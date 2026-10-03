@@ -41,6 +41,7 @@ describe("ServerTaskScheduler", () => {
         schedule: "30 10 * * *",
         prompt: "Daily check",
         subscriber_id: "sub-1",
+        push_enabled: 1,
         enabled: 1,
         last_run: null,
         created_at: 1000,
@@ -146,6 +147,7 @@ describe("ServerTaskScheduler", () => {
         schedule: "30 10 * * *",
         prompt: "check",
         subscriber_id: "sub-1",
+        push_enabled: 1,
         enabled: 1,
         last_run: null,
         created_at: 1000,
@@ -179,6 +181,7 @@ describe("ServerTaskScheduler", () => {
         schedule: "30 10 * * *",
         prompt: "Daily check",
         subscriber_id: "sub-1",
+        push_enabled: 1,
         enabled: 1,
         last_run: null,
         created_at: 1000,
@@ -212,6 +215,7 @@ describe("ServerTaskScheduler", () => {
           schedule: "30 10 * * *",
           prompt: "News check",
           subscriber_id: "sub-knack-123",
+          push_enabled: 1,
           enabled: 1,
           last_run: null,
           created_at: 1000,
@@ -277,6 +281,7 @@ describe("ServerTaskScheduler", () => {
           schedule: "30 10 * * *",
           prompt: "Knack task",
           subscriber_id: "sub-knack",
+          push_enabled: 1,
           enabled: 1,
           last_run: null,
           created_at: 1000,
@@ -287,6 +292,7 @@ describe("ServerTaskScheduler", () => {
           schedule: "30 10 * * *",
           prompt: "iPad task",
           subscriber_id: "sub-ipad",
+          push_enabled: 1,
           enabled: 1,
           last_run: null,
           created_at: 1000,
@@ -308,6 +314,100 @@ describe("ServerTaskScheduler", () => {
         expect.objectContaining({
           id: "t-ipad",
           subscriberId: "sub-ipad",
+        }),
+      );
+    });
+  });
+
+  describe("pushNotifications opt-in (push_enabled) in scheduler", () => {
+    it("does NOT broadcast when push_enabled is 0, but still updates last_run", async () => {
+      jest.useFakeTimers();
+      const now = new Date("2026-03-24T10:30:00");
+      jest.setSystemTime(now);
+
+      (getEnabledTasks as any).mockReturnValue([
+        {
+          id: "t-local-only",
+          group_id: "br:main",
+          schedule: "30 10 * * *",
+          prompt: "Local only task",
+          subscriber_id: "sub-1",
+          push_enabled: 0,
+          enabled: 1,
+          last_run: null,
+          created_at: 1000,
+        },
+      ]);
+
+      await scheduler.tick();
+
+      expect(updateLastRun).toHaveBeenCalledWith("t-local-only", now.getTime());
+      expect(broadcastTaskTrigger).not.toHaveBeenCalled();
+    });
+
+    it("does NOT broadcast when push_enabled is null or undefined (legacy task)", async () => {
+      jest.useFakeTimers();
+      const now = new Date("2026-03-24T10:30:00");
+      jest.setSystemTime(now);
+
+      (getEnabledTasks as any).mockReturnValue([
+        {
+          id: "t-legacy",
+          group_id: "br:main",
+          schedule: "30 10 * * *",
+          prompt: "Legacy task",
+          subscriber_id: "sub-1",
+          push_enabled: null,
+          enabled: 1,
+          last_run: null,
+          created_at: 1000,
+        },
+      ]);
+
+      await scheduler.tick();
+
+      expect(updateLastRun).toHaveBeenCalledWith("t-legacy", now.getTime());
+      expect(broadcastTaskTrigger).not.toHaveBeenCalled();
+    });
+
+    it("only broadcasts tasks that have push_enabled === 1", async () => {
+      jest.useFakeTimers();
+      const now = new Date("2026-03-24T10:30:00");
+      jest.setSystemTime(now);
+
+      (getEnabledTasks as any).mockReturnValue([
+        {
+          id: "t-opted-out",
+          group_id: "br:main",
+          schedule: "30 10 * * *",
+          prompt: "Local task",
+          subscriber_id: "sub-1",
+          push_enabled: 0,
+          enabled: 1,
+          last_run: null,
+          created_at: 1000,
+        },
+        {
+          id: "t-opted-in",
+          group_id: "br:main",
+          schedule: "30 10 * * *",
+          prompt: "Push task",
+          subscriber_id: "sub-1",
+          push_enabled: 1,
+          enabled: 1,
+          last_run: null,
+          created_at: 1000,
+        },
+      ]);
+
+      await scheduler.tick();
+
+      expect(updateLastRun).toHaveBeenCalledWith("t-opted-out", now.getTime());
+      expect(updateLastRun).toHaveBeenCalledWith("t-opted-in", now.getTime());
+      expect(broadcastTaskTrigger).toHaveBeenCalledTimes(1);
+      expect(broadcastTaskTrigger).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "t-opted-in",
         }),
       );
     });

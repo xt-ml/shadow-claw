@@ -17,8 +17,8 @@ export function cloneGroupTasks(
       .all(sourceGroupId) as any[];
     const stmt = raw.prepare(
       `INSERT INTO tasks
-       (id, groupId, enabled, schedule, prompt, tools, lastRun, createdAt, type, freshContext, subagent, name, task_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, groupId, enabled, schedule, prompt, tools, lastRun, createdAt, type, freshContext, subagent, name, task_order, pushNotifications)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     );
     for (const r of rows) {
       stmt.run(
@@ -35,6 +35,7 @@ export function cloneGroupTasks(
         r.subagent ? 1 : null,
         r.name ?? null,
         r.task_order ?? null,
+        r.pushNotifications ? 1 : null,
       );
     }
     return Promise.resolve(rows.length);

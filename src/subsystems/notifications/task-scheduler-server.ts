@@ -25,6 +25,7 @@ export interface ServerTaskSchedulerDeps {
     type?: string | null;
     tools?: unknown[] | null;
     channel?: string | null;
+    subscriberId?: string | null;
   }) => Promise<{ sent: number; failed: number; noSubscribers?: true }>;
 }
 
@@ -38,6 +39,7 @@ export class ServerTaskScheduler {
     type?: string | null;
     tools?: unknown[] | null;
     channel?: string | null;
+    subscriberId?: string | null;
   }) => Promise<{ sent: number; failed: number; noSubscribers?: true }>;
   private _getEnabledTasks: () => ScheduledTaskRow[];
   private _interval: ReturnType<typeof setInterval> | null;
@@ -90,6 +92,13 @@ export class ServerTaskScheduler {
           // Mark as run immediately to prevent double-firing
           this._updateLastRun(task.id, now.getTime());
 
+          if (!task.subscriber_id) {
+            console.warn(
+              `Scheduled task ${task.id} fired but has no subscriber_id — skipping broadcast to prevent accidental multi-device leaks.`,
+            );
+            continue;
+          }
+
           // Send push notification to trigger task on client
           this._broadcastTaskTrigger({
             id: task.id,
@@ -98,6 +107,7 @@ export class ServerTaskScheduler {
             type: task.type,
             tools: task.tools ? JSON.parse(task.tools) : null,
             channel: task.channel,
+            subscriberId: task.subscriber_id,
           })
 
             .then((result) => {

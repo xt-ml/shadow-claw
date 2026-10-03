@@ -13,6 +13,7 @@ interface PushData {
   taskId?: string;
   groupId?: string;
   clientId?: string;
+  subscriberId?: string;
   action?: string;
   args?: Record<string, unknown>;
   prompt?: string;
@@ -83,6 +84,7 @@ self.addEventListener("push", (event: PushEvent) => {
               taskType: data.taskType,
               tools: data.tools,
               channel: data.channel,
+              subscriberId: data.subscriberId,
             });
           }
 
@@ -105,6 +107,7 @@ self.addEventListener("push", (event: PushEvent) => {
                 taskType: data.taskType,
                 tools: data.tools,
                 channel: data.channel,
+                subscriberId: data.subscriberId,
               },
             },
           );

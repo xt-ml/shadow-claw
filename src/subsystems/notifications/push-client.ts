@@ -97,6 +97,7 @@ export async function getVapidPublicKey(): Promise<string> {
 export async function subscribeToPush(
   clientId?: string,
   deviceLabel?: string,
+  subscriberId?: string,
 ): Promise<PushSubscription> {
   const registration = await navigator.serviceWorker.ready;
   const publicKey = await getVapidPublicKey();
@@ -113,6 +114,7 @@ export async function subscribeToPush(
       : undefined);
 
   let resolvedDeviceLabel = deviceLabel;
+  let resolvedSubscriberId = subscriberId;
 
   if (!resolvedClientId || !resolvedDeviceLabel) {
     try {
@@ -132,6 +134,21 @@ export async function subscribeToPush(
     } catch (_) {}
   }
 
+  if (!resolvedSubscriberId) {
+    try {
+      const { getDb } = await import("../../db/db.js");
+      const { getOrCreateSubscriberId } =
+        await import("../../db/getOrCreateSubscriberId.js");
+      const db = await Promise.race([
+        getDb(),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 500)),
+      ]);
+      if (db) {
+        resolvedSubscriberId = await getOrCreateSubscriberId(db);
+      }
+    } catch (_) {}
+  }
+
   const subJson =
     typeof subscription.toJSON === "function"
       ? subscription.toJSON()
@@ -147,11 +164,92 @@ export async function subscribeToPush(
         ...subJson,
         ...(resolvedClientId ? { clientId: resolvedClientId } : {}),
         ...(resolvedDeviceLabel ? { deviceLabel: resolvedDeviceLabel } : {}),
+        ...(resolvedSubscriberId ? { subscriberId: resolvedSubscriberId } : {}),
       }),
     }),
   );
 
   return subscription;
+}
+
+/**
+ * Re-register an existing push subscription with the server if one exists,
+ * ensuring clientId, deviceLabel, and subscriberId are up-to-date.
+ */
+export async function syncExistingPushSubscription(
+  subscriberId?: string,
+): Promise<void> {
+  if (typeof navigator === "undefined" || !navigator.serviceWorker) {
+    return;
+  }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      return;
+    }
+
+    let resolvedClientId: string | undefined;
+    let resolvedDeviceLabel: string | undefined;
+    let resolvedSubscriberId = subscriberId;
+
+    if (typeof localStorage !== "undefined") {
+      resolvedClientId =
+        localStorage.getItem(CONFIG_KEYS.CONTROL_PLANE_CLIENT_ID) || undefined;
+    }
+
+    try {
+      const initCp = await import("../../core/utils/initControlPlane.js");
+      if (
+        !resolvedClientId &&
+        typeof initCp.getOrCreateControlPlaneClientId === "function"
+      ) {
+        resolvedClientId = initCp.getOrCreateControlPlaneClientId();
+      }
+      if (typeof initCp.detectDeviceLabel === "function") {
+        resolvedDeviceLabel = initCp.detectDeviceLabel();
+      }
+    } catch (_) {}
+
+    if (!resolvedSubscriberId) {
+      try {
+        const { getDb } = await import("../../db/db.js");
+        const { getOrCreateSubscriberId } =
+          await import("../../db/getOrCreateSubscriberId.js");
+        const db = await Promise.race([
+          getDb(),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 500)),
+        ]);
+        if (db) {
+          resolvedSubscriberId = await getOrCreateSubscriberId(db);
+        }
+      } catch (_) {}
+    }
+
+    const subJson =
+      typeof sub.toJSON === "function"
+        ? sub.toJSON()
+        : JSON.parse(JSON.stringify(sub));
+
+    const url = await getPushUrl("/push/subscribe");
+    await fetch(
+      url,
+      getPushFetchOptions(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...subJson,
+          ...(resolvedClientId ? { clientId: resolvedClientId } : {}),
+          ...(resolvedDeviceLabel ? { deviceLabel: resolvedDeviceLabel } : {}),
+          ...(resolvedSubscriberId
+            ? { subscriberId: resolvedSubscriberId }
+            : {}),
+        }),
+      }),
+    );
+  } catch (_) {
+    // Non-fatal if server is unreachable
+  }
 }
 
 /**

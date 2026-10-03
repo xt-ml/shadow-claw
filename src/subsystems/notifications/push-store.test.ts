@@ -8,6 +8,7 @@ import {
   getAllSubscriptions,
   removeSubscriptionById,
   getSubscriptionsByClientId,
+  getSubscriptionsBySubscriberId,
   findSubscriptionsForClient,
   getRegisteredPushClients,
 } from "./push-store.js";
@@ -254,6 +255,133 @@ describe("push-store", () => {
       expect(clients).toHaveLength(1);
       const all = getAllSubscriptions();
       expect(clients[0].clientId).toBe(String(all[0].id));
+    });
+  });
+
+  describe("subscriber-targeted subscriptions", () => {
+    it("stores and retrieves subscriptions with subscriberId (both camelCase and snake_case input)", () => {
+      saveSubscription({
+        ...MOCK_SUBSCRIPTION,
+        subscriberId: "sub-12345",
+      });
+
+      const sub = getSubscription(MOCK_SUBSCRIPTION.endpoint);
+      expect(sub).toBeDefined();
+      expect(sub?.subscriber_id).toBe("sub-12345");
+
+      saveSubscription({
+        ...MOCK_SUBSCRIPTION_2,
+        subscriber_id: "sub-67890",
+      });
+
+      const sub2 = getSubscription(MOCK_SUBSCRIPTION_2.endpoint);
+      expect(sub2).toBeDefined();
+      expect(sub2?.subscriber_id).toBe("sub-67890");
+    });
+
+    it("upsert preserves existing subscriber_id when omitted, but updates when provided", () => {
+      saveSubscription({
+        ...MOCK_SUBSCRIPTION,
+        subscriberId: "sub-initial",
+      });
+
+      // Update without subscriberId
+      saveSubscription({
+        ...MOCK_SUBSCRIPTION,
+        deviceLabel: "New Device Label",
+      });
+
+      let sub = getSubscription(MOCK_SUBSCRIPTION.endpoint);
+      expect(sub?.subscriber_id).toBe("sub-initial");
+      expect(sub?.device_label).toBe("New Device Label");
+
+      // Update with new subscriberId
+      saveSubscription({
+        ...MOCK_SUBSCRIPTION,
+        subscriberId: "sub-updated",
+      });
+
+      sub = getSubscription(MOCK_SUBSCRIPTION.endpoint);
+      expect(sub?.subscriber_id).toBe("sub-updated");
+    });
+
+    it("getSubscriptionsBySubscriberId filters subscriptions accurately", () => {
+      saveSubscription({
+        ...MOCK_SUBSCRIPTION,
+        subscriberId: "sub-alpha",
+      });
+      saveSubscription({
+        ...MOCK_SUBSCRIPTION_2,
+        subscriberId: "sub-beta",
+      });
+
+      const alphaSubs = getSubscriptionsBySubscriberId("sub-alpha");
+      expect(alphaSubs).toHaveLength(1);
+      expect(alphaSubs[0].endpoint).toBe(MOCK_SUBSCRIPTION.endpoint);
+      expect(alphaSubs[0].subscriber_id).toBe("sub-alpha");
+
+      const notFound = getSubscriptionsBySubscriberId("sub-nonexistent");
+      expect(notFound).toEqual([]);
+
+      const empty = getSubscriptionsBySubscriberId("");
+      expect(empty).toEqual([]);
+    });
+
+    it("migrates existing subscriptions table without subscriber_id column seamlessly", async () => {
+      closePushStore();
+      const fs = await import("node:fs");
+      const path = await import("node:path");
+      const os = await import("node:os");
+      const { DatabaseSync } = await import("node:sqlite");
+
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "push-store-mig-"));
+      const tempDbPath = path.join(tempDir, "old-push.db");
+
+      try {
+        const rawDb = new DatabaseSync(tempDbPath);
+        rawDb.exec(`
+          CREATE TABLE subscriptions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            endpoint TEXT NOT NULL UNIQUE,
+            keys_p256dh TEXT NOT NULL,
+            keys_auth TEXT NOT NULL,
+            client_id TEXT,
+            device_label TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+          )
+        `);
+        rawDb
+          .prepare(
+            `
+          INSERT INTO subscriptions (endpoint, keys_p256dh, keys_auth, client_id)
+          VALUES ('https://old.endpoint', 'p256', 'auth', 'client-old')
+        `,
+          )
+          .run();
+        rawDb.close();
+
+        // Now open with openPushStore - should run ALTER TABLE without throwing
+        openPushStore(tempDbPath);
+        const sub = getSubscription("https://old.endpoint");
+        expect(sub).toBeDefined();
+        expect(sub?.client_id).toBe("client-old");
+        expect(sub?.subscriber_id).toBeUndefined();
+
+        // And saving with subscriberId should work
+        saveSubscription({
+          endpoint: "https://old.endpoint",
+          keys: { p256dh: "p256", auth: "auth" },
+          subscriberId: "sub-migrated",
+        });
+
+        const updated = getSubscription("https://old.endpoint");
+        expect(updated?.subscriber_id).toBe("sub-migrated");
+      } finally {
+        closePushStore();
+        try {
+          fs.rmSync(tempDir, { recursive: true, force: true });
+        } catch (_) {}
+      }
     });
   });
 });

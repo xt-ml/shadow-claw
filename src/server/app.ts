@@ -123,15 +123,19 @@ export function createApp(config: ServerConfig): {
     getEnabledTasks: getEnabledScheduledTasks,
     updateLastRun: updateScheduledTaskLastRun,
     broadcastTaskTrigger: (task) =>
-      broadcastPush({
-        type: "scheduled-task",
-        taskId: task.id,
-        groupId: task.groupId,
-        prompt: task.prompt,
-        taskType: task.type,
-        tools: task.tools,
-        channel: task.channel,
-      }),
+      broadcastPush(
+        {
+          type: "scheduled-task",
+          taskId: task.id,
+          groupId: task.groupId,
+          prompt: task.prompt,
+          taskType: task.type,
+          tools: task.tools,
+          channel: task.channel,
+          subscriberId: task.subscriberId ?? undefined,
+        },
+        task.subscriberId ? { subscriberId: task.subscriberId } : undefined,
+      ),
   });
 
   // ---------------- STATIC FILES & SPA FALLBACK ----------------

@@ -26,6 +26,7 @@ export interface PushSubscriptionRow {
   keys_auth: string;
   client_id?: string;
   device_label?: string;
+  subscriber_id?: string;
   created_at: string;
 }
 
@@ -39,6 +40,8 @@ export interface PushSubscriptionInput {
   client_id?: string;
   deviceLabel?: string;
   device_label?: string;
+  subscriberId?: string;
+  subscriber_id?: string;
 }
 
 export interface PushClientRecord {
@@ -77,6 +80,7 @@ export function openPushStore(
       keys_auth TEXT NOT NULL,
       client_id TEXT,
       device_label TEXT,
+      subscriber_id TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
@@ -87,6 +91,10 @@ export function openPushStore(
 
   try {
     db.exec(`ALTER TABLE subscriptions ADD COLUMN device_label TEXT`);
+  } catch (_) {}
+
+  try {
+    db.exec(`ALTER TABLE subscriptions ADD COLUMN subscriber_id TEXT`);
   } catch (_) {}
 
   return db;
@@ -143,6 +151,7 @@ function rowToSubscription(row: any): PushSubscriptionRow {
     keys_auth: `${row.keys_auth}`,
     client_id: row.client_id ? `${row.client_id}` : undefined,
     device_label: row.device_label ? `${row.device_label}` : undefined,
+    subscriber_id: row.subscriber_id ? `${row.subscriber_id}` : undefined,
     created_at: `${row.created_at}`,
   };
 }
@@ -158,16 +167,19 @@ export function saveSubscription(subscription: PushSubscriptionInput): void {
   const clientId = subscription.clientId || subscription.client_id || null;
   const deviceLabel =
     subscription.deviceLabel || subscription.device_label || null;
+  const subscriberId =
+    subscription.subscriberId || subscription.subscriber_id || null;
 
   db.prepare(
     `
-    INSERT INTO subscriptions (endpoint, keys_p256dh, keys_auth, client_id, device_label)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO subscriptions (endpoint, keys_p256dh, keys_auth, client_id, device_label, subscriber_id)
+    VALUES (?, ?, ?, ?, ?, ?)
     ON CONFLICT(endpoint) DO UPDATE SET
       keys_p256dh = excluded.keys_p256dh,
       keys_auth = excluded.keys_auth,
       client_id = COALESCE(excluded.client_id, subscriptions.client_id),
-      device_label = COALESCE(excluded.device_label, subscriptions.device_label)
+      device_label = COALESCE(excluded.device_label, subscriptions.device_label),
+      subscriber_id = COALESCE(excluded.subscriber_id, subscriptions.subscriber_id)
   `,
   ).run(
     subscription.endpoint,
@@ -175,6 +187,7 @@ export function saveSubscription(subscription: PushSubscriptionInput): void {
     subscription.keys.auth,
     clientId,
     deviceLabel,
+    subscriberId,
   );
 }
 
@@ -247,6 +260,25 @@ export function getSubscriptionsByClientId(
       "SELECT * FROM subscriptions WHERE client_id = ? ORDER BY created_at DESC, id DESC",
     )
     .all(clientId);
+
+  return result ? result.map(rowToSubscription) : [];
+}
+
+/**
+ * Get subscriptions matching a specific subscriber ID.
+ */
+export function getSubscriptionsBySubscriberId(
+  subscriberId: string,
+): PushSubscriptionRow[] {
+  if (!db || !subscriberId || !subscriberId.trim()) {
+    return [];
+  }
+
+  const result = db
+    .prepare(
+      "SELECT * FROM subscriptions WHERE subscriber_id = ? ORDER BY created_at DESC, id DESC",
+    )
+    .all(subscriberId.trim());
 
   return result ? result.map(rowToSubscription) : [];
 }

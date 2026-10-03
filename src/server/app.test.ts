@@ -172,4 +172,41 @@ describe("app", () => {
       verbose: false,
     });
   });
+
+  it("configures ServerTaskScheduler with broadcastTaskTrigger that includes subscriberId", async () => {
+    const { createApp } = await import("./app.js");
+    const { ServerTaskScheduler } =
+      await import("../subsystems/notifications/task-scheduler-server.js");
+    const { broadcastPush } =
+      await import("../subsystems/notifications/push-routes.js");
+
+    createApp(config);
+
+    expect(ServerTaskScheduler).toHaveBeenCalled();
+    const schedulerConfig = (ServerTaskScheduler as unknown as jest.Mock).mock
+      .calls[0][0] as any;
+    expect(schedulerConfig.broadcastTaskTrigger).toBeDefined();
+
+    const task = {
+      id: "task-1",
+      groupId: "br:main",
+      prompt: "Do work",
+      type: "prompt",
+      tools: null,
+      channel: null,
+      subscriberId: "sub-12345",
+    };
+
+    schedulerConfig.broadcastTaskTrigger(task);
+
+    expect(broadcastPush).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "scheduled-task",
+        taskId: "task-1",
+        groupId: "br:main",
+        subscriberId: "sub-12345",
+      }),
+      { subscriberId: "sub-12345" },
+    );
+  });
 });

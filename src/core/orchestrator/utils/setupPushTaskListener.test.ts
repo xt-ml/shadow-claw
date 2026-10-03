@@ -22,6 +22,25 @@ jest.unstable_mockModule("./operations/channel.js", () => ({
   submitMessage: mockSubmitMessage,
 }));
 
+const mockGetOrCreateSubscriberId = (jest.fn() as any).mockResolvedValue(
+  "sub-local-device",
+);
+
+jest.unstable_mockModule("../../../db/getOrCreateSubscriberId.js", () => ({
+  getOrCreateSubscriberId: mockGetOrCreateSubscriberId,
+}));
+
+const mockSyncExistingPushSubscription = (jest.fn() as any).mockResolvedValue(
+  undefined,
+);
+
+jest.unstable_mockModule(
+  "../../../subsystems/notifications/push-client.js",
+  () => ({
+    syncExistingPushSubscription: mockSyncExistingPushSubscription,
+  }),
+);
+
 const { syncProxyConfigToServiceWorker } =
   await import("./syncProxyConfigToServiceWorker.js");
 const { setupPushTaskListener } = await import("./setupPushTaskListener.js");
@@ -288,6 +307,80 @@ describe("setupPushTaskListener", () => {
       expect(mockOrchestrator.schedulerTriggeredGroups?.has("g4")).toBe(false);
 
       consoleError.mockRestore();
+    });
+
+    it("should ignore event if subscriberId does not match local subscriberId", async () => {
+      mockOrchestratorStore.tasks = [];
+      const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+      listener({
+        data: {
+          type: "scheduled-task-trigger",
+          taskId: "knack-task-1",
+          groupId: "br:main",
+          prompt: "Process news",
+          subscriberId: "sub-knack-host",
+        },
+      });
+
+      await new Promise(process.nextTick);
+
+      expect(mockOrchestratorStore.runTask).not.toHaveBeenCalled();
+      expect(mockSubmitMessage).not.toHaveBeenCalled();
+      expect(mockOrchestrator.schedulerTriggeredGroups?.size).toBe(0);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("subscriberId mismatch"),
+      );
+
+      warnSpy.mockRestore();
+    });
+
+    it("should execute task if subscriberId matches local subscriberId", async () => {
+      mockOrchestratorStore.tasks = [];
+
+      listener({
+        data: {
+          type: "scheduled-task-trigger",
+          taskId: "ipad-task-1",
+          groupId: "br:main",
+          prompt: "iPad prompt",
+          subscriberId: "sub-local-device",
+        },
+      });
+
+      await new Promise(process.nextTick);
+
+      expect(mockSubmitMessage).toHaveBeenCalledWith(
+        mockOrchestrator,
+        "iPad prompt",
+        "br:main",
+      );
+    });
+  });
+
+  describe("startup sync", () => {
+    it("calls syncExistingPushSubscription on startup with local subscriberId", async () => {
+      Object.defineProperty(global, "navigator", {
+        value: {
+          serviceWorker: {
+            addEventListener: jest.fn(),
+          },
+        },
+        configurable: true,
+      });
+
+      setupPushTaskListener(
+        mockOrchestrator as Orchestrator,
+        {} as ShadowClawDatabase,
+      );
+
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(mockSyncExistingPushSubscription).toHaveBeenCalledWith(
+        "sub-local-device",
+      );
     });
   });
 });

@@ -15,6 +15,7 @@ import {
   removeSubscriptionById,
   getSubscription,
   getAllSubscriptions,
+  getSubscriptionsBySubscriberId,
   findSubscriptionsForClient,
   getRegisteredPushClients,
   type PushSubscriptionRow,
@@ -26,6 +27,7 @@ export { getRegisteredPushClients, type PushClientRecord };
 
 export interface BroadcastPushOptions {
   clientId?: string;
+  subscriberId?: string;
 }
 
 export interface BroadcastPushResult {
@@ -36,13 +38,22 @@ export interface BroadcastPushResult {
 }
 
 /**
- * Broadcast a push notification payload to all subscriptions, or send to a specific client.
+ * Broadcast a push notification payload to all subscriptions, or send to a specific client or subscriber.
  * Used by /push/broadcast, MCP send_notification tool, and the server-side task scheduler.
  */
 export async function broadcastPush(
   payload: any,
   options?: BroadcastPushOptions,
 ): Promise<BroadcastPushResult> {
+  const targetSubscriberId =
+    options?.subscriberId ||
+    (typeof payload?.subscriberId === "string" && payload.subscriberId.trim()
+      ? payload.subscriberId.trim()
+      : typeof payload?.subscriber_id === "string" &&
+          payload.subscriber_id.trim()
+        ? payload.subscriber_id.trim()
+        : undefined);
+
   const targetClientId =
     options?.clientId ||
     (typeof payload?.clientId === "string" &&
@@ -52,7 +63,12 @@ export async function broadcastPush(
       : undefined);
 
   let subs: PushSubscriptionRow[];
-  if (targetClientId) {
+  if (targetSubscriberId) {
+    subs = getSubscriptionsBySubscriberId(targetSubscriberId);
+    if (subs.length === 0) {
+      return { sent: 0, failed: 0, notFound: true };
+    }
+  } else if (targetClientId) {
     subs = findSubscriptionsForClient(targetClientId);
     if (subs.length === 0) {
       return { sent: 0, failed: 0, notFound: true };
@@ -137,10 +153,20 @@ export function registerPushRoutes(app: Express): void {
         ? req.query.deviceLabel
         : undefined);
 
+    const subscriberId =
+      subscription.subscriberId ||
+      subscription.subscriber_id ||
+      (typeof req.query?.subscriberId === "string"
+        ? req.query.subscriberId
+        : typeof req.query?.subscriber_id === "string"
+          ? req.query.subscriber_id
+          : undefined);
+
     saveSubscription({
       ...subscription,
       clientId,
       deviceLabel,
+      subscriberId,
     });
     res.sendStatus(201);
   });
@@ -238,9 +264,9 @@ export function registerPushRoutes(app: Express): void {
     res.sendStatus(200);
   });
 
-  // Broadcast a notification to all subscriptions (or to a specific client if clientId is provided)
+  // Broadcast a notification to all subscriptions (or to a specific client/subscriber if provided)
   app.post("/push/broadcast", async (req, res) => {
-    const { title, body, clientId } = req.body || {};
+    const { title, body, clientId, subscriberId } = req.body || {};
 
     if (!body) {
       return res.status(400).json({ error: "Missing body" });
@@ -252,7 +278,7 @@ export function registerPushRoutes(app: Express): void {
           title: title || "ShadowClaw",
           body,
         },
-        clientId ? { clientId } : undefined,
+        subscriberId ? { subscriberId } : clientId ? { clientId } : undefined,
       );
       res.json(result);
     } catch (err: any) {

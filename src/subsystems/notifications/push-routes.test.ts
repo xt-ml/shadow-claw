@@ -24,6 +24,7 @@ jest.unstable_mockModule("./push-store.js", () => ({
   getSubscription: jest.fn(),
   getAllSubscriptions: jest.fn(() => []),
   getSubscriptionsByClientId: jest.fn(() => []),
+  getSubscriptionsBySubscriberId: jest.fn(() => []),
   findSubscriptionsForClient: jest.fn(() => []),
   getRegisteredPushClients: jest.fn(() => []),
 }));
@@ -133,8 +134,61 @@ describe("push-routes", () => {
       const req = createMockReq(subscription);
       const res = createMockRes();
       await app.routes.post["/push/subscribe"](req, res);
-      expect(store.saveSubscription).toHaveBeenCalledWith(subscription);
+      expect(store.saveSubscription).toHaveBeenCalledWith({
+        ...subscription,
+        subscriberId: undefined,
+      });
       expect(res.statusCode).toBe(201);
+    });
+
+    it("saves the subscription with subscriberId from body or query", async () => {
+      const subscription: any = {
+        endpoint: "https://fcm.example.com/abc-with-sub",
+        keys: { p256dh: "key1", auth: "key2" },
+        subscriberId: "sub-ipad-999",
+      };
+      const req = createMockReq(subscription);
+      const res = createMockRes();
+      await app.routes.post["/push/subscribe"](req, res);
+      expect(store.saveSubscription).toHaveBeenCalledWith(
+        expect.objectContaining({
+          endpoint: "https://fcm.example.com/abc-with-sub",
+          subscriberId: "sub-ipad-999",
+        }),
+      );
+
+      // Also support subscriber_id snake_case
+      const subSnake: any = {
+        endpoint: "https://fcm.example.com/abc-snake",
+        keys: { p256dh: "key1", auth: "key2" },
+        subscriber_id: "sub-snake-123",
+      };
+      await app.routes.post["/push/subscribe"](
+        createMockReq(subSnake),
+        createMockRes(),
+      );
+      expect(store.saveSubscription).toHaveBeenCalledWith(
+        expect.objectContaining({
+          endpoint: "https://fcm.example.com/abc-snake",
+          subscriberId: "sub-snake-123",
+        }),
+      );
+
+      // Also support query param ?subscriberId=...
+      const reqQuery: any = {
+        body: {
+          endpoint: "https://fcm.example.com/abc-query",
+          keys: { p256dh: "key1", auth: "key2" },
+        },
+        query: { subscriberId: "sub-from-query" },
+      };
+      await app.routes.post["/push/subscribe"](reqQuery, createMockRes());
+      expect(store.saveSubscription).toHaveBeenCalledWith(
+        expect.objectContaining({
+          endpoint: "https://fcm.example.com/abc-query",
+          subscriberId: "sub-from-query",
+        }),
+      );
     });
   });
 
@@ -478,6 +532,96 @@ describe("push-routes", () => {
       expect(result).toEqual({ sent: 1, failed: 0 });
       expect(store.findSubscriptionsForClient).toHaveBeenCalledWith(
         "client-target-123",
+      );
+    });
+
+    it("targets a specific subscriber and sends push when matching subscription exists", async () => {
+      (store.getSubscriptionsBySubscriberId as any).mockReturnValue([
+        {
+          id: 1,
+          endpoint: "https://fcm.example.com/target-sub",
+          keys_p256dh: "k1",
+          keys_auth: "k2",
+          subscriber_id: "sub-owner-123",
+        },
+      ]);
+      webpush.sendNotification.mockResolvedValueOnce({
+        statusCode: 201,
+      } as any);
+
+      const result = await broadcastPush(
+        { title: "Test", body: "Hello" },
+        { subscriberId: "sub-owner-123" },
+      );
+      expect(result).toEqual({ sent: 1, failed: 0 });
+      expect(store.getSubscriptionsBySubscriberId).toHaveBeenCalledWith(
+        "sub-owner-123",
+      );
+      expect(webpush.sendNotification).toHaveBeenCalledTimes(1);
+    });
+
+    it("targets a specific subscriber and returns notFound when no subscription matches", async () => {
+      (store.getSubscriptionsBySubscriberId as any).mockReturnValue([]);
+
+      const result = await broadcastPush(
+        { title: "Test", body: "Hello" },
+        { subscriberId: "sub-unknown" },
+      );
+      expect(result).toEqual({ sent: 0, failed: 0, notFound: true });
+      expect(store.getSubscriptionsBySubscriberId).toHaveBeenCalledWith(
+        "sub-unknown",
+      );
+      expect(webpush.sendNotification).not.toHaveBeenCalled();
+    });
+
+    it("regression: broadcastPush for Knack task (subscriber sub-knack) does not send to iPad (subscriber sub-ipad)", async () => {
+      // Push store only has iPad subscription
+      (store.getSubscriptionsBySubscriberId as any).mockImplementation(
+        (id: string) => {
+          if (id === "sub-ipad") {
+            return [
+              {
+                id: 2,
+                endpoint: "https://web.push.apple.com/ipad-endpoint",
+                keys_p256dh: "k-ipad",
+                keys_auth: "k-auth",
+                subscriber_id: "sub-ipad",
+                device_label: "iPad Safari",
+              },
+            ];
+          }
+          return [];
+        },
+      );
+
+      // Scheduled task on Knack triggers broadcastPush for sub-knack
+      const result = await broadcastPush(
+        {
+          type: "scheduled-task",
+          taskId: "fabf1c52-task",
+          subscriberId: "sub-knack",
+          prompt: "Fetch Soylent News",
+        },
+        { subscriberId: "sub-knack" },
+      );
+
+      // Must be notFound and zero notifications sent (iPad NEVER gets Knack's task push)
+      expect(result).toEqual({ sent: 0, failed: 0, notFound: true });
+      expect(webpush.sendNotification).not.toHaveBeenCalled();
+    });
+
+    it("extracts subscriberId directly from payload if not specified in options", async () => {
+      (store.getSubscriptionsBySubscriberId as any).mockReturnValue([]);
+
+      const result = await broadcastPush({
+        type: "scheduled-task",
+        taskId: "task-abc",
+        subscriberId: "sub-payload-123",
+      });
+
+      expect(result).toEqual({ sent: 0, failed: 0, notFound: true });
+      expect(store.getSubscriptionsBySubscriberId).toHaveBeenCalledWith(
+        "sub-payload-123",
       );
     });
   });

@@ -50,6 +50,7 @@ jest.unstable_mockModule("../../db/getConfig.js", () => ({
 const {
   getVapidPublicKey,
   subscribeToPush,
+  syncExistingPushSubscription,
   unsubscribeFromPush,
   getCurrentSubscription,
   urlBase64ToUint8Array,
@@ -203,6 +204,47 @@ describe("push-client", () => {
       expect(typeof body.clientId).toBe("string");
       expect(body.deviceLabel).toBeDefined();
       expect(typeof body.deviceLabel).toBe("string");
+    });
+
+    it("includes subscriberId when provided", async () => {
+      (fetch as any)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ publicKey: "test-vapid-key" }),
+        })
+        .mockResolvedValueOnce({ ok: true });
+
+      await subscribeToPush(
+        "client-explicit-123",
+        "Pixel 9 Pro",
+        "sub-custom-999",
+      );
+      const postCall = (fetch as any).mock.calls[1];
+      const body = JSON.parse(postCall[1].body);
+      expect(body.subscriberId).toBe("sub-custom-999");
+    });
+  });
+
+  describe("syncExistingPushSubscription", () => {
+    it("re-registers active subscription with subscriberId", async () => {
+      mockPushManager.getSubscription.mockResolvedValue(mockSubscription);
+      (fetch as any).mockResolvedValueOnce({ ok: true });
+
+      await syncExistingPushSubscription("sub-ipad-active");
+
+      expect(fetch).toHaveBeenCalledWith(
+        "/push/subscribe",
+        expect.objectContaining({
+          method: "POST",
+          body: expect.stringContaining('"subscriberId":"sub-ipad-active"'),
+        }),
+      );
+    });
+
+    it("does nothing when no active subscription", async () => {
+      mockPushManager.getSubscription.mockResolvedValue(null);
+      await syncExistingPushSubscription("sub-ipad-active");
+      expect(fetch).not.toHaveBeenCalled();
     });
   });
 

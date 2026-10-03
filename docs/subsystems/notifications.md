@@ -53,8 +53,9 @@ On server start, `push-store.ts` generates a VAPID key pair (if none exists) and
 The client subscribes via:
 
 ```text
-POST /push/subscribe     { subscription: PushSubscription }
+POST /push/subscribe     { subscription: PushSubscription, subscriberId?: string, clientId?: string }
 DELETE /push/subscribe   { endpoint }
+POST /push/broadcast     { title, body, subscriberId?: string, clientId?: string }
 GET /push/subscriptions  { Array<PushSubscriptionRow> }
 GET /push/clients        { clients: Array<PushClientRecord> }
 GET /push/status         { subscribed: bool, endpoint? }
@@ -178,9 +179,11 @@ Runs on the Express/Electron server and fires even when no browser tab is open:
 
 1. Ticks every 60 seconds
 2. Queries SQLite for enabled tasks with due cron expressions
-3. For each due task: sends a Web Push notification to all subscribers
-4. Service worker receives push, relays to open tabs, or shows OS notification
-5. Open tab receives relay → triggers agent invocation with the task prompt
+3. For each due task: sends a Web Push notification **scoped strictly to the task's owning `subscriber_id`** (never broadcast globally across all subscribers).
+   - If a task has no `subscriber_id`, the scheduler skips dispatch and logs a warning.
+   - If the task's subscriber has no active push subscription, the scheduler skips dispatch without broadcasting to other subscribers.
+4. Service worker receives push, relays to open tabs with `subscriberId`, or shows OS notification
+5. Open tab receives relay → validates that `subscriberId` matches its local subscriber identity, then triggers agent invocation with the task prompt
 
 The server scheduler and client scheduler can both fire for the same task. The `lastRun` timestamp guard (rounded to the minute) prevents double-firing in the common case where a tab is open.
 

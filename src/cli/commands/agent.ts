@@ -413,6 +413,26 @@ export async function runAgentTool(
 }
 
 /**
+ * Delete all stored messages for a conversation group.
+ */
+export async function runAgentClear(
+  options: Record<string, any> = {},
+): Promise<{ success: boolean; groupId: string }> {
+  const { db, core } = await bootstrapHeadlessAgent(options);
+  const groupId =
+    options.group || core.DEFAULT_SERVER_GROUP_ID || DEFAULT_SERVER_GROUP_ID;
+  const { clearGroupMessages } = await import("../../db/clearGroupMessages.js");
+
+  await clearGroupMessages(db, groupId);
+
+  if (!options.quiet) {
+    console.log(`Cleared conversation history for group "${groupId}".`);
+  }
+
+  return { success: true, groupId };
+}
+
+/**
  * Execute a skill by name directly via its declarative tool chain.
  * @param {string} skillName
  * @param {import("../../src/worker/headless-types.js").AgentSkillOptions} [options]
@@ -1057,7 +1077,10 @@ export async function runAgentRun(
 
   // 4. Load recent message history
   let history = [];
-  if (typeof core.getRecentMessages === "function") {
+  if (
+    options.history !== false &&
+    typeof core.getRecentMessages === "function"
+  ) {
     try {
       history = await core.getRecentMessages(db, groupId, 50);
     } catch {}
@@ -1909,6 +1932,9 @@ export async function runAgentCommand(
       return await runAgentSkill(skillName, actualOptions);
     }
 
+    case "clear":
+      return await runAgentClear(actualOptions);
+
     case "run": {
       // Prompt may be empty when data is piped via stdin
       const prompt = actualArgs.join(" ") || "";
@@ -1953,7 +1979,7 @@ export async function runAgentCommand(
 
     default: {
       console.log(
-        "Usage: shadow-claw agent <init|model|skills|tools|tool|skill|import|run|listen> [args...]",
+        "Usage: shadow-claw agent <init|model|skills|tools|tool|skill|import|run|clear|listen> [args...]",
       );
     }
   }

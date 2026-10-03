@@ -1228,7 +1228,7 @@ program.commandsGroup("Headless Agent:");
 program
   .command("agent [action] [args...]")
   .description(
-    "Run the headless CLI agent (init | model | skills | tools | tool | skill | import | run | listen)",
+    "Run the headless CLI agent (init | model | skills | tools | tool | skill | import | run | clear | listen)",
   )
   .optionsGroup("Agent Options:")
   .option(
@@ -1274,6 +1274,10 @@ program
     true,
   )
   .option("--no-stream", "Disable streaming response tokens to stdout")
+  .option(
+    "--no-history",
+    "Do not load prior conversation history for `agent run`",
+  )
   .option(
     "--progress",
     "Show progress bar during model downloads (default: true)",

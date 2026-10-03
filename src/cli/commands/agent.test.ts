@@ -100,8 +100,8 @@ describe("agent init", () => {
 
   it("defaults workspace to a unique random isolated sandbox when options.workspace is not provided", async () => {
     const { runAgentInit } = await import("./agent.js");
-    const result1 = await runAgentInit({});
-    const result2 = await runAgentInit({});
+    const result1 = await runAgentInit({ yes: true });
+    const result2 = await runAgentInit({ yes: true });
     const basePrefix = path.join(tmpdir(), "shadow-claw", "workspace-");
     expect(result1.workspace.startsWith(basePrefix)).toBe(true);
     expect(result2.workspace.startsWith(basePrefix)).toBe(true);
@@ -127,8 +127,14 @@ describe("agent init", () => {
     const basePrefix = path.join(tmpdir(), "shadow-claw", "workspace-");
 
     // 1. Without workspace option, defaults to a unique fallback in tmpdir
-    const resDefault1 = await bootstrapHeadlessAgent({ quiet: true });
-    const resDefault2 = await bootstrapHeadlessAgent({ quiet: true });
+    const resDefault1 = await bootstrapHeadlessAgent({
+      quiet: true,
+      yes: true,
+    });
+    const resDefault2 = await bootstrapHeadlessAgent({
+      quiet: true,
+      yes: true,
+    });
     expect(resDefault1.workspaceDir.startsWith(basePrefix)).toBe(true);
     expect(resDefault2.workspaceDir.startsWith(basePrefix)).toBe(true);
     expect(resDefault1.workspaceDir).not.toBe(resDefault2.workspaceDir);
@@ -143,6 +149,7 @@ describe("agent init", () => {
     const resCache = await bootstrapHeadlessAgent({
       cacheDir: customCache,
       quiet: true,
+      yes: true,
     });
     expect(resCache.workspaceDir.startsWith(basePrefix)).toBe(true);
     closeSqliteDatabase?.();
@@ -153,6 +160,7 @@ describe("agent init", () => {
       workspace: explicitWorkspace,
       cacheDir: customCache,
       quiet: true,
+      yes: true,
     });
     expect(resExplicit.workspaceDir).toBe(path.resolve(explicitWorkspace));
     closeSqliteDatabase?.();
@@ -1344,6 +1352,91 @@ describe("runAgentRun — --output file", () => {
     expect(result.success).toBe(true);
     const written = await readFile(outFile, "utf8");
     expect(written).toBe("The answer is 42.");
+  });
+});
+
+describe("agent clear and run --no-history", () => {
+  let tmpDir;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(path.join(tmpdir(), "sc-agent-clear-test-"));
+  });
+
+  afterEach(async () => {
+    const { closeSqliteDatabase } =
+      await import("../../db/sqlite/openSqliteDatabase.js");
+    closeSqliteDatabase?.();
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  async function runWith(prompt, extra = {}) {
+    const { runAgentRun } = await import("./agent.js");
+    const seen: any[] = [];
+
+    await runAgentRun(prompt, {
+      workspace: tmpDir,
+      provider: "openrouter",
+      apiKey: "sk-or-v1-test",
+      quiet: true,
+      _stdinData: null,
+      invokeHandler: async (_db, payload) => {
+        seen.push(payload.messages);
+      },
+      ...extra,
+    });
+
+    return seen[0] as any[];
+  }
+
+  it("includes prior messages by default", async () => {
+    await runWith("first");
+    const messages = await runWith("second");
+
+    expect(messages.map((m) => m.content)).toEqual(["first", "second"]);
+  });
+
+  it("--no-history omits prior messages", async () => {
+    await runWith("first");
+    const messages = await runWith("second", { history: false });
+
+    expect(messages.map((m) => m.content)).toEqual(["second"]);
+  });
+
+  it("agent clear removes stored history for the group", async () => {
+    const { runAgentCommand } = await import("./agent.js");
+
+    await runWith("first");
+
+    const result = await runAgentCommand("clear", [], {
+      workspace: tmpDir,
+      quiet: true,
+      _stdinData: null,
+    });
+
+    expect(result).toEqual({ success: true, groupId: "server:main" });
+
+    const messages = await runWith("second");
+    expect(messages.map((m) => m.content)).toEqual(["second"]);
+  });
+
+  it("agent clear only affects the targeted --group", async () => {
+    const { runAgentCommand } = await import("./agent.js");
+
+    await runWith("keep", { group: "server:a" });
+    await runWith("drop", { group: "server:b" });
+
+    await runAgentCommand("clear", [], {
+      workspace: tmpDir,
+      quiet: true,
+      group: "server:b",
+      _stdinData: null,
+    });
+
+    const a = await runWith("next", { group: "server:a" });
+    const b = await runWith("next", { group: "server:b" });
+
+    expect(a.map((m) => m.content)).toEqual(["keep", "next"]);
+    expect(b.map((m) => m.content)).toEqual(["next"]);
   });
 });
 

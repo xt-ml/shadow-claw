@@ -1,8 +1,10 @@
 import { DatabaseSync } from "node:sqlite";
+import path from "node:path";
 import { wrapSqliteDatabase } from "./types.js";
 import type { ShadowClawSqliteDatabase } from "./types.js";
 
 let cachedDb: ShadowClawSqliteDatabase | null = null;
+let cachedDbPath: string | null = null;
 
 const addColumn = (
   raw: DatabaseSync,
@@ -31,9 +33,12 @@ const addColumn = (
 export function openSqliteDatabase(
   dbPath: string = "database/agent.db",
 ): ShadowClawSqliteDatabase {
-  if (cachedDb) {
+  const resolvedDbPath = dbPath === ":memory:" ? dbPath : path.resolve(dbPath);
+  if (cachedDb && cachedDbPath === resolvedDbPath) {
     return cachedDb;
   }
+
+  closeSqliteDatabase();
 
   const raw = new DatabaseSync(dbPath);
 
@@ -126,6 +131,7 @@ export function openSqliteDatabase(
   addColumn(raw, "messages", "subagent", "INTEGER");
 
   cachedDb = wrapSqliteDatabase(raw);
+  cachedDbPath = resolvedDbPath;
   return cachedDb;
 }
 
@@ -138,4 +144,5 @@ export function closeSqliteDatabase(): void {
     cachedDb.db.close();
     cachedDb = null;
   }
+  cachedDbPath = null;
 }

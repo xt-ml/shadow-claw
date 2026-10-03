@@ -192,6 +192,7 @@ npx shadow-claw agent import https://xt-ml.github.io/shadow-claw-agent-cli-weath
 | `init`            | `[dir]`             | Initializes workspace directory with `.agents/skills`, `.agents/tools`, `database/`, and default `shadow-claw.config.json`. In interactive TTY environments, prompts for default model and offers immediate prewarm downloading (`--download`). |
 | `model`, `models` | `[action] [id]`     | Inspects, queries, downloads, or configures local models (`list`, `remote`, `download`, `set`). Defaults to `list`.                                                                                                                             |
 | `run`             | `<prompt>`          | Executes a one-shot agent invocation. Persists messages to SQLite, formats conversation history, runs tool loop, streams output to stdout, and exits. Accepts `-` to read the prompt from stdin, or combines `<prompt>` with piped stdin data.  |
+| `clear`           | none                | Deletes all stored messages for the `--group` conversation (default `server:main`).                                                                                                                                                             |
 | `skills`          | `[dir]`             | Discovers and prints all available skills in `.agents/skills/` along with user-invocable status and diagnostics.                                                                                                                                |
 | `tools`           | none                | Lists all registered tools (built-in and declarative) annotated with `[headless-safe]` or `[browser-only]` capability tags.                                                                                                                     |
 | `tool`            | `<name> [jsonArgs]` | When called with only `<name>`, prints the tool description and JSON Schema. When called with `[jsonArgs]`, executes the tool headlessly and prints the result. Accepts JSON arguments or plain text from stdin (auto-mapped to tool schema).   |
@@ -213,6 +214,7 @@ npx shadow-claw agent import https://xt-ml.github.io/shadow-claw-agent-cli-weath
 | `--download`                         | boolean | Prewarm and download the model during agent init or before execution                    | `false`                                   |
 | `--api-key <key>`                    | string  | API key for cloud providers                                                             | auto-resolved from env                    |
 | `--stream` / `--no-stream`           | boolean | Stream response tokens to stdout as they arrive                                         | `true`                                    |
+| `--no-history`                       | boolean | Do not load prior conversation history for `agent run`                                  | history loaded                            |
 | `--progress` / `--no-progress`       | boolean | Show terminal progress bar during model downloads                                       | `true`                                    |
 | `--system-prompt <text>`             | string  | Override system prompt with inline text                                                 | `undefined`                               |
 | `--system-prompt-file <file>`        | string  | Load system prompt from a text or markdown file                                         | `undefined`                               |
@@ -654,6 +656,7 @@ When running an autonomous agent (`shadow-claw agent run`), agents can discover 
 
 1. **`list_peers`**: Discover active peer IDs.
 2. **`send_file`**: Send a workspace file with an optional prompt to another peer:
+
    ```json
    {
      "file_path": "reports/summary.md",
@@ -661,6 +664,7 @@ When running an autonomous agent (`shadow-claw agent run`), agents can discover 
      "prompt": "Please review this summary report."
    }
    ```
+
 3. **`prompt_peer`**: Follow up with queries or instructions to the remote peer.
 
 ### `shadow-claw skills:index [dir]` (alias `agent-skills`)

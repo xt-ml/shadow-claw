@@ -127,6 +127,30 @@ describe("openSqliteDatabase", () => {
     expect(db1).toBe(db2);
   });
 
+  it("opens the requested database when the path changes", async () => {
+    const { openSqliteDatabase } = await import("./openSqliteDatabase.js");
+    const firstPath = path.join(tmpDir, "first.db");
+    const secondPath = path.join(tmpDir, "second.db");
+    const firstDb = openSqliteDatabase(firstPath);
+    firstDb.db
+      .prepare("INSERT INTO config (key, value) VALUES (?, ?)")
+      .run("marker", "first database");
+
+    const secondDb = openSqliteDatabase(secondPath);
+    expect(secondDb).not.toBe(firstDb);
+    expect(
+      secondDb.db.prepare("SELECT * FROM config WHERE key = ?").get("marker"),
+    ).toBeUndefined();
+
+    const reopenedFirstDb = openSqliteDatabase(firstPath);
+    expect(reopenedFirstDb).not.toBe(firstDb);
+    expect(
+      reopenedFirstDb.db
+        .prepare("SELECT value FROM config WHERE key = ?")
+        .get("marker"),
+    ).toEqual({ value: "first database" });
+  });
+
   it("closeSqliteDatabase clears the cache so a new DB can be opened", async () => {
     const { openSqliteDatabase, closeSqliteDatabase } =
       await import("./openSqliteDatabase.js");

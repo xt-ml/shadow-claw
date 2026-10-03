@@ -247,6 +247,7 @@ shadow-claw:not(:defined) {
 
 .header-title-link,
 .header-title-link:hover {
+  align-items: center;
   color: var(--shadow-claw-text-primary);
   display: flex;
   text-decoration: none;
@@ -254,6 +255,7 @@ shadow-claw:not(:defined) {
 
 .header-title-logo {
   display: none;
+  flex-shrink: 0;
   height: var(--shadow-claw-logo-size, 1.5rem);
   width: var(--shadow-claw-logo-size, 1.5rem);
 }

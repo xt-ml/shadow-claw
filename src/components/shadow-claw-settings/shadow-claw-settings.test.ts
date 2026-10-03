@@ -191,6 +191,7 @@ jest.unstable_mockModule("../../db/db.js", () => ({
   getDb: jest.fn<any>().mockResolvedValue({} as any),
 }));
 
+(globalThis as any)._mockOverrideSkeleton = "true";
 jest.unstable_mockModule("../../db/getConfig.js", () => ({
   getConfig: jest.fn<any>().mockImplementation((_db: unknown, key: string) => {
     if (key === "assistant_name") {
@@ -198,6 +199,9 @@ jest.unstable_mockModule("../../db/getConfig.js", () => ({
     }
     if (key === "allowed_iframe_host_patterns") {
       return Promise.resolve(undefined);
+    }
+    if (key === "override_prerender_skeleton") {
+      return Promise.resolve((globalThis as any)._mockOverrideSkeleton);
     }
 
     return Promise.resolve("true");
@@ -262,6 +266,72 @@ const { orchestratorStore } = await import("../../stores/orchestrator.js");
 const { ShadowClawSettings } = await import("./shadow-claw-settings.js");
 
 describe("shadow-claw-settings", () => {
+  describe("override pre-rendered content setting on load", () => {
+    const META = "shadow-claw-override-prerender-skeleton";
+    const KEY = "shadow-claw-override-prerender-skeleton";
+
+    const load = async () => {
+      const el = new ShadowClawSettings();
+      (el as any).db = {} as any;
+      document.body.appendChild(el);
+      await el.render();
+      const toggle = el.shadowRoot?.querySelector<HTMLInputElement>(
+        '[data-setting="override-prerender-skeleton-toggle"]',
+      );
+      document.body.removeChild(el);
+
+      return toggle;
+    };
+
+    const setMeta = (content: string) => {
+      const meta = document.createElement("meta");
+      meta.setAttribute("name", META);
+      meta.setAttribute("content", content);
+      document.head.appendChild(meta);
+    };
+
+    beforeEach(() => {
+      localStorage.clear();
+      (globalThis as any)._mockOverrideSkeleton = undefined;
+    });
+
+    afterEach(() => {
+      document.head
+        .querySelectorAll(`meta[name="${META}"]`)
+        .forEach((m) => m.remove());
+      (globalThis as any)._mockOverrideSkeleton = "true";
+      localStorage.clear();
+    });
+
+    it("shows unchecked and syncs localStorage when the stored value is false", async () => {
+      (globalThis as any)._mockOverrideSkeleton = "false";
+      setMeta("true");
+
+      const toggle = await load();
+
+      expect(toggle?.checked).toBe(false);
+      expect(localStorage.getItem(KEY)).toBe("false");
+    });
+
+    it("follows a site-config default of false when nothing is stored", async () => {
+      setMeta("false");
+
+      const toggle = await load();
+
+      expect(toggle?.checked).toBe(false);
+      expect(localStorage.getItem(KEY)).toBeNull();
+    });
+
+    it("follows a site-config default of true without persisting it", async () => {
+      setMeta("true");
+
+      const toggle = await load();
+
+      expect(toggle?.checked).toBe(true);
+      expect(localStorage.getItem(KEY)).toBeNull();
+    });
+  });
+
   it("registers custom element", () => {
     expect(customElements.get("shadow-claw-settings")).toBe(ShadowClawSettings);
   });

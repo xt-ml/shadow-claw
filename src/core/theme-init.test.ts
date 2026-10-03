@@ -27,6 +27,37 @@ describe("theme-init initializeThemeAndBootState", () => {
     expect(shadowClawEl.getAttribute("data-hydration-pending")).toBe("true");
   });
 
+  it("uses the site-config meta default when localStorage has no value", () => {
+    const meta = document.createElement("meta");
+    meta.setAttribute("name", "shadow-claw-override-prerender-skeleton");
+    meta.setAttribute("content", "true");
+    document.head.appendChild(meta);
+
+    try {
+      initializeThemeAndBootState();
+
+      expect(shadowClawEl.getAttribute("data-js-boot-pending")).toBe("true");
+    } finally {
+      meta.remove();
+    }
+  });
+
+  it("localStorage false beats a site-config meta default of true", () => {
+    const meta = document.createElement("meta");
+    meta.setAttribute("name", "shadow-claw-override-prerender-skeleton");
+    meta.setAttribute("content", "true");
+    document.head.appendChild(meta);
+    localStorage.setItem("shadow-claw-override-prerender-skeleton", "false");
+
+    try {
+      initializeThemeAndBootState();
+
+      expect(shadowClawEl.hasAttribute("data-js-boot-pending")).toBe(false);
+    } finally {
+      meta.remove();
+    }
+  });
+
   it("does not set data-prerender-no-seed if override is false and element lacks no-seed attribute", () => {
     localStorage.setItem("shadow-claw-override-prerender-skeleton", "false");
 

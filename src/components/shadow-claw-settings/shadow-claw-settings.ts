@@ -17,6 +17,7 @@ import { orchestratorStore } from "../../stores/orchestrator.js";
 import { showError, showInfo, showSuccess } from "../../ui/toast.js";
 import { formatDateForFilename } from "../../utils/utils.js";
 import { isTruthyConfigValue } from "../../utils/parseBooleanConfig.js";
+import { getPrerenderSkeletonDefault } from "../../utils/prerenderSkeletonDefault.js";
 
 import type { ConfigEntryRecord } from "../../config/settings-backup.js";
 import type { Orchestrator } from "../../core/orchestrator/orchestrator.js";
@@ -66,8 +67,6 @@ async function ensureSettingsTabLoaded(tabId: string): Promise<void> {
 import ShadowClawElement from "../shadow-claw-element.js";
 import shadowClawSettingsStyles from "./shadow-claw-settings.css" with { type: "css" };
 import shadowClawSettingsTemplate from "./shadow-claw-settings.html" with { type: "html" };
-
-declare const __PRERENDER_MAIN_MEMORY__: boolean | undefined;
 
 const elementName = "shadow-claw-settings";
 
@@ -990,11 +989,7 @@ export class ShadowClawSettings extends ShadowClawElement {
       // Ignore
     }
 
-    // @ts-ignore
-    const defaultOverride =
-      typeof __PRERENDER_MAIN_MEMORY__ !== "undefined"
-        ? __PRERENDER_MAIN_MEMORY__
-        : true;
+    const defaultOverride = getPrerenderSkeletonDefault();
 
     let overridePrerenderSkeleton = defaultOverride;
     if (
@@ -1004,16 +999,19 @@ export class ShadowClawSettings extends ShadowClawElement {
       overridePrerenderSkeleton = isTruthyConfigValue(
         rawOverridePrerenderSkeleton,
       );
-    } else if (storedLocalStorage !== null) {
-      overridePrerenderSkeleton = storedLocalStorage === "true";
-    }
 
-    if (overridePrerenderSkeleton) {
+      // Keep the synchronous early-boot flag in step with the stored choice;
+      // an unset value must never be persisted or it would pin the default.
       try {
-        setNamespacedItem("shadow-claw-override-prerender-skeleton", "true");
+        setNamespacedItem(
+          "shadow-claw-override-prerender-skeleton",
+          overridePrerenderSkeleton ? "true" : "false",
+        );
       } catch {
         // Ignore localStorage quota / access errors
       }
+    } else if (storedLocalStorage !== null) {
+      overridePrerenderSkeleton = storedLocalStorage === "true";
     }
 
     const overridePrerenderSkeletonToggle = root.querySelector(

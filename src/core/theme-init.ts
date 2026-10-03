@@ -5,8 +5,7 @@ import {
   installCustomElementsRegistryGuard,
 } from "../security/custom-element-security.js";
 import { getNamespacedItem } from "../utils/namespacedStorage.js";
-
-declare const __PRERENDER_MAIN_MEMORY__: boolean;
+import { getPrerenderSkeletonDefault } from "../utils/prerenderSkeletonDefault.js";
 
 export function handleGithubPages404Redirects() {
   const redirect = sessionStorage.getItem(
@@ -52,13 +51,13 @@ export function initializeThemeAndBootState() {
   try {
     const rawVal = getNamespacedItem(OVERRIDE_PRERENDER_KEY);
     if (rawVal === null) {
-      shouldOverridePrerender = __PRERENDER_MAIN_MEMORY__;
+      shouldOverridePrerender = getPrerenderSkeletonDefault();
     } else {
       shouldOverridePrerender = rawVal === "true";
     }
   } catch {
     // localStorage may be unavailable (e.g. private browsing restrictions)
-    shouldOverridePrerender = __PRERENDER_MAIN_MEMORY__;
+    shouldOverridePrerender = getPrerenderSkeletonDefault();
   }
 
   if (shouldOverridePrerender) {

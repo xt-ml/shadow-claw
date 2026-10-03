@@ -86,6 +86,42 @@ describe("apply-site-config", () => {
   </body>
 </html>`;
 
+    it.each([true, false])(
+      "embeds settings.overridePrerenderSkeleton=%s as a meta tag before theme-init.js",
+      (value) => {
+        const patched = patchIndexHtml(baseHtml, {
+          settings: { overridePrerenderSkeleton: value },
+        });
+        const meta = `<meta name="shadow-claw-override-prerender-skeleton" content="${value}" />`;
+
+        expect(patched).toContain(meta);
+        expect(patched.indexOf(meta)).toBeLessThan(
+          patched.indexOf('<script src="theme-init.js">'),
+        );
+      },
+    );
+
+    it("replaces an existing override meta tag instead of duplicating it", () => {
+      const html = baseHtml.replace(
+        "</head>",
+        '<meta name="shadow-claw-override-prerender-skeleton" content="true" /></head>',
+      );
+      const patched = patchIndexHtml(html, {
+        settings: { overridePrerenderSkeleton: false },
+      });
+
+      expect(
+        patched.match(/shadow-claw-override-prerender-skeleton/g),
+      ).toHaveLength(1);
+      expect(patched).toContain('content="false"');
+    });
+
+    it("adds no override meta tag when the setting is not configured", () => {
+      const patched = patchIndexHtml(baseHtml, {});
+
+      expect(patched).not.toContain("shadow-claw-override-prerender-skeleton");
+    });
+
     it("patches site title, description, themeColor, and embeds site-config before theme-init.js", () => {
       const config = {
         site: {
@@ -320,6 +356,19 @@ describe("apply-site-config", () => {
       );
       expect(patched).toContain(
         "<loc>https://kherrick.github.io/shadow-claw-template-demo/</loc>",
+      );
+    });
+
+    it("keeps each path when rewriting a multi-url xml sitemap", () => {
+      const xml = `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://example.com/</loc></url>
+  <url><loc>https://example.com/about</loc></url>
+</urlset>`;
+
+      const patched = patchSitemap(xml, "https://demo.example.com/hub/");
+      expect(patched).toContain("<loc>https://demo.example.com/hub/</loc>");
+      expect(patched).toContain(
+        "<loc>https://demo.example.com/hub/about</loc>",
       );
     });
 
@@ -698,6 +747,109 @@ https://example.com/about`;
           process.env.PAGES_ORIGIN = oldEnv;
         } else {
           delete process.env.PAGES_ORIGIN;
+        }
+      }
+    });
+
+    it("generates sitemap.xml from routes.json when no sitemap is provided", async () => {
+      const distPublicDir = path.join(tmpDir, "dist/public");
+      const resourcesDir = path.join(tmpDir, "pages", "resources");
+      await mkdir(distPublicDir, { recursive: true });
+      await mkdir(resourcesDir, { recursive: true });
+
+      const siteConfigPath = path.join(resourcesDir, "site-config.json");
+      await writeFile(
+        path.join(distPublicDir, "index.html"),
+        "<!doctype html><html><head></head><body></body></html>",
+        "utf8",
+      );
+      await writeFile(
+        path.join(resourcesDir, "routes.json"),
+        JSON.stringify({
+          routes: {
+            "/pages/main/index.html": { prettyPath: "/main" },
+            "/pages/main/a.md": { prettyPath: "/main/a" },
+          },
+        }),
+        "utf8",
+      );
+      await writeFile(
+        siteConfigPath,
+        JSON.stringify({ site: { title: "Generated Sitemap" } }),
+        "utf8",
+      );
+
+      const oldOrigin = process.env.PAGES_ORIGIN;
+      const oldBase = process.env.PAGES_BASE_PATH;
+      try {
+        process.env.PAGES_ORIGIN = "https://demo.example.com/hub/";
+        process.env.PAGES_BASE_PATH = "/hub/";
+        await applySiteConfig(distPublicDir, siteConfigPath);
+
+        const sitemap = await readFile(
+          path.join(distPublicDir, "sitemap.xml"),
+          "utf8",
+        );
+        expect(sitemap).toContain("<loc>https://demo.example.com/hub/</loc>");
+        expect(sitemap).toContain(
+          "<loc>https://demo.example.com/hub/main</loc>",
+        );
+        expect(sitemap).toContain(
+          "<loc>https://demo.example.com/hub/main/a</loc>",
+        );
+      } finally {
+        if (oldOrigin !== undefined) {
+          process.env.PAGES_ORIGIN = oldOrigin;
+        } else {
+          delete process.env.PAGES_ORIGIN;
+        }
+
+        if (oldBase !== undefined) {
+          process.env.PAGES_BASE_PATH = oldBase;
+        } else {
+          delete process.env.PAGES_BASE_PATH;
+        }
+      }
+    });
+
+    it("falls back to branding.siteUrl for generated sitemap origin", async () => {
+      const distPublicDir = path.join(tmpDir, "dist/public");
+      const resourcesDir = path.join(tmpDir, "pages", "resources");
+      await mkdir(distPublicDir, { recursive: true });
+      await mkdir(resourcesDir, { recursive: true });
+
+      const siteConfigPath = path.join(resourcesDir, "site-config.json");
+      await writeFile(
+        path.join(distPublicDir, "index.html"),
+        "<!doctype html><html><head></head><body></body></html>",
+        "utf8",
+      );
+      await writeFile(
+        path.join(resourcesDir, "routes.json"),
+        JSON.stringify({
+          routes: { "/pages/a.md": { prettyPath: "/about" } },
+        }),
+        "utf8",
+      );
+      await writeFile(
+        siteConfigPath,
+        JSON.stringify({ branding: { siteUrl: "https://site.example.com" } }),
+        "utf8",
+      );
+
+      const oldOrigin = process.env.PAGES_ORIGIN;
+      try {
+        delete process.env.PAGES_ORIGIN;
+        await applySiteConfig(distPublicDir, siteConfigPath);
+
+        const sitemap = await readFile(
+          path.join(distPublicDir, "sitemap.xml"),
+          "utf8",
+        );
+        expect(sitemap).toContain("<loc>https://site.example.com/about</loc>");
+      } finally {
+        if (oldOrigin !== undefined) {
+          process.env.PAGES_ORIGIN = oldOrigin;
         }
       }
     });

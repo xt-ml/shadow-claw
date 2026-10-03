@@ -32,16 +32,18 @@ To configure the CLI agent defaults without affecting browser client settings, u
 > [!NOTE]
 > The browser client remains defaulted to the Chrome Prompt API (`prompt_api`) with its onboarding setup dialog. Setting `"agent"` configures headless CLI executions while keeping browser state pristine.
 
-### Curated ONNX Models
+### CLI-Curated ONNX Models
 
-The following models are curated and supported out-of-the-box for in-process Node.js and Transformers.js local execution:
+These four ONNX models are listed by `shadow-claw agent model list` and supported by the headless CLI's Transformers.js executor:
 
-| Model ID                                | Name                  | Context | Tools | Notes                                             |
-| --------------------------------------- | --------------------- | ------- | ----- | ------------------------------------------------- |
-| `onnx-community/Qwen3-0.6B-ONNX`        | Qwen 3 0.6B (ONNX)    | 32,768  | Yes   | **Recommended / Default**: Ultra-compact and fast |
-| `onnx-community/gemma-3-1b-it-ONNX-GQA` | Gemma 3 1B GQA (ONNX) | 32,000  | Yes   | Google Gemma 3 1B with Grouped Query Attention    |
-| `onnx-community/gemma-4-E2B-it-ONNX`    | Gemma 4 E2B (ONNX)    | 128,000 | Yes   | Google Gemma 4 E2B instruction-tuned              |
-| `onnx-community/gemma-4-E4B-it-ONNX`    | Gemma 4 E4B (ONNX)    | 128,000 | Yes   | Google Gemma 4 E4B instruction-tuned              |
+| Model ID                                | Name                  | Context | Tools | Notes                                          |
+| --------------------------------------- | --------------------- | ------- | ----- | ---------------------------------------------- |
+| `onnx-community/Qwen3-0.6B-ONNX`        | Qwen 3 0.6B (ONNX)    | 32,768  | Yes   | Server runtime default; ultra-compact and fast |
+| `onnx-community/gemma-3-1b-it-ONNX-GQA` | Gemma 3 1B GQA (ONNX) | 32,000  | Yes   | Headless CLI local-model default               |
+| `onnx-community/gemma-4-E2B-it-ONNX`    | Gemma 4 E2B (ONNX)    | 128,000 | Yes   | Google Gemma 4 E2B instruction-tuned           |
+| `onnx-community/gemma-4-E4B-it-ONNX`    | Gemma 4 E4B (ONNX)    | 128,000 | Yes   | Google Gemma 4 E4B instruction-tuned           |
+
+The server-side runtime also advertises ONNX models beyond this CLI-curated list. With no model ID, `shadow-claw agent model download` downloads Gemma 3 1B GQA; the server runtime's default model is Qwen 3 0.6B.
 
 ---
 
@@ -60,7 +62,7 @@ Displays all curated models, their token context length, tool-calling capability
 ### 2. Download Model with Progress Bar
 
 ```bash
-# Download default model (Qwen3-0.6B-ONNX)
+# Download default CLI model (Gemma 3 1B GQA)
 shadow-claw agent model download
 
 # Download specific model (e.g. Gemma 4 E2B)

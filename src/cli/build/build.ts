@@ -346,6 +346,12 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
     },
   });
 
+  // The toolchain's own sitemap must not leak into another site's build.
+  if (contentRoot !== toolchainRoot) {
+    await rimraf(join(distPublicDir, "sitemap.xml"));
+    await rimraf(join(distPublicDir, "sitemap.txt"));
+  }
+
   // 2. Copy/merge assets from contentRoot
   const contentAssets = join(contentRoot, "assets");
   if (await pathExists(contentAssets)) {

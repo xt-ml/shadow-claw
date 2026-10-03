@@ -75,6 +75,8 @@ Builds a static site bundle into `./dist/public`.
 | `--prerender-pages <mode>` | string  | Prerender mode: `all`, `auto`, `none`                                           | `"auto"`          |
 | `--copy-all-assets`        | boolean | Copy entire `assets/` directory into output                                     | `false`           |
 
+When the content project has no configured or existing sitemap, the build generates `sitemap.xml` from `routes.json` if a canonical origin is set with `--origin` / `PAGES_ORIGIN` or `branding.siteUrl`. The generated sitemap includes the site root and unique pretty paths. See [Pages System](pages.md#pre-rendered-content-routing--pretty-paths) for sitemap precedence and routing details.
+
 ### `shadow-claw dev [port]` / `shadow-claw run [port]`
 
 Builds the site in development mode and starts the local server with live proxy, task scheduler, and static serving.

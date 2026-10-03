@@ -12,6 +12,8 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
+import { getRoutesCandidates } from "../build/utils/get-routes-candidates.js";
+import { generateSitemapXml } from "./sitemap/generate-sitemap.js";
 import { resolveCustomElementScripts } from "./custom-elements/resolve-custom-element-scripts.js";
 import { sanitizeEmbeddedCustomElementScripts } from "./custom-elements/sanitize-embedded-custom-element-scripts.js";
 import {
@@ -435,6 +437,18 @@ export function patchIndexHtml(
     next = insertBeforeClosingHead(next, `  ${siteConfigScript}`);
   }
 
+  next = next.replace(
+    /\s*<meta\s+name="shadow-claw-override-prerender-skeleton"[^>]*>/giu,
+    "",
+  );
+  if (typeof config.settings?.overridePrerenderSkeleton === "boolean") {
+    // Runtime default read by theme-init.js and the settings panel.
+    next = next.replace(
+      '<script id="shadow-claw-site-config"',
+      `<meta name="shadow-claw-override-prerender-skeleton" content="${config.settings.overridePrerenderSkeleton}" />\n    <script id="shadow-claw-site-config"`,
+    );
+  }
+
   const sidebarHtmlToInject =
     customSidebarHtml ||
     config.sidebar?.slotHtml ||
@@ -593,16 +607,25 @@ export function patchSitemap(content: string, pagesOrigin?: string): string {
     return content;
   }
 
-  if (/<loc>/i.test(content)) {
-    return content.replace(
-      /<loc>[^<]*<\/loc>/giu,
-      `<loc>${escapeHtml(pagesOrigin)}</loc>`,
-    );
-  }
-
   const normalizedOrigin = pagesOrigin.endsWith("/")
     ? pagesOrigin
     : pagesOrigin + "/";
+
+  if (/<loc>/i.test(content)) {
+    return content.replace(/<loc>([^<]*)<\/loc>/giu, (_match, loc: string) => {
+      try {
+        const u = new URL(loc.trim());
+        const originUrl = new URL(normalizedOrigin);
+        const basePath = originUrl.pathname.replace(/\/$/, "");
+
+        return `<loc>${escapeHtml(
+          originUrl.origin + basePath + u.pathname + u.search,
+        )}</loc>`;
+      } catch {
+        return `<loc>${escapeHtml(normalizedOrigin)}</loc>`;
+      }
+    });
+  }
 
   return content
     .split("\n")
@@ -729,6 +752,30 @@ function getCandidateFilePaths(
     path.resolve(repoRootDir, relativePath),
     path.resolve(repoRootDir, cleanPath),
   ];
+}
+
+async function generateSitemapFromRoutes(
+  configDir: string,
+  templateRootDir: string,
+  origin: string,
+): Promise<string | null> {
+  if (!origin) {
+    return null;
+  }
+
+  const routesPath = await findFirstExisting([
+    ...getRoutesCandidates(configDir),
+    ...getRoutesCandidates(templateRootDir),
+    ...getRoutesCandidates(getRepoRootDir(configDir)),
+  ]);
+
+  if (!routesPath) {
+    return null;
+  }
+
+  const routes = await readJson(routesPath);
+
+  return routes ? generateSitemapXml(routes, origin) : null;
 }
 
 async function findFirstExisting(candidates: string[]): Promise<string | null> {
@@ -1200,7 +1247,26 @@ export async function applySiteConfig(
   }
 
   const sitemapXmlPath = path.join(distPublicDir, "sitemap.xml");
-  const sitemapXmlText = await readText(sitemapXmlPath);
+  const sitemapTxtExists = Boolean(
+    await readText(path.join(distPublicDir, "sitemap.txt")),
+  );
+
+  let generatedSitemap = false;
+  if (!(await readText(sitemapXmlPath)) && !sitemapTxtExists) {
+    const generated = await generateSitemapFromRoutes(
+      configDir,
+      templateRootDir,
+      pagesOrigin || config.branding?.siteUrl || "",
+    );
+
+    if (generated) {
+      await writeText(sitemapXmlPath, generated);
+      generatedSitemap = true;
+      console.log("  Generated sitemap.xml from routes.json");
+    }
+  }
+
+  const sitemapXmlText = generatedSitemap ? "" : await readText(sitemapXmlPath);
   if (sitemapXmlText) {
     const patched = patchSitemap(sitemapXmlText, pagesOrigin);
     await writeText(sitemapXmlPath, patched);

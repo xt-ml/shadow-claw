@@ -169,11 +169,22 @@ export function isLlamafileLocallyCached(
     return false;
   }
 
-  const base = path.basename(modelId);
+  const matched = CURATED_LLAMAFILE_MODELS.find(
+    (m) =>
+      m.id === modelId ||
+      m.fileName === modelId ||
+      m.fileName === path.basename(modelId) ||
+      m.url === modelId,
+  );
+  const base = matched ? matched.fileName : path.basename(modelId);
   const fileName = base.endsWith(".llamafile") ? base : `${base}.llamafile`;
   const targetPath = path.join(dir, fileName);
+  const partPath = path.join(dir, `${fileName}.part`);
 
   try {
+    if (fs.existsSync(partPath)) {
+      return false;
+    }
     if (fs.existsSync(targetPath)) {
       const st = fs.statSync(targetPath);
       return st.size > 0;
@@ -181,6 +192,43 @@ export function isLlamafileLocallyCached(
   } catch {}
 
   return false;
+}
+
+function scanOnnxModelCache(dirPath: string): {
+  hasPartFiles: boolean;
+  hasOnnxFiles: boolean;
+} {
+  let hasPartFiles = false;
+  let hasOnnxFiles = false;
+
+  function traverse(current: string) {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        traverse(path.join(current, entry.name));
+      } else if (entry.isFile()) {
+        const name = entry.name;
+        if (name.endsWith(".part") || name.includes(".tmp")) {
+          hasPartFiles = true;
+        }
+        if (
+          name.endsWith(".onnx") &&
+          !name.endsWith(".part") &&
+          !name.includes(".tmp")
+        ) {
+          hasOnnxFiles = true;
+        }
+      }
+    }
+  }
+
+  traverse(dirPath);
+  return { hasPartFiles, hasOnnxFiles };
 }
 
 export function isModelLocallyCached(
@@ -205,11 +253,8 @@ export function isModelLocallyCached(
   for (const p of candidatePaths) {
     try {
       if (fs.existsSync(p)) {
-        const entries = fs.readdirSync(p);
-        const validEntries = entries.filter(
-          (e) => !e.endsWith(".part") && !e.includes(".tmp"),
-        );
-        if (validEntries.length > 0) {
+        const { hasPartFiles, hasOnnxFiles } = scanOnnxModelCache(p);
+        if (!hasPartFiles && hasOnnxFiles) {
           return true;
         }
       }
@@ -365,6 +410,7 @@ export async function downloadLlamafile(
     enabled: showProgress,
   });
 
+  let fileStream: fs.WriteStream | undefined;
   try {
     if (verbose && stream?.write) {
       stream.write(`[Llamafile] Downloading ${url}...\n`);
@@ -407,7 +453,6 @@ export async function downloadLlamafile(
     const is206 = res.status === 206;
     let totalSize = 0;
     let loaded = 0;
-    let fileStream: fs.WriteStream;
 
     if (is206) {
       const contentRange = res.headers?.get?.("content-range");
@@ -470,11 +515,14 @@ export async function downloadLlamafile(
       }
     }
 
-    fileStream.end();
-    await new Promise<void>((resolve, reject) => {
-      fileStream.on("finish", resolve);
-      fileStream.on("error", reject);
-    });
+    if (fileStream) {
+      const activeStream = fileStream;
+      activeStream.end();
+      await new Promise<void>((resolve, reject) => {
+        activeStream.on("finish", resolve);
+        activeStream.on("error", reject);
+      });
+    }
 
     fs.renameSync(partPath, destPath);
     try {
@@ -484,6 +532,9 @@ export async function downloadLlamafile(
     progressBar.finish();
     return { success: true, modelId, path: destPath };
   } catch (err: any) {
+    try {
+      fileStream?.end();
+    } catch {}
     const message = err instanceof Error ? err.message : String(err);
     progressBar.fail(`✖ Error downloading ${fileName}: ${message}`);
     return { success: false, modelId, error: message };

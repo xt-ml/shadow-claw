@@ -644,7 +644,10 @@ export async function resolveAgentProvider(
     const isCached = isModelLocallyCached(model, options.cacheDir);
     if (!isCached) {
       const outStream = options.stdout || process.stderr;
-      if (options.download) {
+      const shouldDownload = Boolean(
+        options.download || options.yes || options.y,
+      );
+      if (shouldDownload) {
         if (!options.quiet) {
           outStream.write(`\nDownloading ${model} from Hugging Face...\n`);
         }
@@ -776,7 +779,15 @@ export async function resolveAgentProvider(
             progress: options.progress !== false && !options.noProgress,
             verbose: options.verbose,
           });
+        } else {
+          throw new Error(
+            `Model "${model}" is not downloaded. Download aborted.`,
+          );
         }
+      } else {
+        throw new Error(
+          `Model "${model}" is not downloaded. Run with --download or --yes to download model weights automatically.`,
+        );
       }
     }
   }
@@ -1259,67 +1270,79 @@ export async function runAgentRun(
   const DEFAULT_SYSTEM_PROMPT =
     "You are ShadowClaw, a helpful AI assistant operating in a headless workspace. Answer concisely.";
 
-  let systemPrompt = options.systemPrompt;
+  let systemPrompt: string | undefined;
 
-  if (!systemPrompt && options.systemPromptFile) {
-    try {
-      const filePath = path.resolve(options.systemPromptFile);
-      systemPrompt = await readFile(filePath, "utf8");
-    } catch (err: any) {
-      const errorMsg = `Error: Failed to read system prompt file "${options.systemPromptFile}": ${err.message}`;
-      if (!options.quiet) console.error(errorMsg);
-      process.exitCode = 1;
-      return { success: false, error: errorMsg };
+  const isExplicitlyDisabled =
+    options.systemPrompt === "none" ||
+    options.systemPrompt === "" ||
+    (options.systemPrompt as any) === false ||
+    options.noSystemPrompt === true;
+
+  if (isExplicitlyDisabled) {
+    systemPrompt = "";
+  } else {
+    systemPrompt = options.systemPrompt;
+
+    if (!systemPrompt && options.systemPromptFile) {
+      try {
+        const filePath = path.resolve(options.systemPromptFile);
+        systemPrompt = await readFile(filePath, "utf8");
+      } catch (err: any) {
+        const errorMsg = `Error: Failed to read system prompt file "${options.systemPromptFile}": ${err.message}`;
+        if (!options.quiet) console.error(errorMsg);
+        process.exitCode = 1;
+        return { success: false, error: errorMsg };
+      }
     }
-  }
 
-  if (!systemPrompt) {
-    systemPrompt =
-      process.env.SHADOW_CLAW_SYSTEM_PROMPT ||
-      process.env.SHADOWCLAW_SYSTEM_PROMPT;
-  }
+    if (!systemPrompt) {
+      systemPrompt =
+        process.env.SHADOW_CLAW_SYSTEM_PROMPT ||
+        process.env.SHADOWCLAW_SYSTEM_PROMPT;
+    }
 
-  if (!systemPrompt && profileSystemPromptOverride) {
-    systemPrompt = profileSystemPromptOverride;
-  }
+    if (!systemPrompt && profileSystemPromptOverride) {
+      systemPrompt = profileSystemPromptOverride;
+    }
 
-  if (!systemPrompt && workspaceAgent?.systemPromptFile) {
-    try {
-      const baseDir = workspaceConfigData?.configPath
-        ? path.dirname(workspaceConfigData.configPath)
-        : workspaceDir;
-      const filePath = path.resolve(baseDir, workspaceAgent.systemPromptFile);
-      systemPrompt = await readFile(filePath, "utf8");
-    } catch (err: any) {
-      if (options.verbose && !options.quiet) {
-        console.error(
-          `Warning: Failed to read systemPromptFile from config: ${err.message}`,
+    if (!systemPrompt && workspaceAgent?.systemPromptFile) {
+      try {
+        const baseDir = workspaceConfigData?.configPath
+          ? path.dirname(workspaceConfigData.configPath)
+          : workspaceDir;
+        const filePath = path.resolve(baseDir, workspaceAgent.systemPromptFile);
+        systemPrompt = await readFile(filePath, "utf8");
+      } catch (err: any) {
+        if (options.verbose && !options.quiet) {
+          console.error(
+            `Warning: Failed to read systemPromptFile from config: ${err.message}`,
+          );
+        }
+      }
+    }
+
+    if (!systemPrompt) {
+      systemPrompt =
+        workspaceAgent?.systemPrompt ||
+        workspaceSettings?.systemPrompt ||
+        workspaceSettings?.systemPromptOverride;
+    }
+
+    if (!systemPrompt && typeof core.getConfig === "function") {
+      try {
+        const dbOverride = await core.getConfig(
+          db,
+          core.CONFIG_KEYS?.SYSTEM_PROMPT_OVERRIDE || "system_prompt_override",
         );
-      }
+        if (dbOverride && typeof dbOverride === "string") {
+          systemPrompt = dbOverride;
+        }
+      } catch {}
     }
-  }
 
-  if (!systemPrompt) {
-    systemPrompt =
-      workspaceAgent?.systemPrompt ||
-      workspaceSettings?.systemPrompt ||
-      workspaceSettings?.systemPromptOverride;
-  }
-
-  if (!systemPrompt && typeof core.getConfig === "function") {
-    try {
-      const dbOverride = await core.getConfig(
-        db,
-        core.CONFIG_KEYS?.SYSTEM_PROMPT_OVERRIDE || "system_prompt_override",
-      );
-      if (dbOverride && typeof dbOverride === "string") {
-        systemPrompt = dbOverride;
-      }
-    } catch {}
-  }
-
-  if (!systemPrompt) {
-    systemPrompt = DEFAULT_SYSTEM_PROMPT;
+    if (!systemPrompt) {
+      systemPrompt = DEFAULT_SYSTEM_PROMPT;
+    }
   }
 
   const invokePayload = {
@@ -1349,9 +1372,25 @@ export async function runAgentRun(
     }
   }
 
+  const exitWithCode = (code: number) => {
+    if (typeof options.onExit === "function") {
+      options.onExit(code);
+    } else if (!process.env.JEST_WORKER_ID && process.env.NODE_ENV !== "test") {
+      process.exit(code);
+    }
+  };
+
   let wasInterrupted = false;
+  let forceExitTimer: ReturnType<typeof setTimeout> | null = null;
   const onSigint = () => {
-    if (wasInterrupted) return;
+    if (wasInterrupted) {
+      if (forceExitTimer) {
+        clearTimeout(forceExitTimer);
+        forceExitTimer = null;
+      }
+      exitWithCode(130);
+      return;
+    }
     wasInterrupted = true;
     abortController.abort();
     try {
@@ -1359,6 +1398,11 @@ export async function runAgentRun(
         core.cleanupAllLlamafileProcesses();
       }
     } catch {}
+
+    forceExitTimer = setTimeout(() => {
+      exitWithCode(130);
+    }, 1500);
+    forceExitTimer.unref?.();
   };
 
   process.on("SIGINT", onSigint);
@@ -1373,6 +1417,10 @@ export async function runAgentRun(
     }
   } finally {
     process.removeListener("SIGINT", onSigint);
+    if (forceExitTimer) {
+      clearTimeout(forceExitTimer);
+      forceExitTimer = null;
+    }
   }
 
   if (wasInterrupted) {

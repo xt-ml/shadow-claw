@@ -216,7 +216,8 @@ npx shadow-claw agent import https://xt-ml.github.io/shadow-claw-agent-cli-weath
 | `--stream` / `--no-stream`           | boolean | Stream response tokens to stdout as they arrive                                         | `true`                                    |
 | `--no-history`                       | boolean | Do not load prior conversation history for `agent run`                                  | history loaded                            |
 | `--progress` / `--no-progress`       | boolean | Show terminal progress bar during model downloads                                       | `true`                                    |
-| `--system-prompt <text>`             | string  | Override system prompt with inline text                                                 | `undefined`                               |
+| `--system-prompt <text>`             | string  | Override system prompt with inline text (pass `""` or `"none"` to disable)              | `undefined`                               |
+| `--no-system-prompt`                 | boolean | Disable system prompt completely for pure text completion                               | `false`                                   |
 | `--system-prompt-file <file>`        | string  | Load system prompt from a text or markdown file                                         | `undefined`                               |
 | `--tools <tools>`                    | string  | Comma-separated list of tools to enable or import (e.g. `bash,read_file`)               | `undefined`                               |
 | `--skills <skills>`                  | string  | Comma-separated list of skills to filter or import                                      | `undefined`                               |
@@ -310,9 +311,7 @@ cat prompt.txt | npx shadow-claw agent run -
 echo "Summarize: ..." | npx shadow-claw agent run -o summary.txt
 ```
 
-#### Process Interruption & Clean Termination
-
-##### Attaching files to `agent run`
+#### Attaching files to `agent run`
 
 Use `-f, --file <path>` to attach local files without sharing a workspace.
 The flag is repeatable, so multiple files can be attached to a single prompt.
@@ -327,7 +326,27 @@ npx shadow-claw agent run "Describe these" -f photo.png -f report.pdf
 - A missing or unreadable file prints an error to `stderr` and exits with code `1` before the model is called.
 - Combines with the prompt argument and piped stdin.
 
-The CLI runtime installs central termination signal handlers (`SIGINT` code 130, `SIGTERM` code 143, and `exit`) via `registerTerminationCleanup` in `src/cli/cli.ts`. When an agent run or server session is interrupted (e.g. Ctrl+C), all active child processes, Llamafile daemons, and temporary descriptors are terminated cleanly without leaving orphan processes behind.
+#### System Prompt Customization & Pure Text Completion
+
+By default, headless agent executions prepend a concise assistant system prompt. You can customize or completely disable this prompt:
+
+- **Custom System Prompt**: Pass inline text with `--system-prompt <text>` or load from disk with `--system-prompt-file <path>`.
+- **Pure Text Completion**: Pass `--no-system-prompt` (or `--system-prompt ""` / `--system-prompt none`) to strip the system prompt entirely. Combined with `--tools none` and `--no-history`, this configures pure text completion with zero token overhead.
+
+```bash
+# Provide custom system prompt
+npx shadow-claw agent run "Analyze data" --system-prompt "You are a senior data engineer."
+
+# Pure text completion without system prompt framing or tools
+npx shadow-claw agent --tools none --no-system-prompt --no-history run "Explain quantum superposition in two sentences"
+```
+
+#### Process Interruption & Clean Termination
+
+The CLI runtime installs central termination signal handlers (`SIGINT` code 130, `SIGTERM` code 143, and `exit`) via `registerTerminationCleanup` in `src/cli/cli.ts`. In `agent run`:
+
+- The first `SIGINT` (Ctrl+C) triggers an abort controller on the active model invocation and cleans up child processes (including active Llamafile instances).
+- A second `SIGINT` or a 1500ms safety timeout forcefully exits with exit code `130`, guaranteeing terminal sessions and scripts never hang.
 
 #### Credential Auto-Resolution & Exit Codes
 
@@ -338,6 +357,8 @@ The headless agent checks credentials in the following order:
 3. SQLite database configuration (`CONFIG_KEYS.PROVIDER`, `CONFIG_KEYS.MODEL`)
 4. Workspace configuration (`agent.defaultProvider`, `agent.defaultModel` or `settings.defaultProvider`, `settings.defaultModel` in `shadow-claw.config.json`)
 5. Provider defaults (`"transformers_js_local"` with `"onnx-community/gemma-3-1b-it-ONNX-GQA"` for offline execution, or `"openrouter"` with `"openrouter/free"`)
+
+When executing `agent run` with a local model that has not yet been downloaded, ShadowClaw guards against unintentional multi-gigabyte downloads: you must pass `--download` or `--yes` (`-y`) to initiate the download. Otherwise, it aborts immediately with an actionable error.
 
 If credentials are required but missing, or if the LLM provider returns an API error, `agent run` outputs actionable diagnostic messages to `stderr` and terminates with **exit code `1`**, ensuring scripts and CI/CD pipelines fail reliably.
 

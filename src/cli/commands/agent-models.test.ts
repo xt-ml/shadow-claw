@@ -112,8 +112,17 @@ describe("agent model command and declarative agent config", () => {
       );
 
       try {
+        await mkdir(path.join(tmpDir, "onnx-community/gemma-4-E4B-it-ONNX"), {
+          recursive: true,
+        });
+        await writeFile(
+          path.join(tmpDir, "onnx-community/gemma-4-E4B-it-ONNX", "model.onnx"),
+          "x",
+        );
+
         const resolved = await resolveAgentProvider({}, mockCore(), sandbox, {
           isTTY: false,
+          cacheDir: tmpDir,
         });
         expect(resolved.providerId).toBe("transformers_js_local");
         expect(resolved.model).toBe("onnx-community/gemma-4-E4B-it-ONNX");
@@ -137,7 +146,7 @@ describe("agent model command and declarative agent config", () => {
           "x",
         );
         await mkdir(path.join(tmpDir, model), { recursive: true });
-        await writeFile(path.join(tmpDir, model, "config.json"), "{}");
+        await writeFile(path.join(tmpDir, model, "model.onnx"), "x");
 
         const resolved = await resolveAgentProvider({}, mockCore(), tmpDir, {
           isTTY: false,
@@ -149,6 +158,83 @@ describe("agent model command and declarative agent config", () => {
         expect(resolved.model).toBe(model);
       },
     );
+
+    it("throws an error when local model is uncached and running non-interactively without download flag", async () => {
+      const { resolveAgentProvider } = await import("./agent.js");
+      const emptyCacheDir = await mkdtemp(
+        path.join(tmpdir(), "sc-empty-cache-"),
+      );
+      try {
+        await expect(
+          resolveAgentProvider({}, mockCore(), tmpDir, {
+            isTTY: false,
+            cacheDir: emptyCacheDir,
+            model: "onnx-community/gemma-3-1b-it-ONNX-GQA",
+            provider: "transformers_js_local",
+          }),
+        ).rejects.toThrow(/not downloaded/i);
+      } finally {
+        await rm(emptyCacheDir, { recursive: true, force: true });
+      }
+    });
+
+    it.each(["download", "yes", "y"])(
+      "automatically triggers download when %s flag is passed",
+      async (flag) => {
+        const { resolveAgentProvider } = await import("./agent.js");
+        const emptyCacheDir = await mkdtemp(
+          path.join(tmpdir(), "sc-empty-cache-"),
+        );
+        const mockService = {
+          prewarmModel: jest.fn(async () => ({
+            modelId: "onnx-community/gemma-3-1b-it-ONNX-GQA",
+          })),
+        };
+        try {
+          const resolved = await resolveAgentProvider({}, mockCore(), tmpDir, {
+            isTTY: false,
+            cacheDir: emptyCacheDir,
+            model: "onnx-community/gemma-3-1b-it-ONNX-GQA",
+            provider: "transformers_js_local",
+            [flag]: true,
+            _transformersService: mockService,
+          });
+          expect(resolved.providerId).toBe("transformers_js_local");
+          expect(mockService.prewarmModel).toHaveBeenCalled();
+        } finally {
+          await rm(emptyCacheDir, { recursive: true, force: true });
+        }
+      },
+    );
+
+    it("throws an error when interactive download prompt is declined", async () => {
+      const { resolveAgentProvider } = await import("./agent.js");
+      const emptyCacheDir = await mkdtemp(
+        path.join(tmpdir(), "sc-empty-cache-"),
+      );
+      const { PassThrough } = await import("node:stream");
+      const mockStdin = new PassThrough();
+      const mockStdout = new PassThrough();
+      mockStdout.on("data", (chunk) => {
+        if (chunk.toString().includes("Download model weights now?")) {
+          mockStdin.write("n\n");
+        }
+      });
+      try {
+        await expect(
+          resolveAgentProvider({}, mockCore(), tmpDir, {
+            isTTY: true,
+            cacheDir: emptyCacheDir,
+            model: "onnx-community/gemma-3-1b-it-ONNX-GQA",
+            provider: "transformers_js_local",
+            stdin: mockStdin,
+            stdout: mockStdout,
+          }),
+        ).rejects.toThrow(/download aborted/i);
+      } finally {
+        await rm(emptyCacheDir, { recursive: true, force: true });
+      }
+    });
   });
 
   describe("runAgentModel", () => {

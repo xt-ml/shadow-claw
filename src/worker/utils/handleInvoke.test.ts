@@ -1213,6 +1213,77 @@ describe("handleInvoke.js", () => {
     }
   });
 
+  it("passes systemPrompt in messages to in-process node transformers completion in headless mode", async () => {
+    const { setHeadlessMode } = await import("../../config/headless.js");
+    setHeadlessMode(true);
+    const {
+      executeNodeTransformersCompletion,
+      setTransformersServiceForTests,
+    } = await import("../tools/node-transformers-executor.js");
+    const { setNodeTransformersCompletionExecutor } =
+      await import("./handleInvoke.js");
+    setNodeTransformersCompletionExecutor(executeNodeTransformersCompletion);
+
+    const mockService = {
+      runChatCompletion: jest.fn(async () => ({
+        text: "Direct node result",
+        promptTokens: 10,
+        completionTokens: 5,
+      })),
+    };
+    setTransformersServiceForTests(mockService as any);
+
+    try {
+      const payload: any = {
+        groupId: "server:main",
+        messages: [{ role: "user", content: "test in process" }],
+        provider: "transformers_js_local",
+        model: "onnx-community/Qwen3-0.6B-ONNX",
+        systemPrompt: "ONLY EVER RESPOND WITH THE WORD, 'it is finished'",
+      };
+
+      (mockGetProvider as any).mockReturnValue({
+        id: "transformers_js_local",
+        name: "Transformers.js (Local Proxy)",
+        baseUrl: "http://localhost:8888/v1/chat/completions",
+        format: "openai",
+      });
+
+      (mockFormatRequest as any).mockImplementation(
+        (_provider: any, msgs: any[], _tools: any[], opts: any) => ({
+          messages: opts?.system
+            ? [{ role: "system", content: opts.system }, ...msgs]
+            : msgs,
+        }),
+      );
+
+      (mockParseResponse as any).mockImplementation((_p: any, raw: any) => ({
+        stop_reason: "end_turn",
+        content: [{ type: "text", text: raw.choices[0].message.content }],
+      }));
+
+      await handleInvoke({} as any, payload);
+
+      expect(mockService.runChatCompletion).toHaveBeenCalledWith(
+        expect.objectContaining({
+          modelId: "onnx-community/Qwen3-0.6B-ONNX",
+          messages: expect.arrayContaining([
+            expect.objectContaining({
+              role: "system",
+              content: "ONLY EVER RESPOND WITH THE WORD, 'it is finished'",
+            }),
+          ]),
+        }),
+      );
+    } finally {
+      setHeadlessMode(false);
+      setTransformersServiceForTests(null);
+      const { setNodeTransformersCompletionExecutor } =
+        await import("./handleInvoke.js");
+      setNodeTransformersCompletionExecutor(null);
+    }
+  });
+
   it("forwards currentTools to in-process node transformers executor in headless mode", async () => {
     const { setHeadlessMode } = await import("../../config/headless.js");
     const { setTransformersServiceForTests } =

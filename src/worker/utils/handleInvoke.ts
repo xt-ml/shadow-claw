@@ -477,7 +477,7 @@ export async function handleInvoke(
 
         const rawResult = await _nodeTransformersCompletionExecutor({
           modelId: model,
-          messages: payloadMessages,
+          messages: body?.messages || payloadMessages,
           tools: currentTools as any[],
           maxTokens: safeMaxTokens,
           abortSignal,
@@ -533,7 +533,7 @@ export async function handleInvoke(
 
         const rawResult = await _nodeLlamafileCompletionExecutor({
           model,
-          messages: payloadMessages,
+          messages: body?.messages || payloadMessages,
           maxTokens: safeMaxTokens,
           abortSignal,
           verbose: Boolean(payload.verbose),

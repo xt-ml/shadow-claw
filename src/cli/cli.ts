@@ -1284,7 +1284,14 @@ program
     true,
   )
   .option("--no-progress", "Disable download progress bar")
-  .option("--system-prompt <text>", "Override system prompt with inline text")
+  .option(
+    "--system-prompt <text>",
+    "Override system prompt with inline text (pass empty string or 'none' to disable)",
+  )
+  .option(
+    "--no-system-prompt",
+    "Disable system prompt completely for pure text completion",
+  )
   .option(
     "--system-prompt-file <file>",
     "Load system prompt from a text or markdown file",

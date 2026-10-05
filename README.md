@@ -54,7 +54,13 @@ npx shadow-claw agent model download onnx-community/gemma-3-1b-it-ONNX-GQA
 npx shadow-claw agent model set onnx-community/gemma-3-1b-it-ONNX-GQA
 
 # Run one-shot agent prompt using host OS shell and filesystem (streams to stdout)
-npx shadow-claw agent --workspace ./my-project run "list the files in this directory"
+npx shadow-claw agent --workspace ./my-project --no-history run "list the files in this directory"
+
+# Multi-turn prompts retain history by default; clear conversation history anytime
+npx shadow-claw agent --workspace ./my-project clear
+
+# Pure text completion without tools or system prompt overhead
+npx shadow-claw agent --tools none --no-system-prompt --no-history run "Explain quantum superposition in two sentences"
 
 # Pipe plain text into an agent tool (auto-mapped to tool schema)
 echo "how are you doing today" | npx shadow-claw agent tool rewrite_text
@@ -333,7 +339,11 @@ npx shadow-claw agent model list                     # List local cached ONNX an
 npx shadow-claw agent model download [modelId]       # Download model from Hugging Face with progress bar
 npx shadow-claw agent model set [modelId]            # Configure default headless agent model
 npx shadow-claw agent model remote --query <search>  # Search Hugging Face onnx-community repository
-npx shadow-claw agent run "prompt"                   # Run agent prompt (streams stdout, logs to stderr)
+npx shadow-claw agent run "prompt"                   # Run agent prompt (retains multi-turn history by default)
+npx shadow-claw agent run "prompt" --no-history      # Run isolated one-shot prompt without prior history
+npx shadow-claw agent run "prompt" --tools none      # Strip all tool schemas for pure text completion / low token usage
+npx shadow-claw agent run "prompt" --no-system-prompt # Strip system prompt for direct text completion
+npx shadow-claw agent clear                          # Reset conversation history for the group (default server:main)
 cat doc.txt | npx shadow-claw agent run -o sum.txt   # Pipe document into agent prompt and write to file
 npx shadow-claw agent run "Describe" -f a.png -f b.pdf # Attach one or more local files (repeatable)
 npx shadow-claw agent skills                         # List discovered workspace skills

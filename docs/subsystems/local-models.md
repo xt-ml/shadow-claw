@@ -81,7 +81,10 @@ Downloads are resumable:
 - Files are written to a stable `<file>.part` path and renamed to the final path only when complete.
 - After an interruption (Ctrl+C, network drop), re-running the command sends `Range: bytes=N-` and appends only the missing bytes.
 - A `416 Range Not Satisfiable` response discards the stale `.part` file and restarts the file from zero.
-- Files ending in `.part` or containing `.tmp` do not count when checking whether a model is locally cached.
+- Download routines safely close and clean up active write streams upon errors or interruptions.
+- Local model cache detection (`isModelLocallyCached`) traverses the model cache directory recursively, verifying that no `.part` or `.tmp` files exist and confirming valid completed `.onnx` files are present.
+- Llamafile cache detection (`isLlamafileLocallyCached`) matches curated models by ID, filename, or URL, and similarly excludes incomplete downloads with `.part` files.
+- Executing `agent run` with an uncached local model requires `--download` or `--yes` (`-y`) to initiate the download.
 - Pass `--cache-dir <dir>` to store model files in a custom cache directory.
 - Llamafile downloads use the same `.part` resume behavior.
 
@@ -121,6 +124,7 @@ Located at `src/worker/tools/node-transformers-executor.ts`, this executor runs 
 - Eliminates the need for a background HTTP proxy server on port 8888.
 - Automatically initializes the model download progress bar on stderr if weights are not yet cached.
 - Streams generation in-process, returning OpenAI-compatible JSON objects normalized for the tool-use loop.
+- **System Prompt Forwarding**: During headless agent invocation (`handleInvoke`), messages formatted with the active system prompt (`body.messages`) are passed directly to both `node-transformers-executor.ts` and `node-llamafile-executor.ts`, ensuring complete system prompt adherence in offline headless runs.
 
 ### 2. `TransformersRuntimeService`
 

@@ -1744,6 +1744,89 @@ describe("runAgentRun — custom system prompt options", () => {
     expect(result.error).toContain("missing-prompt.txt");
   });
 
+  it("disables system prompt when --system-prompt is 'none'", async () => {
+    const { runAgentRun } = await import("./agent.js");
+    const { getAgentCore } = await import("../utils/agent-core.js");
+    const core = await getAgentCore();
+
+    let capturedPayload: any = null;
+    const mockInvokeHandler = async (_db, payload) => {
+      capturedPayload = payload;
+      core.post({
+        type: "response",
+        payload: { groupId: payload.groupId, text: "Understood." },
+      });
+    };
+
+    const result = await runAgentRun("Question", {
+      workspace: tmpDir,
+      provider: "openrouter",
+      apiKey: "sk-test",
+      systemPrompt: "none",
+      invokeHandler: mockInvokeHandler,
+      quiet: true,
+    });
+
+    expect(result.success).toBe(true);
+    expect(capturedPayload).not.toBeNull();
+    expect(capturedPayload.systemPrompt).toBe("");
+  });
+
+  it("disables system prompt when --system-prompt is empty string or --no-system-prompt", async () => {
+    const { runAgentRun } = await import("./agent.js");
+    const { getAgentCore } = await import("../utils/agent-core.js");
+    const core = await getAgentCore();
+
+    let capturedPayload: any = null;
+    const mockInvokeHandler = async (_db, payload) => {
+      capturedPayload = payload;
+      core.post({
+        type: "response",
+        payload: { groupId: payload.groupId, text: "Understood." },
+      });
+    };
+
+    const result = await runAgentRun("Question", {
+      workspace: tmpDir,
+      provider: "openrouter",
+      apiKey: "sk-test",
+      systemPrompt: "",
+      invokeHandler: mockInvokeHandler,
+      quiet: true,
+    });
+
+    expect(result.success).toBe(true);
+    expect(capturedPayload).not.toBeNull();
+    expect(capturedPayload.systemPrompt).toBe("");
+  });
+
+  it("disables system prompt when noSystemPrompt: true is passed", async () => {
+    const { runAgentRun } = await import("./agent.js");
+    const { getAgentCore } = await import("../utils/agent-core.js");
+    const core = await getAgentCore();
+
+    let capturedPayload: any = null;
+    const mockInvokeHandler = async (_db, payload) => {
+      capturedPayload = payload;
+      core.post({
+        type: "response",
+        payload: { groupId: payload.groupId, text: "Understood." },
+      });
+    };
+
+    const result = await runAgentRun("Question", {
+      workspace: tmpDir,
+      provider: "openrouter",
+      apiKey: "sk-test",
+      noSystemPrompt: true,
+      invokeHandler: mockInvokeHandler,
+      quiet: true,
+    });
+
+    expect(result.success).toBe(true);
+    expect(capturedPayload).not.toBeNull();
+    expect(capturedPayload.systemPrompt).toBe("");
+  });
   it("reads agent.systemPrompt from shadow-claw.config.json if CLI option omitted", async () => {
     const { runAgentRun } = await import("./agent.js");
     const { getAgentCore } = await import("../utils/agent-core.js");
@@ -2110,6 +2193,72 @@ describe("runAgentRun — SIGINT cancellation and process cleanup", () => {
     expect(result.error).toBe("Operation cancelled.");
     expect(capturedAbortSignal?.aborted).toBe(true);
     expect(cleanupCalled).toBe(true);
+  });
+
+  it("calls options.onExit(130) when SIGINT is received", async () => {
+    const { runAgentRun } = await import("./agent.js");
+    let signalInvokerCalled: any;
+    const invokerCalledPromise = new Promise(
+      (resolve) => (signalInvokerCalled = resolve),
+    );
+
+    const mockInvokeHandler = async (
+      _db: any,
+      _payload: any,
+      abortSignal: any,
+    ) => {
+      signalInvokerCalled();
+      return new Promise<void>((resolve) => {
+        abortSignal?.addEventListener("abort", () => resolve());
+      });
+    };
+
+    const onExitMock = jest.fn();
+    const runPromise = runAgentRun("Test interruption", {
+      workspace: tmpDir,
+      provider: "openrouter",
+      apiKey: "sk-test",
+      invokeHandler: mockInvokeHandler as any,
+      quiet: true,
+      onExit: onExitMock,
+    });
+
+    await invokerCalledPromise;
+    process.emit("SIGINT");
+    const result = await runPromise;
+
+    expect(result.success).toBe(false);
+    expect(onExitMock).toHaveBeenCalledWith(130);
+  });
+
+  it("forces exit via options.onExit(130) immediately upon receiving a second SIGINT", async () => {
+    const { runAgentRun } = await import("./agent.js");
+    let signalInvokerCalled: any;
+    const invokerCalledPromise = new Promise(
+      (resolve) => (signalInvokerCalled = resolve),
+    );
+
+    const mockHangingInvoker = async () => {
+      signalInvokerCalled();
+      return new Promise<void>(() => {}); // deliberately never resolves
+    };
+
+    const onExitMock = jest.fn();
+    runAgentRun("Test hanging invoker", {
+      workspace: tmpDir,
+      provider: "openrouter",
+      apiKey: "sk-test",
+      invokeHandler: mockHangingInvoker as any,
+      quiet: true,
+      onExit: onExitMock,
+    });
+
+    await invokerCalledPromise;
+    process.emit("SIGINT"); // first SIGINT signals abort
+    expect(onExitMock).not.toHaveBeenCalled();
+
+    process.emit("SIGINT"); // second SIGINT forces immediate exit
+    expect(onExitMock).toHaveBeenCalledWith(130);
   });
 });
 

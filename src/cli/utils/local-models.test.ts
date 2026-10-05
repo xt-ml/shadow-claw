@@ -81,9 +81,63 @@ describe("local-models", () => {
         expect(isModelLocallyCached("test-org/test-model", testDir)).toBe(
           false,
         );
+      } finally {
+        await rm(testDir, { recursive: true, force: true });
+      }
+    });
 
-        // Once a valid file is present, returns true
-        fs.writeFileSync(path.join(modelDir, "tokenizer.json"), "complete");
+    it("returns false when download was interrupted leaving a .part file in subdirectories", async () => {
+      const testDir = await mkdtemp(path.join(tmpdir(), "sc-cached-test-"));
+      try {
+        const modelDir = path.join(testDir, "test-org/test-model");
+        const onnxDir = path.join(modelDir, "onnx");
+        fs.mkdirSync(onnxDir, { recursive: true });
+        fs.writeFileSync(path.join(modelDir, "config.json"), "{}");
+        fs.writeFileSync(path.join(modelDir, "tokenizer.json"), "{}");
+        fs.writeFileSync(path.join(onnxDir, "model_q4.onnx"), "onnx-graph");
+        fs.writeFileSync(
+          path.join(onnxDir, "model_q4.onnx_data.part"),
+          "partial-data",
+        );
+
+        // Even though config, tokenizer, and model_q4.onnx exist, the .part file means it is incomplete!
+        expect(isModelLocallyCached("test-org/test-model", testDir)).toBe(
+          false,
+        );
+      } finally {
+        await rm(testDir, { recursive: true, force: true });
+      }
+    });
+
+    it("returns false when only metadata exists without onnx weight files", async () => {
+      const testDir = await mkdtemp(path.join(tmpdir(), "sc-cached-test-"));
+      try {
+        const modelDir = path.join(testDir, "test-org/test-model");
+        fs.mkdirSync(modelDir, { recursive: true });
+        fs.writeFileSync(path.join(modelDir, "config.json"), "{}");
+        fs.writeFileSync(path.join(modelDir, "tokenizer.json"), "{}");
+        fs.writeFileSync(path.join(modelDir, "tokenizer_config.json"), "{}");
+
+        // No .onnx files exist — weights are not downloaded
+        expect(isModelLocallyCached("test-org/test-model", testDir)).toBe(
+          false,
+        );
+      } finally {
+        await rm(testDir, { recursive: true, force: true });
+      }
+    });
+
+    it("returns true when model weights (.onnx) exist and no .part or .tmp files remain", async () => {
+      const testDir = await mkdtemp(path.join(tmpdir(), "sc-cached-test-"));
+      try {
+        const modelDir = path.join(testDir, "test-org/test-model");
+        const onnxDir = path.join(modelDir, "onnx");
+        fs.mkdirSync(onnxDir, { recursive: true });
+        fs.writeFileSync(path.join(modelDir, "config.json"), "{}");
+        fs.writeFileSync(path.join(modelDir, "tokenizer.json"), "{}");
+        fs.writeFileSync(path.join(onnxDir, "model_q4.onnx"), "onnx-graph");
+        fs.writeFileSync(path.join(onnxDir, "model_q4.onnx_data"), "weights");
+
         expect(isModelLocallyCached("test-org/test-model", testDir)).toBe(true);
       } finally {
         await rm(testDir, { recursive: true, force: true });
@@ -99,6 +153,74 @@ describe("local-models", () => {
           "/tmp/nonexistent-cache-dir-12345",
         ),
       ).toBe(false);
+    });
+
+    it("returns false for llamafile cache if .part file is present even if target file exists", async () => {
+      const testDir = await mkdtemp(
+        path.join(tmpdir(), "sc-llama-cache-test-"),
+      );
+      try {
+        const llamaDir = path.join(testDir, "llamafile");
+        fs.mkdirSync(llamaDir, { recursive: true });
+        const target = path.join(llamaDir, "gemma-4-E2B-it-Q5_K_M.llamafile");
+        const part = path.join(
+          llamaDir,
+          "gemma-4-E2B-it-Q5_K_M.llamafile.part",
+        );
+        fs.writeFileSync(target, "old-partial");
+        fs.writeFileSync(part, "in-progress-download");
+
+        expect(
+          isLlamafileLocallyCached("gemma-4-E2B-it-Q5_K_M.llamafile", testDir),
+        ).toBe(false);
+      } finally {
+        await rm(testDir, { recursive: true, force: true });
+      }
+    });
+
+    it("returns false for llamafile cache if only .part file exists", async () => {
+      const testDir = await mkdtemp(
+        path.join(tmpdir(), "sc-llama-cache-test-"),
+      );
+      try {
+        const llamaDir = path.join(testDir, "llamafile");
+        fs.mkdirSync(llamaDir, { recursive: true });
+        const part = path.join(
+          llamaDir,
+          "gemma-4-E2B-it-Q5_K_M.llamafile.part",
+        );
+        fs.writeFileSync(part, "in-progress-download");
+
+        expect(
+          isLlamafileLocallyCached("gemma-4-E2B-it-Q5_K_M.llamafile", testDir),
+        ).toBe(false);
+      } finally {
+        await rm(testDir, { recursive: true, force: true });
+      }
+    });
+
+    it("returns true for llamafile cache when target exists and no .part file is present", async () => {
+      const testDir = await mkdtemp(
+        path.join(tmpdir(), "sc-llama-cache-test-"),
+      );
+      try {
+        const llamaDir = path.join(testDir, "llamafile");
+        fs.mkdirSync(llamaDir, { recursive: true });
+        const target = path.join(llamaDir, "gemma-4-E2B-it-Q5_K_M.llamafile");
+        fs.writeFileSync(target, "complete-binary");
+
+        expect(
+          isLlamafileLocallyCached("gemma-4-E2B-it-Q5_K_M.llamafile", testDir),
+        ).toBe(true);
+        expect(
+          isLlamafileLocallyCached(
+            "mozilla-ai/gemma-4-E2B-it-Q5_K_M.llamafile",
+            testDir,
+          ),
+        ).toBe(true);
+      } finally {
+        await rm(testDir, { recursive: true, force: true });
+      }
     });
   });
 
@@ -416,6 +538,7 @@ describe("local-models", () => {
       const result = await promptForAgentModel({
         workspaceDir: tmpDir,
         contentRoot: tmpDir,
+        cacheDir: tmpDir,
         stdin: mockStdin,
         stdout: mockStdout,
         isTTY: true,

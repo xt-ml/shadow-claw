@@ -7,7 +7,7 @@
 Run instantly without cloning the repo:
 
 - `npx shadow-claw dev --open` — Start local services and launch the assistant in your browser immediately.
-- `npx shadow-claw agent run "prompt"` — Run autonomous headless agent prompts directly on the server or host CLI (backed by SQLite, host OS tools, and streaming stdout).
+- `npx shadow-claw agent run "prompt"` — Run autonomous headless agent prompts directly on the server or host CLI (backed by SQLite, host OS tools, streaming stdout, multi-turn history, and isolated `--no-history`, `--tools none`, or `--no-system-prompt` pure completion flags).
 - `npx shadow-claw agent model list` — List local cached ONNX/GGUF models, context lengths, and active defaults.
 - `npx shadow-claw agent model download [id]` — Pre-download model weights from Hugging Face with an interactive terminal progress bar.
 - `npx shadow-claw agent model set [id]` — Set the default model for headless CLI execution in workspace config.

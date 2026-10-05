@@ -1300,6 +1300,7 @@ program
     "--tools <tools>",
     "Comma-separated list of tools to enable or import (e.g. bash,read_file)",
   )
+  .option("--no-tools", "Disable all tools for pure text completion")
   .option(
     "--skills <skills>",
     "Comma-separated list of skills to filter or import",

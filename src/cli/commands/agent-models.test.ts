@@ -35,7 +35,7 @@ describe("agent model command and declarative agent config", () => {
     expect(content.agent).toBeDefined();
     expect(content.agent.defaultProvider).toBe("transformers_js_local");
     expect(content.agent.defaultModel).toBe(
-      "onnx-community/gemma-3-1b-it-ONNX-GQA",
+      "onnx-community/gemma-4-E2B-it-ONNX",
     );
   });
 

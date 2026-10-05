@@ -1159,6 +1159,7 @@ export async function runAgentRun(
   let capturedResponse: string | undefined = undefined;
   let capturedError: string | undefined = undefined;
   let hasStreamedChunks = false;
+  let capturedStreamedText = "";
   const pendingWrites: Promise<void>[] = [];
 
   core.setPostHandler(async (message: any) => {
@@ -1169,6 +1170,7 @@ export async function runAgentRun(
       "streaming-chunk": (msg) => {
         if (msg.payload?.text) {
           hasStreamedChunks = true;
+          capturedStreamedText += msg.payload.text;
           capturedResponse = (capturedResponse || "") + msg.payload.text;
           if (!options.quiet && !options.output) {
             process.stdout.write(msg.payload.text);
@@ -1176,7 +1178,10 @@ export async function runAgentRun(
         }
       },
       "streaming-done": () => {},
-      "streaming-end": () => {},
+      "streaming-end": () => {
+        hasStreamedChunks = false;
+        capturedStreamedText = "";
+      },
       response: (msg) => {
         if (msg.payload?.text) {
           capturedResponse = msg.payload.text;
@@ -1194,7 +1199,12 @@ export async function runAgentRun(
               .catch(() => {});
             pendingWrites.push(writePromise);
           } else if (!options.quiet) {
-            if (hasStreamedChunks) {
+            const streamedMatchesResponse =
+              hasStreamedChunks &&
+              typeof capturedStreamedText === "string" &&
+              capturedStreamedText.trim() === msg.payload.text.trim();
+
+            if (streamedMatchesResponse) {
               if (!msg.payload.text.endsWith("\n")) {
                 process.stdout.write("\n");
               }
@@ -1281,6 +1291,16 @@ export async function runAgentRun(
     return { success: false, error: errorMsg };
   }
   const { enabledTools, profileSystemPromptOverride } = toolResolution;
+
+  if (enabledTools.length > 0 && !options.quiet) {
+    const { getCuratedModelToolSupport } =
+      await import("../utils/local-models.js");
+    if (getCuratedModelToolSupport(model) === false) {
+      process.stderr.write(
+        `[Agent] Warning: Model "${model}" does not support tool calling; tools will be ignored. Use --tools none or choose a tool-capable model (e.g. onnx-community/gemma-4-E2B-it-ONNX).\n`,
+      );
+    }
+  }
 
   const DEFAULT_SYSTEM_PROMPT =
     "You are ShadowClaw, a helpful AI assistant operating in a headless workspace. Answer concisely.";

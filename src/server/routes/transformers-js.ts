@@ -20,7 +20,7 @@ import {
   sendStreamingProxyError,
 } from "../utils/openai-sse.js";
 
-import { parseLocalModelToolCall } from "../../subsystems/providers/utils/parseLocalModelToolCall.js";
+import { parseLocalModelToolCalls } from "../../subsystems/providers/utils/parseLocalModelToolCall.js";
 
 import type { Express } from "express";
 
@@ -154,9 +154,11 @@ export function registerTransformersJsRoutes(
 
         const finalText = (streamedChunks.join("") || result.text || "").trim();
 
-        const toolCall = parseLocalModelToolCall(finalText);
-        if (toolCall) {
-          writeOpenAiToolCallChunk(res, modelId, toolCall);
+        const toolCalls = parseLocalModelToolCalls(finalText);
+        if (toolCalls.length > 0) {
+          for (let i = 0; i < toolCalls.length; i++) {
+            writeOpenAiToolCallChunk(res, modelId, toolCalls[i]!, i);
+          }
           writeOpenAiDoneChunk(res, modelId, "tool_calls");
 
           return res.end();
@@ -201,26 +203,25 @@ export function registerTransformersJsRoutes(
         total_tokens: result.promptTokens + result.completionTokens,
       };
 
-      const toolCall = parseLocalModelToolCall(result.text || "");
-      const message = toolCall
-        ? {
-            role: "assistant",
-            content: null,
-            tool_calls: [
-              {
-                id: `call_${Date.now()}_${Math.random()}`,
+      const toolCalls = parseLocalModelToolCalls(result.text || "");
+      const message =
+        toolCalls.length > 0
+          ? {
+              role: "assistant",
+              content: null,
+              tool_calls: toolCalls.map((tc, idx) => ({
+                id: `call_${Date.now()}_${idx}_${Math.random()}`,
                 type: "function",
                 function: {
-                  name: toolCall.name,
-                  arguments: JSON.stringify(toolCall.input || {}),
+                  name: tc.name,
+                  arguments: JSON.stringify(tc.input || {}),
                 },
-              },
-            ],
-          }
-        : {
-            role: "assistant",
-            content: result.text || "(no response)",
-          };
+              })),
+            }
+          : {
+              role: "assistant",
+              content: result.text || "(no response)",
+            };
 
       res.json({
         id: `chatcmpl-transformers-${Date.now()}`,
@@ -231,7 +232,7 @@ export function registerTransformersJsRoutes(
           {
             index: 0,
             message,
-            finish_reason: toolCall ? "tool_calls" : "stop",
+            finish_reason: toolCalls.length > 0 ? "tool_calls" : "stop",
           },
         ],
         usage,

@@ -158,8 +158,8 @@ npx shadow-claw agent init [dir] --download
 
 # Manage local models (list, download with progress bar, set default, query remote)
 npx shadow-claw agent model list
-npx shadow-claw agent model download onnx-community/gemma-3-1b-it-ONNX-GQA
-npx shadow-claw agent model set onnx-community/gemma-3-1b-it-ONNX-GQA
+npx shadow-claw agent model download onnx-community/gemma-4-E2B-it-ONNX
+npx shadow-claw agent model set onnx-community/gemma-4-E2B-it-ONNX
 npx shadow-claw agent model remote --query gemma
 
 # Run a one-shot agent prompt against the workspace (streams to stdout)
@@ -210,7 +210,7 @@ npx shadow-claw agent import https://xt-ml.github.io/shadow-claw-agent-cli-weath
 | `-y, --yes`                          | boolean | Skip interactive prompts and accept defaults                                            | `false`                                   |
 | `--group <groupId>`                  | string  | Conversation group identifier                                                           | `"server:main"`                           |
 | `--provider <provider>`              | string  | LLM provider ID (`transformers_js_local`, `openrouter`, `llamafile`, `gemini`, etc.)    | auto-resolved (`"transformers_js_local"`) |
-| `--model <model>`                    | string  | Model identifier (e.g. `onnx-community/gemma-3-1b-it-ONNX-GQA`)                         | auto-resolved (curated local default)     |
+| `--model <model>`                    | string  | Model identifier (e.g. `onnx-community/gemma-4-E2B-it-ONNX`)                            | auto-resolved (curated local default)     |
 | `--download`                         | boolean | Prewarm and download the model during agent init or before execution                    | `false`                                   |
 | `--api-key <key>`                    | string  | API key for cloud providers                                                             | auto-resolved from env                    |
 | `--stream` / `--no-stream`           | boolean | Stream response tokens to stdout as they arrive                                         | `true`                                    |
@@ -220,6 +220,7 @@ npx shadow-claw agent import https://xt-ml.github.io/shadow-claw-agent-cli-weath
 | `--no-system-prompt`                 | boolean | Disable system prompt completely for pure text completion                               | `false`                                   |
 | `--system-prompt-file <file>`        | string  | Load system prompt from a text or markdown file                                         | `undefined`                               |
 | `--tools <tools>`                    | string  | Comma-separated list of tools to enable or import (e.g. `bash,read_file`)               | `undefined`                               |
+| `--no-tools`                         | boolean | Disable all tools for pure text completion / zero tool-call overhead                    | `false`                                   |
 | `--skills <skills>`                  | string  | Comma-separated list of skills to filter or import                                      | `undefined`                               |
 | `--scripts <scripts>`                | string  | Comma-separated list of companion scripts to import                                     | `undefined`                               |
 | `--all`                              | boolean | Import all tools, skills, and scripts from discovery manifest                           | `false`                                   |
@@ -248,10 +249,10 @@ npx shadow-claw agent model remote --query gemma
 npx shadow-claw agent model list --remote
 
 # Download a model with interactive progress bar (stored in .cache/models/)
-npx shadow-claw agent model download onnx-community/gemma-3-1b-it-ONNX-GQA
+npx shadow-claw agent model download onnx-community/gemma-4-E2B-it-ONNX
 
 # Set the active default model in shadow-claw.config.json
-npx shadow-claw agent model set onnx-community/gemma-3-1b-it-ONNX-GQA
+npx shadow-claw agent model set onnx-community/gemma-4-E2B-it-ONNX
 ```
 
 #### Node-Native Offline Execution
@@ -332,7 +333,7 @@ npx shadow-claw agent run "Describe these" -f photo.png -f report.pdf
 By default, headless agent executions prepend a concise assistant system prompt. You can customize or completely disable this prompt:
 
 - **Custom System Prompt**: Pass inline text with `--system-prompt <text>` or load from disk with `--system-prompt-file <path>`.
-- **Pure Text Completion**: Pass `--no-system-prompt` (or `--system-prompt ""` / `--system-prompt none`) to strip the system prompt entirely. Combined with `--tools none` and `--no-history`, this configures pure text completion with zero token overhead.
+- **Pure Text Completion**: Pass `--no-system-prompt` (or `--system-prompt ""` / `--system-prompt none`) to strip the system prompt entirely. Combined with `--no-tools` (or `--tools none`) and `--no-history`, this configures pure text completion with zero token overhead.
 
 ```bash
 # Provide custom system prompt
@@ -357,7 +358,7 @@ The headless agent checks credentials in the following order:
 2. Environment variables (`SHADOW_CLAW_PROVIDER`, `SHADOW_CLAW_MODEL`, `OPENROUTER_API_KEY`, `HUGGINGFACE_API_KEY`, `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, etc.)
 3. SQLite database configuration (`CONFIG_KEYS.PROVIDER`, `CONFIG_KEYS.MODEL`)
 4. Workspace configuration (`agent.defaultProvider`, `agent.defaultModel` or `settings.defaultProvider`, `settings.defaultModel` in `shadow-claw.config.json`)
-5. Provider defaults (`"transformers_js_local"` with `"onnx-community/gemma-3-1b-it-ONNX-GQA"` for offline execution, or `"openrouter"` with `"openrouter/free"`)
+5. Provider defaults (`"transformers_js_local"` with `"onnx-community/gemma-4-E2B-it-ONNX"` for offline execution, or `"openrouter"` with `"openrouter/free"`)
 
 When executing `agent run` with a local model that has not yet been downloaded, ShadowClaw guards against unintentional multi-gigabyte downloads: you must pass `--download` or `--yes` (`-y`) to initiate the download. Otherwise, it aborts immediately with an actionable error.
 

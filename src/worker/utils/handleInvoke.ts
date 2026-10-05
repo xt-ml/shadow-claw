@@ -707,6 +707,7 @@ export async function handleInvoke(
               toolResults.push({
                 content: output as ToolResultContentBlock[],
                 tool_use_id: block.id,
+                name: block.name,
                 type: "tool_result",
               });
             } else {
@@ -716,6 +717,7 @@ export async function handleInvoke(
                     ? output.slice(0, 100_000)
                     : JSON.stringify(output).slice(0, 100_000),
                 tool_use_id: block.id,
+                name: block.name,
                 type: "tool_result",
               });
             }

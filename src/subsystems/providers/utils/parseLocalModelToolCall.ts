@@ -133,79 +133,261 @@ function parseArgsBody(raw: string): Record<string, any> {
   return parseLooseKVArgs(trimmed);
 }
 
+/**
+ * Extract balanced curly-brace substring `{ ... }` starting from startIndex.
+ * Respects single and double quotes and escaped characters.
+ */
+function extractBalancedBraces(
+  text: string,
+  startIndex: number,
+): { body: string; endIndex: number } | null {
+  const openIdx = text.indexOf("{", startIndex);
+  if (openIdx === -1) return null;
+
+  let depth = 0;
+  let quote: '"' | "'" | null = null;
+
+  for (let i = openIdx; i < text.length; i++) {
+    const ch = text[i];
+    if ((ch === '"' || ch === "'") && text[i - 1] !== "\\") {
+      if (quote === ch) {
+        quote = null;
+      } else if (!quote) {
+        quote = ch;
+      }
+      continue;
+    }
+    if (!quote) {
+      if (ch === "{") {
+        depth++;
+      } else if (ch === "}") {
+        depth--;
+        if (depth === 0) {
+          return {
+            body: text.slice(openIdx, i + 1),
+            endIndex: i + 1,
+          };
+        }
+      }
+    }
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
 /**
- * Parse raw model text for a tool-call invocation.
+ * Parse raw model text for ALL tool-call invocations.
  *
- * Returns `null` if no tool call is detected.
+ * Supports:
+ * - Gemma 4 `call:<name>{...}` syntax (single or multiple)
+ * - Standard `<tool_call>\n{"name": "...", "arguments": {...}}\n</tool_call>`
+ * - `<execute_tool> name(...) </execute_tool>` syntax
+ * - Qwen `[tool_code] ... [/tool_code]` syntax
+ *
+ * Automatically strips thought channel tokens (`<|channel>thought...<channel|>`),
+ * `<think>...</think>` tags, and Gemma 4 `<tool_call|>` closing tokens.
  */
-export function parseLocalModelToolCall(text: string): ParsedToolCall | null {
-  // Strip common end-of-turn special tokens left in by some models
-  const trimmed = text
-    .replace(/<\s*turn\|>\s*|<\|end_of_turn\|>|<\|eot_id\|>/gi, "")
-    .replace(/<\|tool_call\|?>/gi, "") // Gemma 4 <|tool_call>
+export function parseLocalModelToolCalls(text: string): ParsedToolCall[] {
+  if (!text || typeof text !== "string") return [];
+
+  // 1. Strip thought channels / thinking tags
+  const cleaned = text
+    .replace(/<\|channel\>[\s\S]*?<channel\|>/gi, "")
+    .replace(/<think\>[\s\S]*?<\/think>/gi, "")
+    .replace(/<\s*turn\|>\s*|<\|end_of_turn\|>|<\|eot_id\|>|<\|im_end\|>/gi, "")
+    .replace(/<\|tool_call\|?>|<tool_call\|>/gi, "")
     .trim();
 
-  if (!trimmed) return null;
+  if (!cleaned) return [];
 
-  // ── 1. Gemma "call:" syntax ─────────────────────────────────────────────
-  // Pattern: `call:<name>{...}` or `call: <name> {...}`
-  const callMatch = trimmed.match(
-    /^call\s*:\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\{([\s\S]*)\}\s*$/,
+  const calls: ParsedToolCall[] = [];
+
+  // ── 1. Standard <tool_call> JSON format ─────────────────────────────────
+  const toolCallXmlMatches = cleaned.matchAll(
+    /<\s*tool_call\s*>([\s\S]*?)<\s*\/\s*tool_call\s*>/gi,
   );
-  if (callMatch?.[1]) {
-    return {
-      name: callMatch[1],
-      input: parseArgsBody(`{${callMatch[2]}}`),
-    };
+  for (const m of toolCallXmlMatches) {
+    const inner = (m[1] ?? "").trim();
+    if (!inner) continue;
+    if (inner.startsWith("{") && inner.endsWith("}")) {
+      try {
+        const parsed = JSON.parse(inner);
+        if (parsed && typeof parsed.name === "string") {
+          calls.push({
+            name: parsed.name,
+            input:
+              parsed.arguments && typeof parsed.arguments === "object"
+                ? parsed.arguments
+                : {},
+          });
+        }
+      } catch {
+        // Fall through
+      }
+    }
   }
 
   // ── 2. <execute_tool> syntax ─────────────────────────────────────────────
-  // Pattern: `<execute_tool> name(args) </execute_tool>`
-  const execMatch = trimmed.match(
-    /^<\s*execute_tool\s*>\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*<\s*\/\s*execute_tool\s*>\s*$/i,
+  const execToolMatches = cleaned.matchAll(
+    /<\s*execute_tool\s*>([\s\S]*?)<\s*\/\s*execute_tool\s*>/gi,
   );
-  if (execMatch?.[1]) {
-    return {
-      name: execMatch[1],
-      input: parseLooseKVArgs(execMatch[2] ?? ""),
-    };
+  for (const m of execToolMatches) {
+    const inner = (m[1] ?? "").trim();
+    const execMatch = inner.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)/i);
+    if (execMatch?.[1]) {
+      calls.push({
+        name: execMatch[1],
+        input: parseLooseKVArgs(execMatch[2] ?? ""),
+      });
+    }
   }
 
   // ── 3. Qwen [tool_code] syntax ───────────────────────────────────────────
-  // Pattern: `[tool_code]\nprint(name({...}))\n[/tool_code]`
-  //       or `[tool_code]\nname({...})\n[/tool_code]`
-  const toolCodeMatch = trimmed.match(
-    /^\[tool_code\]([\s\S]*?)\[\/tool_code\]$/i,
+  const toolCodeMatches = cleaned.matchAll(
+    /\[tool_code\]([\s\S]*?)\[\/tool_code\]/gi,
   );
-  if (toolCodeMatch?.[1]) {
-    const body = toolCodeMatch[1].trim();
-    // print(name({...})) or name({...})
+  for (const m of toolCodeMatches) {
+    const body = (m[1] ?? "").trim();
     const printMatch = body.match(
       /^print\s*\(\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\s*(.*?)\s*\)\s*\)$/s,
     );
     const directMatch = body.match(
       /^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\s*(.*?)\s*\)$/s,
     );
-    const m = printMatch ?? directMatch;
-    if (m?.[1]) {
-      const rawArgs = (m[2] ?? "").trim();
-      if (!rawArgs.startsWith("{") || !rawArgs.endsWith("}")) return null;
-      try {
-        const input = JSON.parse(rawArgs);
-        if (input && typeof input === "object" && !Array.isArray(input)) {
-          return { name: m[1], input: input as Record<string, any> };
+    const mFn = printMatch ?? directMatch;
+    if (mFn?.[1]) {
+      const rawArgs = (mFn[2] ?? "").trim();
+      if (rawArgs.startsWith("{") && rawArgs.endsWith("}")) {
+        try {
+          const input = JSON.parse(rawArgs);
+          if (input && typeof input === "object" && !Array.isArray(input)) {
+            calls.push({ name: mFn[1], input });
+          }
+        } catch {
+          // Fall through
         }
-      } catch {
-        return null;
       }
     }
   }
 
-  return null;
+  // ── 4. Gemma 4 "call:" syntax (balanced brace extraction) ─────────────────
+  // Matches `call:name{` anywhere in the text without greedy argument mangling
+  const callRegex =
+    /(?:^|[^a-zA-Z0-9_])call\s*:\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*(\{)/g;
+  let match: RegExpExecArray | null;
+  while ((match = callRegex.exec(cleaned)) !== null) {
+    const toolName = match[1]!;
+    const openBraceIdx = match.index + match[0].length - 1;
+    const balanced = extractBalancedBraces(cleaned, openBraceIdx);
+    if (balanced) {
+      calls.push({
+        name: toolName,
+        input: parseArgsBody(balanced.body),
+      });
+      callRegex.lastIndex = balanced.endIndex;
+    }
+  }
+
+  return calls;
+}
+
+/**
+ * Parse raw model text for a tool-call invocation.
+ * Returns the first detected tool call, or `null` if none detected.
+ */
+export function parseLocalModelToolCall(text: string): ParsedToolCall | null {
+  const calls = parseLocalModelToolCalls(text);
+  return calls[0] ?? null;
+}
+
+function sanitizePropertySchema(val: any): Record<string, any> {
+  if (!val || typeof val !== "object" || Array.isArray(val)) {
+    return { type: "string" };
+  }
+
+  const prop: Record<string, any> = { ...val };
+
+  // Infer missing type
+  if (!prop.type) {
+    if (Array.isArray(prop.anyOf) && prop.anyOf.length > 0) {
+      const match = prop.anyOf.find(
+        (x: any) => x && typeof x.type === "string",
+      );
+      prop.type = match ? match.type : "string";
+    } else if (Array.isArray(prop.oneOf) && prop.oneOf.length > 0) {
+      const match = prop.oneOf.find(
+        (x: any) => x && typeof x.type === "string",
+      );
+      prop.type = match ? match.type : "string";
+    } else if (prop.properties && typeof prop.properties === "object") {
+      prop.type = "object";
+    } else if (prop.items && typeof prop.items === "object") {
+      prop.type = "array";
+    } else {
+      prop.type = "string";
+    }
+  }
+
+  if (prop.type === "object") {
+    const childProps = prop.properties;
+    const sanitizedChildProps: Record<string, any> = {};
+    if (
+      childProps &&
+      typeof childProps === "object" &&
+      !Array.isArray(childProps)
+    ) {
+      for (const [k, v] of Object.entries(childProps)) {
+        sanitizedChildProps[k] = sanitizePropertySchema(v);
+      }
+    }
+    prop.properties = sanitizedChildProps;
+  } else if (prop.type === "array") {
+    if (
+      prop.items &&
+      typeof prop.items === "object" &&
+      !Array.isArray(prop.items)
+    ) {
+      prop.items = sanitizePropertySchema(prop.items);
+    } else {
+      prop.items = { type: "string" };
+    }
+  }
+
+  return prop;
+}
+
+/**
+ * Defensively sanitize parameter schemas so that strict chat templates (such as
+ * Gemma 4's chat_template.jinja) do not crash when encountering missing `type`
+ * properties or `type: "object"` definitions lacking a `properties` dictionary.
+ */
+export function sanitizeToolParameters(rawParams: any): Record<string, any> {
+  if (!rawParams || typeof rawParams !== "object" || Array.isArray(rawParams)) {
+    return { type: "object", properties: {} };
+  }
+
+  const result: Record<string, any> = { ...rawParams };
+  result.type = typeof result.type === "string" ? result.type : "object";
+
+  if (result.type === "object") {
+    const rawProps = result.properties;
+    const sanitizedProps: Record<string, any> = {};
+    if (rawProps && typeof rawProps === "object" && !Array.isArray(rawProps)) {
+      for (const [key, val] of Object.entries(rawProps)) {
+        sanitizedProps[key] = sanitizePropertySchema(val);
+      }
+    }
+    result.properties = sanitizedProps;
+  }
+
+  if (Array.isArray(result.required)) {
+    result.required = result.required.filter((r: any) => typeof r === "string");
+  }
+
+  return result;
 }
 
 /**
@@ -221,8 +403,8 @@ export function convertToolSchemasToOpenAI(tools: any[]): any[] {
     type: "function",
     function: {
       name: tool.name,
-      description: tool.description,
-      parameters: tool.input_schema ?? {},
+      description: tool.description || "",
+      parameters: sanitizeToolParameters(tool.input_schema ?? tool.parameters),
     },
   }));
 }

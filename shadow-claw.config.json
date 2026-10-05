@@ -34,7 +34,7 @@
   },
   "agent": {
     "defaultProvider": "transformers_js_local",
-    "defaultModel": "onnx-community/gemma-3-1b-it-ONNX-GQA"
+    "defaultModel": "onnx-community/gemma-4-E2B-it-ONNX"
   },
   "customElements": {
     "allowedElements": [

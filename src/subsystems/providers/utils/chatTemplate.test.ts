@@ -1,5 +1,7 @@
+import fs from "node:fs";
 import { jest } from "@jest/globals";
 import { modelRegistry } from "../model-registry.js";
+import { TOOL_DEFINITIONS } from "../../tools/tools.js";
 import {
   fetchTokenizerConfig,
   clearTokenizerConfigCache,
@@ -84,6 +86,116 @@ describe("chatTemplate", () => {
       expect(normalized[0].content).toContain(
         "[ATTACHMENT text/plain] notes.txt",
       );
+    });
+
+    it("preserves tool_call_id and resolves tool name on tool messages", () => {
+      const raw = [
+        { role: "user", content: "List files" },
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "call_abc123",
+              type: "function",
+              function: { name: "list_files", arguments: "{}" },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          tool_call_id: "call_abc123",
+          content: "file1.txt\nfile2.txt",
+        },
+      ];
+
+      const normalized = normalizeMessagesForChatTemplate(raw);
+      expect(normalized).toHaveLength(3);
+      expect(normalized[1].role).toBe("assistant");
+      expect(normalized[1].content).toBe("");
+      expect(normalized[1].tool_calls).toHaveLength(1);
+      expect(normalized[2]).toEqual({
+        role: "tool",
+        content: "file1.txt\nfile2.txt",
+        tool_call_id: "call_abc123",
+        name: "list_files",
+      });
+    });
+
+    it("parses JSON string arguments to object in assistant tool_calls to prevent Jinja double-brace rendering", () => {
+      const raw = [
+        { role: "user", content: "read file" },
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "call_abc123",
+              type: "function",
+              function: {
+                name: "read_file",
+                arguments: '{"path":"package.json"}',
+              },
+            },
+          ],
+        },
+      ];
+
+      const normalized = normalizeMessagesForChatTemplate(raw);
+      expect(normalized[1].tool_calls?.[0]?.function?.arguments).toEqual({
+        path: "package.json",
+      });
+    });
+
+    it("normalizes Anthropic-style tool_use in assistant and tool_result in user message", () => {
+      const raw = [
+        { role: "user", content: "list files in database" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "call_123",
+              name: "list_files",
+              input: { path: "database" },
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "call_123",
+              name: "list_files",
+              content: "agent.db",
+            },
+          ],
+        },
+      ];
+
+      const normalized = normalizeMessagesForChatTemplate(raw);
+      expect(normalized).toHaveLength(3);
+      expect(normalized[0]).toEqual({
+        role: "user",
+        content: "list files in database",
+      });
+      expect(normalized[1].role).toBe("assistant");
+      expect(normalized[1].tool_calls).toHaveLength(1);
+      expect(normalized[1].tool_calls?.[0]).toEqual({
+        id: "call_123",
+        type: "function",
+        function: {
+          name: "list_files",
+          arguments: { path: "database" },
+        },
+      });
+      expect(normalized[2]).toEqual({
+        role: "tool",
+        content: "agent.db",
+        tool_call_id: "call_123",
+        name: "list_files",
+      });
     });
   });
 
@@ -282,6 +394,102 @@ describe("chatTemplate", () => {
           },
         },
       ]);
+    });
+
+    it("defensively ensures all property definitions have a type and object properties have a properties map", () => {
+      const tools = [
+        {
+          name: "git_unstage",
+          description: "Unstage file",
+          input_schema: {
+            type: "object",
+            properties: {
+              repo: { type: "string" },
+              filepath: {
+                anyOf: [
+                  { type: "string" },
+                  { type: "array", items: { type: "string" } },
+                ],
+              },
+            },
+          },
+        },
+        {
+          name: "render_component",
+          description: "Render A2UI surface",
+          input_schema: {
+            type: "object",
+            properties: {
+              dataModel: {
+                type: "object",
+                additionalProperties: true,
+              },
+              value: {
+                description: "untyped value",
+              },
+            },
+          },
+        },
+      ];
+
+      const mapped = mapToolsForChatTemplate(tools);
+      const gitProps = mapped?.[0]?.function?.parameters?.properties;
+      expect(gitProps?.filepath?.type).toBe("string");
+
+      const a2uiProps = mapped?.[1]?.function?.parameters?.properties;
+      expect(a2uiProps?.dataModel?.properties).toBeDefined();
+      expect(typeof a2uiProps?.dataModel?.properties).toBe("object");
+      expect(a2uiProps?.value?.type).toBe("string");
+    });
+
+    it("renders all TOOL_DEFINITIONS with Gemma 4 template without filter crashes", async () => {
+      const gemma4JinjaPath =
+        ".cache/assets/cache/transformers.js/onnx-community/gemma-4-E4B-it-ONNX/chat_template.jinja";
+      if (!fs.existsSync(gemma4JinjaPath)) return;
+      const jinja = fs.readFileSync(gemma4JinjaPath, "utf-8");
+
+      for (const tool of TOOL_DEFINITIONS) {
+        await expect(
+          renderChatTemplate({
+            template: jinja,
+            messages: [{ role: "user", content: "test" }],
+            tools: [tool],
+            addGenerationPrompt: true,
+          }),
+        ).resolves.toBeDefined();
+      }
+    });
+
+    it("renders assistant tool call without double curly braces in Gemma 4 template", async () => {
+      const gemma4JinjaPath =
+        ".cache/assets/cache/transformers.js/onnx-community/gemma-4-E4B-it-ONNX/chat_template.jinja";
+      if (!fs.existsSync(gemma4JinjaPath)) return;
+      const jinja = fs.readFileSync(gemma4JinjaPath, "utf-8");
+
+      const rendered = await renderChatTemplate({
+        template: jinja,
+        messages: [
+          { role: "user", content: "read file" },
+          {
+            role: "assistant",
+            content: "",
+            tool_calls: [
+              {
+                id: "call_abc123",
+                type: "function",
+                function: {
+                  name: "read_file",
+                  arguments: '{"path":"index.ts"}',
+                },
+              },
+            ],
+          },
+        ],
+        addGenerationPrompt: false,
+      });
+
+      expect(rendered).toContain('call:read_file{path:<|"|>index.ts<|"|>}');
+      expect(rendered).not.toContain("call:read_file{{");
     });
   });
 });

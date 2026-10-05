@@ -585,10 +585,7 @@ export const git_unstage: ToolDefinition = {
         description: "Short repo name",
       },
       filepath: {
-        anyOf: [
-          { type: "string" },
-          { type: "array", items: { type: "string" } },
-        ],
+        type: "string",
         description:
           "File path or array of file paths to unstage (relative to repo root)",
       },

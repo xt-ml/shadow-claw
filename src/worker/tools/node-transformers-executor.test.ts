@@ -122,6 +122,161 @@ describe("executeNodeTransformersCompletion", () => {
     );
   });
 
+  it("suppresses onToken streaming when the model output is a tool call", async () => {
+    const onToken = jest.fn();
+    mockService.runChatCompletion = jest.fn(async (opts: any) => {
+      opts.onToken?.("call:read_file");
+      opts.onToken?.('{"path":"test.txt"}');
+      return {
+        text: 'call:read_file{"path":"test.txt"}',
+        promptTokens: 20,
+        completionTokens: 15,
+      };
+    }) as typeof mockService.runChatCompletion;
+
+    const tools = [
+      {
+        name: "read_file",
+        description: "Read a file",
+        parameters: {
+          type: "object",
+          properties: { path: { type: "string" } },
+        },
+      },
+    ];
+
+    const response = await executeNodeTransformersCompletion({
+      modelId: "onnx-community/gemma-4-E2B-it-ONNX",
+      messages: [{ role: "user", content: "Read test.txt" }],
+      tools,
+      onToken,
+    });
+
+    expect(response.choices[0].finish_reason).toBe("tool_calls");
+    expect(onToken).not.toHaveBeenCalled();
+  });
+
+  it("suppresses onToken streaming when Gemma 4 tool call arrives in fine-grained chunks", async () => {
+    const onToken = jest.fn();
+    mockService.runChatCompletion = jest.fn(async (opts: any) => {
+      const chunks = ["call", ":list", "_files", "{path:", '"database"', "}"];
+      for (const chunk of chunks) {
+        opts.onToken?.(chunk);
+      }
+      return {
+        text: 'call:list_files{path:"database"}',
+        promptTokens: 20,
+        completionTokens: 15,
+      };
+    }) as typeof mockService.runChatCompletion;
+
+    const tools = [
+      {
+        name: "list_files",
+        description: "List files",
+        parameters: {
+          type: "object",
+          properties: { path: { type: "string" } },
+        },
+      },
+    ];
+
+    const response = await executeNodeTransformersCompletion({
+      modelId: "onnx-community/gemma-4-E2B-it-ONNX",
+      messages: [{ role: "user", content: "List files in database" }],
+      tools,
+      onToken,
+    });
+
+    expect(response.choices[0].finish_reason).toBe("tool_calls");
+    expect(onToken).not.toHaveBeenCalled();
+    expect(response.choices[0].message.tool_calls?.[0].function.name).toBe(
+      "list_files",
+    );
+  });
+
+  it("suppresses onToken streaming when Qwen tool call arrives with leading newline and XML tags", async () => {
+    const onToken = jest.fn();
+    mockService.runChatCompletion = jest.fn(async (opts: any) => {
+      const chunks = [
+        "\n",
+        "<tool_call>",
+        "\n",
+        '{"name": "list_files", "arguments": {"path": "database"}}',
+        "\n",
+        "</tool_call>",
+      ];
+      for (const chunk of chunks) {
+        opts.onToken?.(chunk);
+      }
+      return {
+        text: '<tool_call>\n{"name": "list_files", "arguments": {"path": "database"}}\n</tool_call>',
+        promptTokens: 20,
+        completionTokens: 15,
+      };
+    }) as typeof mockService.runChatCompletion;
+
+    const tools = [
+      {
+        name: "list_files",
+        description: "List files",
+        parameters: {
+          type: "object",
+          properties: { path: { type: "string" } },
+        },
+      },
+    ];
+
+    const response = await executeNodeTransformersCompletion({
+      modelId: "onnx-community/Qwen3-0.6B-ONNX",
+      messages: [{ role: "user", content: "List files in database" }],
+      tools,
+      onToken,
+    });
+
+    expect(response.choices[0].finish_reason).toBe("tool_calls");
+    expect(onToken).not.toHaveBeenCalled();
+    expect(response.choices[0].message.tool_calls?.[0].function.name).toBe(
+      "list_files",
+    );
+  });
+
+  it("streams onToken when the model output is regular conversational text", async () => {
+    const onToken = jest.fn();
+    mockService.runChatCompletion = jest.fn(async (opts: any) => {
+      opts.onToken?.("Here are");
+      opts.onToken?.(" the files.");
+      return {
+        text: "Here are the files.",
+        promptTokens: 20,
+        completionTokens: 15,
+      };
+    }) as typeof mockService.runChatCompletion;
+
+    const tools = [
+      {
+        name: "list_files",
+        description: "List files",
+        parameters: {
+          type: "object",
+          properties: { path: { type: "string" } },
+        },
+      },
+    ];
+
+    const response = await executeNodeTransformersCompletion({
+      modelId: "onnx-community/gemma-4-E2B-it-ONNX",
+      messages: [{ role: "user", content: "List files" }],
+      tools,
+      onToken,
+    });
+
+    expect(response.choices[0].finish_reason).toBe("stop");
+    expect(response.choices[0].message.content).toBe("Here are the files.");
+    expect(onToken).toHaveBeenCalledWith("Here are");
+    expect(onToken).toHaveBeenCalledWith(" the files.");
+  });
+
   it("creates default service when defaultService is null", async () => {
     setTransformersServiceForTests(null);
 

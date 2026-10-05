@@ -39,25 +39,19 @@ export interface PromptForAgentModelOptions {
 
 export const CURATED_LOCAL_MODELS: LocalModelDefinition[] = [
   {
-    id: "onnx-community/gemma-3-1b-it-ONNX-GQA",
-    name: "Gemma 3 1B GQA (ONNX)",
-    description: "Google Gemma 3 1B with Grouped Query Attention (Default)",
-    contextLength: 32000,
+    id: "onnx-community/gemma-4-E2B-it-ONNX",
+    name: "Gemma 4 E2B (ONNX)",
+    description:
+      "Google Gemma 4 E2B instruction-tuned ONNX model (Default, 128k context, tools)",
+    contextLength: 128000,
     supportsTools: true,
     recommended: true,
   },
   {
-    id: "onnx-community/gemma-4-E2B-it-ONNX",
-    name: "Gemma 4 E2B (ONNX)",
-    description: "Google Gemma 4 E2B instruction-tuned ONNX model",
-    contextLength: 128000,
-    supportsTools: true,
-    recommended: false,
-  },
-  {
     id: "onnx-community/gemma-4-E4B-it-ONNX",
     name: "Gemma 4 E4B (ONNX)",
-    description: "Google Gemma 4 E4B instruction-tuned ONNX model",
+    description:
+      "Google Gemma 4 E4B instruction-tuned ONNX model (128k context, tools)",
     contextLength: 128000,
     supportsTools: true,
     recommended: false,
@@ -70,9 +64,18 @@ export const CURATED_LOCAL_MODELS: LocalModelDefinition[] = [
     supportsTools: true,
     recommended: false,
   },
+  {
+    id: "onnx-community/gemma-3-1b-it-ONNX-GQA",
+    name: "Gemma 3 1B GQA (ONNX)",
+    description:
+      "Google Gemma 3 1B GQA — chat only (template has no tool support)",
+    contextLength: 32000,
+    supportsTools: false,
+    recommended: false,
+  },
 ];
 
-export const DEFAULT_LOCAL_MODEL = "onnx-community/gemma-3-1b-it-ONNX-GQA";
+export const DEFAULT_LOCAL_MODEL = "onnx-community/gemma-4-E2B-it-ONNX";
 
 export const CURATED_LLAMAFILE_MODELS: LlamafileModelDefinition[] = [
   {
@@ -130,6 +133,32 @@ export const CURATED_LLAMAFILE_MODELS: LlamafileModelDefinition[] = [
     supportsTools: false,
   },
 ];
+
+/**
+ * Return whether a model ID is known in our curated definitions to support tool calling.
+ * Returns `true` if explicitly supported, `false` if explicitly not supported,
+ * or `undefined` if the model is not in the curated list.
+ */
+export function getCuratedModelToolSupport(
+  modelId?: string,
+): boolean | undefined {
+  if (!modelId) return undefined;
+  const onnxMatch = CURATED_LOCAL_MODELS.find(
+    (m) => m.id === modelId || m.id.toLowerCase() === modelId.toLowerCase(),
+  );
+  if (onnxMatch) return onnxMatch.supportsTools;
+
+  const llamafileMatch = CURATED_LLAMAFILE_MODELS.find(
+    (m) =>
+      m.id === modelId ||
+      m.fileName === modelId ||
+      m.id.toLowerCase() === modelId.toLowerCase() ||
+      m.fileName.toLowerCase() === modelId.toLowerCase(),
+  );
+  if (llamafileMatch) return llamafileMatch.supportsTools;
+
+  return undefined;
+}
 
 export function getLocalModelCacheDir(customCacheDir?: string): string {
   if (customCacheDir) {
@@ -684,16 +713,16 @@ export async function promptForAgentModel(
     output.write("No default LLM model is configured for the agent.\n\n");
     output.write("Please select a model for local or cloud execution:\n");
     output.write(
-      "  1) onnx-community/gemma-3-1b-it-ONNX-GQA (Gemma 3 1B GQA) [Default, local ONNX, tools]\n",
+      "  1) onnx-community/gemma-4-E2B-it-ONNX (Gemma 4 E2B) [Default, local ONNX: 128k context, tools]\n",
     );
     output.write(
-      "  2) onnx-community/gemma-4-E2B-it-ONNX (Gemma 4 E2B) [Local ONNX: 128k context, tools]\n",
+      "  2) onnx-community/gemma-4-E4B-it-ONNX (Gemma 4 E4B) [Local ONNX: 128k context, tools]\n",
     );
     output.write(
-      "  3) onnx-community/gemma-4-E4B-it-ONNX (Gemma 4 E4B) [Local ONNX: 128k context, tools]\n",
+      "  3) onnx-community/Qwen3-0.6B-ONNX (Qwen 3 0.6B) [Local ONNX, tools]\n",
     );
     output.write(
-      "  4) onnx-community/Qwen3-0.6B-ONNX (Qwen 3 0.6B) [Local ONNX, tools]\n",
+      "  4) onnx-community/gemma-3-1b-it-ONNX-GQA (Gemma 3 1B GQA) [Local ONNX, chat only]\n",
     );
     output.write(
       "  5) mozilla-ai/gemma-4-E2B-it-Q5_K_M.llamafile (Gemma 4 E2B) [Local Llamafile]\n",
@@ -729,16 +758,16 @@ export async function promptForAgentModel(
 
     if (answer === "1" || answer === "") {
       providerId = "transformers_js_local";
-      model = "onnx-community/gemma-3-1b-it-ONNX-GQA";
+      model = DEFAULT_LOCAL_MODEL;
     } else if (answer === "2") {
       providerId = "transformers_js_local";
-      model = "onnx-community/gemma-4-E2B-it-ONNX";
+      model = "onnx-community/gemma-4-E4B-it-ONNX";
     } else if (answer === "3") {
       providerId = "transformers_js_local";
-      model = "onnx-community/gemma-4-E4B-it-ONNX";
+      model = "onnx-community/Qwen3-0.6B-ONNX";
     } else if (answer === "4") {
       providerId = "transformers_js_local";
-      model = "onnx-community/Qwen3-0.6B-ONNX";
+      model = "onnx-community/gemma-3-1b-it-ONNX-GQA";
     } else if (answer === "5") {
       providerId = "llamafile";
       model = "gemma-4-E2B-it-Q5_K_M.llamafile";

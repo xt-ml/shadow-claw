@@ -25,19 +25,58 @@ import {
   downloadLlamafile,
   fetchRemoteModels,
   promptForAgentModel,
+  getCuratedModelToolSupport,
 } from "./local-models.js";
 
 describe("local-models", () => {
-  it("exports the 4 curated ONNX models with Gemma first and Qwen #4", () => {
+  describe("getCuratedModelToolSupport", () => {
+    it("returns true for models that support tools", () => {
+      expect(
+        getCuratedModelToolSupport("onnx-community/gemma-4-E2B-it-ONNX"),
+      ).toBe(true);
+      expect(getCuratedModelToolSupport("onnx-community/Qwen3-0.6B-ONNX")).toBe(
+        true,
+      );
+    });
+
+    it("returns false for models that do not support tools", () => {
+      expect(
+        getCuratedModelToolSupport("onnx-community/gemma-3-1b-it-ONNX-GQA"),
+      ).toBe(false);
+      expect(
+        getCuratedModelToolSupport("gemma-4-E2B-it-Q5_K_M.llamafile"),
+      ).toBe(false);
+    });
+
+    it("returns undefined for unknown or undefined models", () => {
+      expect(
+        getCuratedModelToolSupport("custom/unknown-model"),
+      ).toBeUndefined();
+      expect(getCuratedModelToolSupport(undefined)).toBeUndefined();
+    });
+  });
+  it("exports the 4 curated ONNX models with Gemma 4 E2B first and Gemma 3 chat-only", () => {
     const ids = CURATED_LOCAL_MODELS.map((m) => m.id);
     expect(ids).toEqual([
-      "onnx-community/gemma-3-1b-it-ONNX-GQA",
       "onnx-community/gemma-4-E2B-it-ONNX",
       "onnx-community/gemma-4-E4B-it-ONNX",
       "onnx-community/Qwen3-0.6B-ONNX",
+      "onnx-community/gemma-3-1b-it-ONNX-GQA",
     ]);
 
-    expect(DEFAULT_LOCAL_MODEL).toBe("onnx-community/gemma-3-1b-it-ONNX-GQA");
+    expect(DEFAULT_LOCAL_MODEL).toBe("onnx-community/gemma-4-E2B-it-ONNX");
+
+    const e2b = CURATED_LOCAL_MODELS.find(
+      (m) => m.id === "onnx-community/gemma-4-E2B-it-ONNX",
+    );
+    expect(e2b?.recommended).toBe(true);
+    expect(e2b?.supportsTools).toBe(true);
+
+    const gemma3 = CURATED_LOCAL_MODELS.find(
+      (m) => m.id === "onnx-community/gemma-3-1b-it-ONNX-GQA",
+    );
+    expect(gemma3?.recommended).toBe(false);
+    expect(gemma3?.supportsTools).toBe(false);
   });
 
   it("exports the 6 curated Llamafile models with Gemma first and Qwen next", () => {
@@ -228,7 +267,7 @@ describe("local-models", () => {
     it("lists ONNX models with cached status boolean", () => {
       const list = listLocalModels("/tmp/nonexistent-dir");
       expect(list.length).toBe(4);
-      expect(list[0].id).toBe("onnx-community/gemma-3-1b-it-ONNX-GQA");
+      expect(list[0].id).toBe("onnx-community/gemma-4-E2B-it-ONNX");
       expect(typeof list[0].cached).toBe("boolean");
     });
 
@@ -513,7 +552,7 @@ describe("local-models", () => {
       await rm(tmpDir, { recursive: true, force: true });
     });
 
-    it("defaults to gemma-3-1b-it-ONNX-GQA (#1) and triggers download when user accepts", async () => {
+    it("defaults to gemma-4-E2B-it-ONNX (#1) and triggers download when user accepts", async () => {
       const mockStdin = new PassThrough();
       let capturedOutput = "";
       const mockStdout = new Writable({
@@ -531,7 +570,7 @@ describe("local-models", () => {
 
       const mockService = {
         prewarmModel: jest.fn(async (_opts?: any) => ({
-          modelId: "onnx-community/gemma-3-1b-it-ONNX-GQA",
+          modelId: "onnx-community/gemma-4-E2B-it-ONNX",
         })),
       };
 
@@ -546,10 +585,10 @@ describe("local-models", () => {
       });
 
       expect(result.providerId).toBe("transformers_js_local");
-      expect(result.model).toBe("onnx-community/gemma-3-1b-it-ONNX-GQA");
+      expect(result.model).toBe("onnx-community/gemma-4-E2B-it-ONNX");
       expect(mockService.prewarmModel).toHaveBeenCalledWith(
         (expect as any).objectContaining({
-          modelId: "onnx-community/gemma-3-1b-it-ONNX-GQA",
+          modelId: "onnx-community/gemma-4-E2B-it-ONNX",
         }),
       );
 
@@ -558,17 +597,17 @@ describe("local-models", () => {
       const savedConfig = JSON.parse(await readFile(configPath, "utf8"));
       expect(savedConfig.agent.defaultProvider).toBe("transformers_js_local");
       expect(savedConfig.agent.defaultModel).toBe(
-        "onnx-community/gemma-3-1b-it-ONNX-GQA",
+        "onnx-community/gemma-4-E2B-it-ONNX",
       );
       expect(capturedOutput).toContain(
         "ShadowClaw CLI Agent — Model Selection:",
       );
       expect(capturedOutput).toContain(
-        "Saved default agent model (onnx-community/gemma-3-1b-it-ONNX-GQA)",
+        "Saved default agent model (onnx-community/gemma-4-E2B-it-ONNX)",
       );
     });
 
-    it("allows selecting Qwen3-0.6B-ONNX at option 4", async () => {
+    it("allows selecting Gemma 3 1B GQA at option 4", async () => {
       const mockStdin = new PassThrough();
       let capturedOutput = "";
       const mockStdout = new Writable({
@@ -598,13 +637,13 @@ describe("local-models", () => {
       });
 
       expect(result.providerId).toBe("transformers_js_local");
-      expect(result.model).toBe("onnx-community/Qwen3-0.6B-ONNX");
+      expect(result.model).toBe("onnx-community/gemma-3-1b-it-ONNX-GQA");
       expect(mockService.prewarmModel).not.toHaveBeenCalled();
 
       const configPath = path.join(tmpDir, "shadow-claw.config.json");
       const savedConfig = JSON.parse(await readFile(configPath, "utf8"));
       expect(savedConfig.agent.defaultModel).toBe(
-        "onnx-community/Qwen3-0.6B-ONNX",
+        "onnx-community/gemma-3-1b-it-ONNX-GQA",
       );
     });
 
@@ -674,7 +713,7 @@ describe("local-models", () => {
       expect(savedConfig.agent.defaultModel).toBe("openrouter/free");
     });
 
-    it("allows selecting Gemma 4 E2B ONNX at option 2 and skips download if declined", async () => {
+    it("allows selecting Gemma 4 E4B ONNX at option 2 and skips download if declined", async () => {
       const mockStdin = new PassThrough();
       let capturedOutput = "";
       const mockStdout = new Writable({
@@ -704,14 +743,55 @@ describe("local-models", () => {
       });
 
       expect(result.providerId).toBe("transformers_js_local");
-      expect(result.model).toBe("onnx-community/gemma-4-E2B-it-ONNX");
+      expect(result.model).toBe("onnx-community/gemma-4-E4B-it-ONNX");
       expect(mockService.prewarmModel).not.toHaveBeenCalled();
 
       const configPath = path.join(tmpDir, "shadow-claw.config.json");
       const savedConfig = JSON.parse(await readFile(configPath, "utf8"));
       expect(savedConfig.agent.defaultProvider).toBe("transformers_js_local");
       expect(savedConfig.agent.defaultModel).toBe(
-        "onnx-community/gemma-4-E2B-it-ONNX",
+        "onnx-community/gemma-4-E4B-it-ONNX",
+      );
+    });
+
+    it("allows selecting Qwen3-0.6B-ONNX at option 3 and skips download if declined", async () => {
+      const mockStdin = new PassThrough();
+      let capturedOutput = "";
+      const mockStdout = new Writable({
+        write(chunk, _encoding, callback) {
+          const str = chunk.toString();
+          capturedOutput += str;
+          if (str.includes("Enter choice [1-12]")) {
+            setImmediate(() => mockStdin.write("3\n"));
+          } else if (str.includes("Download model weights now?")) {
+            setImmediate(() => mockStdin.write("n\n"));
+          }
+          callback();
+        },
+      });
+
+      const mockService = {
+        prewarmModel: jest.fn(),
+      };
+
+      const result = await promptForAgentModel({
+        workspaceDir: tmpDir,
+        contentRoot: tmpDir,
+        stdin: mockStdin,
+        stdout: mockStdout,
+        isTTY: true,
+        service: mockService,
+      });
+
+      expect(result.providerId).toBe("transformers_js_local");
+      expect(result.model).toBe("onnx-community/Qwen3-0.6B-ONNX");
+      expect(mockService.prewarmModel).not.toHaveBeenCalled();
+
+      const configPath = path.join(tmpDir, "shadow-claw.config.json");
+      const savedConfig = JSON.parse(await readFile(configPath, "utf8"));
+      expect(savedConfig.agent.defaultProvider).toBe("transformers_js_local");
+      expect(savedConfig.agent.defaultModel).toBe(
+        "onnx-community/Qwen3-0.6B-ONNX",
       );
     });
 

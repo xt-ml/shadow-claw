@@ -36,14 +36,16 @@ To configure the CLI agent defaults without affecting browser client settings, u
 
 These four ONNX models are listed by `shadow-claw agent model list` and supported by the headless CLI's Transformers.js executor:
 
-| Model ID                                | Name                  | Context | Tools | Notes                                          |
-| --------------------------------------- | --------------------- | ------- | ----- | ---------------------------------------------- |
-| `onnx-community/Qwen3-0.6B-ONNX`        | Qwen 3 0.6B (ONNX)    | 32,768  | Yes   | Server runtime default; ultra-compact and fast |
-| `onnx-community/gemma-3-1b-it-ONNX-GQA` | Gemma 3 1B GQA (ONNX) | 32,000  | Yes   | Headless CLI local-model default               |
-| `onnx-community/gemma-4-E2B-it-ONNX`    | Gemma 4 E2B (ONNX)    | 128,000 | Yes   | Google Gemma 4 E2B instruction-tuned           |
-| `onnx-community/gemma-4-E4B-it-ONNX`    | Gemma 4 E4B (ONNX)    | 128,000 | Yes   | Google Gemma 4 E4B instruction-tuned           |
+| Model ID                                | Name                  | Context | Tools | Notes                                                      |
+| --------------------------------------- | --------------------- | ------- | ----- | ---------------------------------------------------------- |
+| `onnx-community/gemma-4-E2B-it-ONNX`    | Gemma 4 E2B (ONNX)    | 128,000 | Yes   | Headless CLI local-model default (128k context, tools)     |
+| `onnx-community/gemma-4-E4B-it-ONNX`    | Gemma 4 E4B (ONNX)    | 128,000 | Yes   | Google Gemma 4 E4B instruction-tuned (128k context, tools) |
+| `onnx-community/Qwen3-0.6B-ONNX`        | Qwen 3 0.6B (ONNX)    | 32,768  | Yes   | Server runtime default; ultra-compact and fast             |
+| `onnx-community/gemma-3-1b-it-ONNX-GQA` | Gemma 3 1B GQA (ONNX) | 32,000  | No    | Chat only (chat template does not support tool calling)    |
 
-The server-side runtime also advertises ONNX models beyond this CLI-curated list. With no model ID, `shadow-claw agent model download` downloads Gemma 3 1B GQA; the server runtime's default model is Qwen 3 0.6B.
+> **Note on Tool Calling:** Tool calling requires a chat template that renders `tools`. Gemma 3's official chat template does not render tool definitions or support tool role turns, so tool calling is disabled for Gemma 3.
+
+The server-side runtime also advertises ONNX models beyond this CLI-curated list. With no model ID, `shadow-claw agent model download` downloads Gemma 4 E2B; the server runtime's default model is Qwen 3 0.6B.
 
 ---
 
@@ -62,7 +64,7 @@ Displays all curated models, their token context length, tool-calling capability
 ### 2. Download Model with Progress Bar
 
 ```bash
-# Download default CLI model (Gemma 3 1B GQA)
+# Download default CLI model (Gemma 4 E2B)
 shadow-claw agent model download
 
 # Download specific model (e.g. Gemma 4 E2B)
@@ -100,7 +102,7 @@ Persists the selection to `shadow-claw.config.json` under `"agent": { "defaultMo
 
 ```bash
 # Initialize with custom model and download immediately
-shadow-claw agent init --model onnx-community/gemma-3-1b-it-ONNX-GQA --download
+shadow-claw agent init --model onnx-community/gemma-4-E2B-it-ONNX --download
 ```
 
 ---
@@ -146,10 +148,12 @@ Client / CLI Agent
               └── Executes inference via TextStreamer
 ```
 
-### 3. Unified Local Model Tool Calling (`parseLocalModelToolCall`)
+### 3. Unified Local Model Tool Calling (`parseLocalModelToolCalls`)
 
-Located at `src/subsystems/providers/utils/parseLocalModelToolCall.ts`, this utility standardizes tool invocation formatting and parsing across local models:
+Located at `src/subsystems/providers/utils/parseLocalModelToolCall.ts`, this utility standardizes tool invocation formatting, schema normalization, and parsing across local models:
 
-- **Schema Normalization**: Converts internal tool definitions (`ToolDefinition`) into standard OpenAI-compatible function definitions (`{ type: "function", function: { name, description, parameters } }`).
-- **Tokenizer Template Integration**: Passes tool schemas directly into the tokenizer's Jinja chat template via `tools: currentTools`, allowing models trained on tool use (such as Qwen and Gemma) to structure tool calls natively.
-- **Robust Extraction**: Parses tool call syntax from model outputs (e.g. `<tool_call>{"name": "...", "arguments": {...}}</tool_call>`, markdown code blocks, or raw JSON) across both the HTTP proxy route (`src/server/routes/transformers-js.ts`) and in-process Node execution (`src/worker/tools/node-transformers-executor.ts`).
+- **Defensive Schema Sanitization**: Converts internal tool definitions (`ToolDefinition`) into standard OpenAI-compatible function definitions (`{ type: "function", function: { name, description, parameters } }`), recursively sanitizing nested property definitions (`sanitizePropertySchema`) so all object and array fields include explicit `type` metadata required by strict Jinja chat templates (e.g. Gemma 4).
+- **Tokenizer Template Integration**: Passes sanitized tool schemas directly into the tokenizer's Jinja chat template via `tools: currentTools`, allowing models trained on tool use (such as Qwen and Gemma) to structure tool calls natively.
+- **Multi-Tool Parsing & Grammar Support**: Parses single and multi-tool invocations (`parseLocalModelToolCalls`) across varied model grammars, including Gemma 4 `call:function{...}` syntax with balanced brace extraction, Qwen `<|tool_call>`, `<tool_call>`, `<execute_tool>`, and Markdown JSON code blocks, with `<think>` reasoning block stripping.
+- **Streaming Tool Call Suppression Filter**: Uses `createToolCallStreamFilter` in `src/worker/tools/node-transformers-executor.ts` to intercept and buffer token output that matches potential tool-call prefixes. When a tool call is detected, streaming is suppressed so raw tool-call syntax does not leak to stdout or the chat UI; when normal conversational text is detected, buffered tokens are flushed and subsequent tokens stream in real-time.
+- **Chat Template Normalization**: In `normalizeMessagesForChatTemplate` (`src/subsystems/providers/utils/chatTemplate.ts`), stringified assistant tool arguments are parsed to objects, and `tool_call_id` and tool `name` attributes are preserved on `role: "tool"` turns to satisfy Jinja template requirements.

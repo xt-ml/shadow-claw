@@ -376,6 +376,31 @@ describe("TransformersRuntimeService", () => {
       expect(models.length).toBeGreaterThan(0);
       expect(models.some((m) => m.id.includes("gemma-4"))).toBe(true);
     });
+
+    it("marks Gemma 3 models as not supporting tools in static baseline", async () => {
+      readFileMock
+        .mockRejectedValueOnce(new Error("ENOENT")) // cache file missing
+        .mockResolvedValueOnce(JSON.stringify([])); // empty discovery catalog
+
+      statMock.mockRejectedValue(new Error("ENOENT"));
+      (globalThis as any).fetch = (jest.fn() as any).mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () => "[]",
+      });
+
+      const service = await getService();
+      const models = await service.fetchDynamicModels();
+      const gemma3Gqa = models.find(
+        (m) => m.id === "onnx-community/gemma-3-1b-it-ONNX-GQA",
+      );
+      expect(gemma3Gqa?.supports_tools).toBe(false);
+
+      const gemma3Std = models.find(
+        (m) => m.id === "onnx-community/gemma-3-1b-it-ONNX",
+      );
+      expect(gemma3Std?.supports_tools).toBe(false);
+    });
   });
 
   describe("getDownloadStatus & getDiskCacheStatus & prewarmModel", () => {

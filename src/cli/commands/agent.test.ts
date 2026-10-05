@@ -505,6 +505,158 @@ Instructions for make-file
       expect(process.exitCode).toBeFalsy();
     });
 
+    it("warns on stderr when tools are requested with a model lacking tool support", async () => {
+      const { runAgentRun } = await import("./agent.js");
+      const { getAgentCore } = await import("../utils/agent-core.js");
+      const core = await getAgentCore();
+
+      let stderrOutput = "";
+      const originalStderrWrite = process.stderr.write;
+      process.stderr.write = ((chunk: any) => {
+        stderrOutput += String(chunk);
+        return true;
+      }) as any;
+
+      const mockInvokeHandler = async (_db: any, payload: any) => {
+        core.post({
+          type: "response",
+          payload: {
+            groupId: payload.groupId,
+            text: "Done",
+          },
+        });
+      };
+
+      // Mock dummy model weights in tmpDir so isModelLocallyCached returns true
+      await mkdir(path.join(tmpDir, "onnx-community/gemma-3-1b-it-ONNX-GQA"), {
+        recursive: true,
+      });
+      await writeFile(
+        path.join(
+          tmpDir,
+          "onnx-community/gemma-3-1b-it-ONNX-GQA",
+          "model.onnx",
+        ),
+        "x",
+      );
+      await mkdir(path.join(tmpDir, "onnx-community/gemma-4-E2B-it-ONNX"), {
+        recursive: true,
+      });
+      await writeFile(
+        path.join(tmpDir, "onnx-community/gemma-4-E2B-it-ONNX", "model.onnx"),
+        "x",
+      );
+
+      try {
+        await runAgentRun("list files", {
+          workspace: tmpDir,
+          cacheDir: tmpDir,
+          provider: "transformers_js_local",
+          model: "onnx-community/gemma-3-1b-it-ONNX-GQA",
+          tools: "list_files",
+          invokeHandler: mockInvokeHandler,
+          quiet: false,
+        });
+
+        expect(stderrOutput).toContain(
+          'Warning: Model "onnx-community/gemma-3-1b-it-ONNX-GQA" does not support tool calling',
+        );
+
+        // Reset stderr and verify --quiet suppresses the warning
+        stderrOutput = "";
+        await runAgentRun("list files", {
+          workspace: tmpDir,
+          cacheDir: tmpDir,
+          provider: "transformers_js_local",
+          model: "onnx-community/gemma-3-1b-it-ONNX-GQA",
+          tools: "list_files",
+          invokeHandler: mockInvokeHandler,
+          quiet: true,
+        });
+        expect(stderrOutput).not.toContain("Warning:");
+
+        // Reset stderr and verify --tools none does not produce a warning
+        stderrOutput = "";
+        await runAgentRun("list files", {
+          workspace: tmpDir,
+          cacheDir: tmpDir,
+          provider: "transformers_js_local",
+          model: "onnx-community/gemma-3-1b-it-ONNX-GQA",
+          tools: "none",
+          invokeHandler: mockInvokeHandler,
+          quiet: false,
+        });
+        expect(stderrOutput).not.toContain("Warning:");
+
+        // Reset stderr and verify a tool-capable model produces no warning
+        stderrOutput = "";
+        await runAgentRun("list files", {
+          workspace: tmpDir,
+          cacheDir: tmpDir,
+          provider: "transformers_js_local",
+          model: "onnx-community/gemma-4-E2B-it-ONNX",
+          tools: "list_files",
+          invokeHandler: mockInvokeHandler,
+          quiet: false,
+        });
+        expect(stderrOutput).not.toContain("Warning:");
+      } finally {
+        process.stderr.write = originalStderrWrite;
+      }
+    });
+
+    it("prints fallback response when streaming ended prior to tool execution", async () => {
+      const { runAgentRun } = await import("./agent.js");
+      const { getAgentCore } = await import("../utils/agent-core.js");
+      const core = await getAgentCore();
+
+      let written = "";
+      const originalStdoutWrite = process.stdout.write;
+      process.stdout.write = ((chunk: any) => {
+        written += String(chunk);
+        return true;
+      }) as any;
+
+      try {
+        const mockInvokeHandler = async (_db, payload) => {
+          // Simulate turn 1 streaming an intermediate token then ending for tool execution
+          core.post({
+            type: "streaming-start",
+            payload: { groupId: payload.groupId },
+          });
+          core.post({
+            type: "streaming-chunk",
+            payload: { groupId: payload.groupId, text: "thinking..." },
+          });
+          core.post({
+            type: "streaming-end",
+            payload: { groupId: payload.groupId },
+          });
+
+          // Turn 2 produces no new stream chunks, but yields fallback response
+          core.post({
+            type: "response",
+            payload: {
+              groupId: payload.groupId,
+              text: "Tool result:\nbar\ndatabase/",
+            },
+          });
+        };
+
+        const result = await runAgentRun("list files", {
+          workspace: tmpDir,
+          provider: "openrouter",
+          apiKey: "sk-or-v1-test",
+          invokeHandler: mockInvokeHandler,
+        });
+
+        expect(result.success).toBe(true);
+        expect(written).toContain("Tool result:\nbar\ndatabase/");
+      } finally {
+        process.stdout.write = originalStdoutWrite;
+      }
+    });
+
     it("defaults to OpenRouter and openrouter/free model when no provider or model is configured", async () => {
       const { runAgentRun } = await import("./agent.js");
       const { getAgentCore } = await import("../utils/agent-core.js");
@@ -558,7 +710,7 @@ Instructions for make-file
 
       const mockService = {
         prewarmModel: jest.fn(async () => ({
-          modelId: "onnx-community/gemma-3-1b-it-ONNX-GQA",
+          modelId: "onnx-community/gemma-4-E2B-it-ONNX",
         })),
       };
 
@@ -590,12 +742,10 @@ Instructions for make-file
       expect(result.success).toBe(true);
       expect(capturedPayload).not.toBeNull();
       expect(capturedPayload.provider).toBe("transformers_js_local");
-      expect(capturedPayload.model).toBe(
-        "onnx-community/gemma-3-1b-it-ONNX-GQA",
-      );
+      expect(capturedPayload.model).toBe("onnx-community/gemma-4-E2B-it-ONNX");
       expect(mockService.prewarmModel).toHaveBeenCalled();
       expect((mockService.prewarmModel as any).mock.calls[0][0].modelId).toBe(
-        "onnx-community/gemma-3-1b-it-ONNX-GQA",
+        "onnx-community/gemma-4-E2B-it-ONNX",
       );
       expect(capturedOutput).toContain(
         "ShadowClaw CLI Agent — Model Selection:",

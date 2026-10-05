@@ -535,6 +535,7 @@ class OpenAIAdapter extends BaseAdapter {
           openaiMessages.push({
             role: "tool",
             tool_call_id: toolResult.tool_use_id,
+            ...(toolResult.name ? { name: toolResult.name } : {}),
             content: toolContent,
           });
         }

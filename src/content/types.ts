@@ -60,6 +60,7 @@ export interface TextContent {
 export interface ToolResultContent {
   content: string | ToolResultContentBlock[];
   tool_use_id: string;
+  name?: string;
   type: "tool_result";
 }
 

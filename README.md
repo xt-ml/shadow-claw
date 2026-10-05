@@ -13,7 +13,7 @@ _Watch a demo:_ [Peer-to-peer Browser Native Agents in action (YouTube)](https:/
 
 On the server side, the headless CLI agent participant (`shadow-claw agent`) runs the same reasoning loop, declarative skills, and tool chain pipeline directly against host Node.js environments—backed by SQLite (`node:sqlite`), native filesystem handles, and host OS shell execution. Inference routes seamlessly across cloud providers, as well as local engines.
 
-![ShadowClaw CLI agent writing a paragraph](https://xt-ml.github.io/shadow-claw/assets/screencasts/shadow-claw-cli-agent-writing-paragraph.gif)
+![ShadowClaw CLI agent explaining quantum superposition](https://xt-ml.github.io/shadow-claw/assets/screencasts/shadow-claw-cli-agent-explain-quantum-superposition.gif)
 
 _Watch a demo:_ [Running AI Agents Locally: ShadowClaw Setup and Prompt Testing (YouTube)](https://www.youtube.com/watch?v=zVxPGHipdvU)
 
@@ -50,11 +50,11 @@ npx shadow-claw agent init ./my-project
 
 # Manage local models (list, download from Hugging Face with progress bar, set default)
 npx shadow-claw agent model list
-npx shadow-claw agent model download onnx-community/gemma-3-1b-it-ONNX-GQA
-npx shadow-claw agent model set onnx-community/gemma-3-1b-it-ONNX-GQA
+npx shadow-claw agent model download onnx-community/gemma-4-E2B-it-ONNX
+npx shadow-claw agent model set onnx-community/gemma-4-E2B-it-ONNX
 
-# Run one-shot agent prompt using host OS shell and filesystem (streams to stdout)
-npx shadow-claw agent --workspace ./my-project --no-history run "list the files in this directory"
+# Run one-shot agent prompt with scoped tools (reduces context for compact local models)
+npx shadow-claw agent --workspace ./my-project --no-history --tools list_files run "list the files in ."
 
 # Multi-turn prompts retain history by default; clear conversation history anytime
 npx shadow-claw agent --workspace ./my-project clear
@@ -221,7 +221,7 @@ ShadowClaw resolves default LLM providers and models via a strict precedence cas
 
 - **In-Browser Inference Default:** Defaults to Prompt API (`prompt_api`) with guided onboarding and task API polyfills, enabling local, private, and zero-configuration browser execution.
 - **OpenRouter Default for Headless CLI:** Headless execution via `shadow-claw agent` defaults out-of-the-box to `openrouter` with `openrouter/free`.
-- **Local Models & Hugging Face Hub:** Automatic on-demand downloading from Hugging Face Hub, disk caching under `assets/cache/transformers.js`, and pre-warming endpoints (`POST /transformers-js-proxy/prewarm`). Unified local model tool calling extracts tool invocations across in-process Node executors and server proxy routes using OpenAI function schemas formatted directly for tokenizer chat templates. See [Local Models Guide](docs/subsystems/local-models.md).
+- **Local Models & Hugging Face Hub:** Automatic on-demand downloading from Hugging Face Hub, disk caching under `assets/cache/transformers.js`, and pre-warming endpoints (`POST /transformers-js-proxy/prewarm`). Unified local model tool calling (`parseLocalModelToolCalls`) supports multi-tool calling, Gemma 4 syntax, streaming tool-call suppression, and defensive schema sanitization across in-process Node executors and server proxy routes using OpenAI function schemas formatted directly for tokenizer chat templates. See [Local Models Guide](docs/subsystems/local-models.md).
 - **Prompt API & Polyfill Fallbacks:** In the browser client, uses native `window.LanguageModel` when available, with built-in polyfills (`prompt-api-polyfill` and `built-in-ai-task-apis-polyfills` backed by Transformers.js / ONNX) for cross-browser execution.
 - **Hardware Feature Probing & Fallbacks:** Probes WebGPU adapter capabilities (`shader-f16`), retries during downloads, and dynamically falls back to WebAssembly CPU (`device: "wasm"`, `dtype: "q4"`) if WebGPU initialization fails or software emulation is detected.
 - **Streaming & Resilience:** Streaming responses across OpenAI and Anthropic formats; adaptive rate limiting with `retry-after` handling and 30-second auto-closing, ARIA-accessible countdown dialogs for fatal errors and throttling.
@@ -341,7 +341,7 @@ npx shadow-claw agent model set [modelId]            # Configure default headles
 npx shadow-claw agent model remote --query <search>  # Search Hugging Face onnx-community repository
 npx shadow-claw agent run "prompt"                   # Run agent prompt (retains multi-turn history by default)
 npx shadow-claw agent run "prompt" --no-history      # Run isolated one-shot prompt without prior history
-npx shadow-claw agent run "prompt" --tools none      # Strip all tool schemas for pure text completion / low token usage
+npx shadow-claw agent run "prompt" --tools none      # Strip all tool schemas for pure text completion (or --no-tools)
 npx shadow-claw agent run "prompt" --no-system-prompt # Strip system prompt for direct text completion
 npx shadow-claw agent clear                          # Reset conversation history for the group (default server:main)
 cat doc.txt | npx shadow-claw agent run -o sum.txt   # Pipe document into agent prompt and write to file

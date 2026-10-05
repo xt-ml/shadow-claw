@@ -55,6 +55,7 @@ export function writeOpenAiToolCallChunk(
   res: ExpressResponse,
   model: string,
   toolCall: { name: string; input: Record<string, any> },
+  index: number = 0,
 ) {
   const chunk = {
     id: `chatcmpl-${Date.now()}`,
@@ -67,8 +68,8 @@ export function writeOpenAiToolCallChunk(
         delta: {
           tool_calls: [
             {
-              index: 0,
-              id: `call_${Date.now()}_${Math.random()}`,
+              index,
+              id: `call_${Date.now()}_${index}_${Math.random()}`,
               type: "function",
               function: {
                 name: toolCall.name,

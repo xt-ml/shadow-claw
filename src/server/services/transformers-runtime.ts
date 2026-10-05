@@ -150,14 +150,14 @@ const STATIC_MODELS: TransformersModelMetadata[] = [
     name: "Gemma 3 1B (ONNX)",
     context_length: 32_000,
     max_completion_tokens: 4096,
-    supports_tools: true,
+    supports_tools: false,
   },
   {
     id: "onnx-community/gemma-3-1b-it-ONNX-GQA",
     name: "Gemma 3 1B GQA (ONNX)",
     context_length: 32_000,
     max_completion_tokens: 4096,
-    supports_tools: true,
+    supports_tools: false,
   },
 ];
 

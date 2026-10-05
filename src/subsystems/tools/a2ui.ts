@@ -78,6 +78,7 @@ export const render_component: ToolDefinition = {
         description:
           "Initial data model for the surface (used with createSurface). " +
           'Components can reference values via { "path": "/key" }.',
+        properties: {},
         additionalProperties: true,
       },
       path: {
@@ -88,6 +89,7 @@ export const render_component: ToolDefinition = {
           'Use "/" to replace the entire data model.',
       },
       value: {
+        type: "string",
         description:
           "New value to set at the specified path (used with updateDataModel). " +
           "Omit to delete the key at the given path.",
@@ -96,6 +98,7 @@ export const render_component: ToolDefinition = {
         type: "object",
         description:
           "Optional display/branding properties for this surface (e.g. agentDisplayName).",
+        properties: {},
         additionalProperties: true,
       },
     },

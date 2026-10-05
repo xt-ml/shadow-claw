@@ -1,6 +1,7 @@
 import { Template } from "@huggingface/jinja";
 import { modelRegistry } from "../model-registry.js";
 import { createModelCacheFetch } from "./createModelCacheFetch.js";
+import { sanitizeToolParameters } from "./parseLocalModelToolCall.js";
 
 export interface TokenizerConfig {
   chat_template?: string | Record<string, string>;
@@ -188,15 +189,20 @@ export function mapToolsForChatTemplate(tools?: any[]): any[] | undefined {
 
   return tools.map((t) => {
     if (t.type === "function" && t.function) {
-      return t;
+      return {
+        ...t,
+        function: {
+          ...t.function,
+          parameters: sanitizeToolParameters(t.function.parameters),
+        },
+      };
     }
     return {
       type: "function",
       function: {
         name: t.name,
         description: t.description || "",
-        parameters: t.input_schema ||
-          t.parameters || { type: "object", properties: {} },
+        parameters: sanitizeToolParameters(t.input_schema || t.parameters),
       },
     };
   });
@@ -214,11 +220,28 @@ export function normalizeMessagesForChatTemplate(
   systemPrompt?: string,
 ): NormalizedChatMessage[] {
   let combinedSystemText = String(systemPrompt || "").trim();
-  const nonSystem: Array<{
-    role: "user" | "assistant" | "tool";
-    content: string;
-    tool_calls?: any[];
-  }> = [];
+  const nonSystem: NormalizedChatMessage[] = [];
+
+  // Map known tool_call ids to their function names to resolve tool messages cleanly
+  const toolCallNameById = new Map<string, string>();
+  for (const msg of rawMessages) {
+    if (msg?.tool_calls && Array.isArray(msg.tool_calls)) {
+      for (const tc of msg.tool_calls) {
+        const id = tc?.id || tc?.tool_call_id;
+        const name = tc?.function?.name || tc?.name;
+        if (id && name) {
+          toolCallNameById.set(id, name);
+        }
+      }
+    }
+    if (Array.isArray(msg?.content)) {
+      for (const b of msg.content) {
+        if (b?.type === "tool_use" && b.id && b.name) {
+          toolCallNameById.set(b.id, b.name);
+        }
+      }
+    }
+  }
 
   for (const msg of rawMessages) {
     if (!msg) continue;
@@ -230,24 +253,117 @@ export function normalizeMessagesForChatTemplate(
         ? `${combinedSystemText}\n\n${contentText}`
         : contentText;
     } else if (rawRole === "tool") {
-      nonSystem.push({ role: "tool", content: contentText });
+      const resolvedName =
+        msg.name ||
+        (msg.tool_call_id
+          ? toolCallNameById.get(msg.tool_call_id)
+          : undefined) ||
+        "unknown";
+      nonSystem.push({
+        role: "tool",
+        content: contentText,
+        ...(msg.tool_call_id ? { tool_call_id: msg.tool_call_id } : {}),
+        name: resolvedName,
+      });
     } else if (rawRole === "assistant" || rawRole === "model") {
+      let toolCalls = msg.tool_calls;
+      let textContent = contentText;
+
+      if (Array.isArray(msg.content)) {
+        const toolUseBlocks = msg.content.filter(
+          (b: any) => b?.type === "tool_use",
+        );
+        if (toolUseBlocks.length > 0) {
+          if (!toolCalls) {
+            toolCalls = toolUseBlocks.map((b: any) => ({
+              id: b.id || `call_${Math.random().toString(36).slice(2, 9)}`,
+              type: "function",
+              function: {
+                name: b.name,
+                arguments:
+                  typeof b.input === "object" && b.input !== null
+                    ? b.input
+                    : {},
+              },
+            }));
+          }
+          const textBlocks = msg.content.filter(
+            (b: any) => b?.type !== "tool_use",
+          );
+          textContent = extractContentText(textBlocks);
+        }
+      }
+
+      if (Array.isArray(toolCalls)) {
+        toolCalls = toolCalls.map((tc: any) => {
+          if (!tc || typeof tc !== "object") return tc;
+          const fn = tc.function;
+          if (
+            fn &&
+            typeof fn === "object" &&
+            typeof fn.arguments === "string"
+          ) {
+            try {
+              const parsedArgs = JSON.parse(fn.arguments);
+              if (
+                parsedArgs &&
+                typeof parsedArgs === "object" &&
+                !Array.isArray(parsedArgs)
+              ) {
+                return {
+                  ...tc,
+                  function: {
+                    ...fn,
+                    arguments: parsedArgs,
+                  },
+                };
+              }
+            } catch {
+              // Leave as string if not valid JSON
+            }
+          }
+          return tc;
+        });
+      }
       nonSystem.push({
         role: "assistant",
-        content: contentText,
-        ...(msg.tool_calls ? { tool_calls: msg.tool_calls } : {}),
+        content: textContent,
+        ...(toolCalls ? { tool_calls: toolCalls } : {}),
       });
+    } else if (
+      Array.isArray(msg.content) &&
+      msg.content.some((b: any) => b?.type === "tool_result")
+    ) {
+      for (const b of msg.content) {
+        if (b?.type === "tool_result") {
+          const res =
+            typeof b.content === "string"
+              ? b.content
+              : JSON.stringify(b.content || "");
+          const resolvedName =
+            b.name ||
+            (b.tool_use_id ? toolCallNameById.get(b.tool_use_id) : undefined) ||
+            "unknown";
+          nonSystem.push({
+            role: "tool",
+            content: res,
+            ...(b.tool_use_id ? { tool_call_id: b.tool_use_id } : {}),
+            name: resolvedName,
+          });
+        } else {
+          const nonToolText = extractContentText([b]);
+          if (nonToolText) {
+            nonSystem.push({ role: "user", content: nonToolText });
+          }
+        }
+      }
     } else {
       nonSystem.push({ role: "user", content: contentText });
     }
   }
 
   // Merge consecutive messages with the same role
-  const merged: Array<{
-    role: "user" | "assistant" | "tool";
-    content: string;
-    tool_calls?: any[];
-  }> = [];
+  const merged: NormalizedChatMessage[] = [];
   for (const msg of nonSystem) {
     if (
       merged.length > 0 &&

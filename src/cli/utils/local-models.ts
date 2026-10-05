@@ -333,6 +333,7 @@ export async function downloadLlamafile(
     stream?: any;
     progress?: boolean;
     noProgress?: boolean;
+    quiet?: boolean;
     abortSignal?: AbortSignal;
     fetch?: any;
   } = {},
@@ -349,6 +350,7 @@ export async function downloadLlamafile(
     stream = process.stderr,
     progress,
     noProgress,
+    quiet = false,
     abortSignal,
   } = options;
 
@@ -402,7 +404,7 @@ export async function downloadLlamafile(
     }
   }
 
-  const showProgress = progress !== false && !noProgress;
+  const showProgress = !quiet && progress !== false && !noProgress;
   const progressBar = createCliProgressBar({
     modelId: fileName,
     stream,
@@ -551,6 +553,7 @@ export async function downloadLocalModel(
     service?: any;
     progress?: boolean;
     noProgress?: boolean;
+    quiet?: boolean;
   } = {},
 ): Promise<{ success: boolean; modelId: string; error?: string }> {
   if (isLlamafile(modelId)) {
@@ -564,6 +567,7 @@ export async function downloadLocalModel(
     service: injectedService,
     progress,
     noProgress,
+    quiet = false,
   } = options;
 
   let service = injectedService;
@@ -578,7 +582,7 @@ export async function downloadLocalModel(
     service = core.createTransformersRuntimeService();
   }
 
-  const showProgress = progress !== false && !noProgress;
+  const showProgress = !quiet && progress !== false && !noProgress;
   const progressBar = createCliProgressBar({
     modelId,
     stream,

@@ -641,7 +641,14 @@ export async function resolveAgentProvider(
   if (providerId === "transformers_js_local" || providerId === "llamafile") {
     const { isModelLocallyCached, downloadLocalModel } =
       await import("../utils/local-models.js");
-    const isCached = isModelLocallyCached(model, options.cacheDir);
+    const cacheDir =
+      options.cacheDir ||
+      workspaceAgent.cacheDir ||
+      workspaceConfig.cacheDir ||
+      workspaceSettings.cacheDir;
+    const isCached =
+      isModelLocallyCached(model, cacheDir) ||
+      (workspaceDir && isModelLocallyCached(model, workspaceDir));
     if (!isCached) {
       const outStream = options.stdout || process.stderr;
       const shouldDownload = Boolean(
@@ -652,11 +659,14 @@ export async function resolveAgentProvider(
           outStream.write(`\nDownloading ${model} from Hugging Face...\n`);
         }
         await downloadLocalModel(model, {
-          cacheDir: options.cacheDir,
+          cacheDir: cacheDir || options.cacheDir,
           stream: outStream,
           isTTY,
           service: options._transformersService,
-          progress: options.progress !== false && !options.noProgress,
+          progress: options.quiet
+            ? false
+            : options.progress !== false && !options.noProgress,
+          quiet: options.quiet,
           verbose: options.verbose,
         });
       } else if (isInteractive) {
@@ -770,13 +780,18 @@ export async function resolveAgentProvider(
         }
 
         if (answer === "" || answer === "y" || answer === "yes") {
-          outStream.write(`\nDownloading ${model} from Hugging Face...\n`);
+          if (!options.quiet) {
+            outStream.write(`\nDownloading ${model} from Hugging Face...\n`);
+          }
           await downloadLocalModel(model, {
-            cacheDir: options.cacheDir,
+            cacheDir: cacheDir || options.cacheDir,
             stream: outStream,
             isTTY,
             service: options._transformersService,
-            progress: options.progress !== false && !options.noProgress,
+            progress: options.quiet
+              ? false
+              : options.progress !== false && !options.noProgress,
+            quiet: options.quiet,
             verbose: options.verbose,
           });
         } else {

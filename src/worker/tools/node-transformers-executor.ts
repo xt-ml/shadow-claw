@@ -16,6 +16,7 @@ import {
 } from "../../subsystems/providers/utils/parseLocalModelToolCall.js";
 import { ulid } from "../../utils/ulid.js";
 import { setNodeTransformersCompletionExecutor } from "../utils/handleInvoke.js";
+import { setNodeTransformersTaskExecutor } from "../../subsystems/providers/executeNativeAiTask.js";
 
 let defaultService: TransformersRuntimeService | null = null;
 
@@ -150,3 +151,4 @@ export async function executeNodeTransformersCompletion(
 
 // Automatically register for headless mode execution
 setNodeTransformersCompletionExecutor(executeNodeTransformersCompletion);
+setNodeTransformersTaskExecutor(executeNodeTransformersCompletion);

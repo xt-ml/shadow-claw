@@ -11,6 +11,7 @@ jest.unstable_mockModule(
 let executeRewriteText: any;
 let executeSummarizeText: any;
 let executeWriteText: any;
+let executeTranslateText: any;
 let setHeadlessMode: any;
 let setNativeAiTaskHandler: any;
 
@@ -23,6 +24,7 @@ describe("builtin-ai in headless mode", () => {
     executeRewriteText = mod.executeRewriteText;
     executeSummarizeText = mod.executeSummarizeText;
     executeWriteText = mod.executeWriteText;
+    executeTranslateText = mod.executeTranslateText;
     setNativeAiTaskHandler = mod.setNativeAiTaskHandler;
   });
 
@@ -95,6 +97,35 @@ describe("builtin-ai in headless mode", () => {
 
     expect(result).toBe(
       "Error rewriting text: Provider openrouter requires an API key",
+    );
+  });
+
+  it("executes translate_text directly via executeNativeAiTask in headless mode", async () => {
+    mockExecuteNativeAiTask.mockResolvedValue("Bonjour");
+
+    const result = await executeTranslateText(
+      { text: "Good morning", sourceLanguage: "en", targetLanguage: "fr" },
+      "server:main",
+      {
+        invokeContext: {
+          provider: "transformers_js_local",
+          model: "onnx-community/gemma-3-1b-it-ONNX-GQA",
+        },
+      },
+    );
+
+    expect(result).toBe("Bonjour");
+    expect(mockExecuteNativeAiTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskType: "translate",
+        input: expect.objectContaining({
+          text: "Good morning",
+          sourceLanguage: "en",
+          targetLanguage: "fr",
+        }),
+        providerId: "transformers_js_local",
+        model: "onnx-community/gemma-3-1b-it-ONNX-GQA",
+      }),
     );
   });
 

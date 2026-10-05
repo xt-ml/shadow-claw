@@ -35,6 +35,48 @@ export interface ExecuteNativeAiTaskOptions {
   db?: any;
   toolsBackendPref?: "active_provider" | "local" | string;
   onProgress?: (progress: any) => void;
+  abortSignal?: AbortSignal;
+}
+
+export type NodeTransformersTaskExecutor = (options: {
+  modelId: string;
+  messages: any[];
+  maxTokens?: number;
+  abortSignal?: AbortSignal;
+  verbose?: boolean;
+  onToken?: (text: string) => void;
+  onProgress?: (info: any) => void;
+}) => Promise<any>;
+
+let _nodeTransformersTaskExecutor: NodeTransformersTaskExecutor | null = null;
+
+export function setNodeTransformersTaskExecutor(
+  executor: NodeTransformersTaskExecutor | null,
+): void {
+  _nodeTransformersTaskExecutor = executor;
+  if (typeof globalThis !== "undefined") {
+    (globalThis as any).__nodeTransformersTaskExecutor = executor;
+  }
+}
+
+export type NodeLlamafileTaskExecutor = (options: {
+  model: string;
+  messages: any[];
+  maxTokens?: number;
+  abortSignal?: AbortSignal;
+  verbose?: boolean;
+  onToken?: (text: string) => void;
+}) => Promise<any>;
+
+let _nodeLlamafileTaskExecutor: NodeLlamafileTaskExecutor | null = null;
+
+export function setNodeLlamafileTaskExecutor(
+  executor: NodeLlamafileTaskExecutor | null,
+): void {
+  _nodeLlamafileTaskExecutor = executor;
+  if (typeof globalThis !== "undefined") {
+    (globalThis as any).__nodeLlamafileTaskExecutor = executor;
+  }
 }
 
 export function buildTaskPrompt(
@@ -266,8 +308,13 @@ export async function executeNativeAiTask(
     );
   }
 
+  const isHeadlessLocal =
+    isHeadlessMode() &&
+    (effectiveProviderId === "transformers_js_local" ||
+      effectiveProviderId === "llamafile");
+
   const apiKey = await resolveApiKey(provider, effectiveProviderId, options);
-  if (provider.requiresApiKey !== false && !apiKey) {
+  if (!isHeadlessLocal && provider.requiresApiKey !== false && !apiKey) {
     throw new Error(
       `Provider "${provider.name || effectiveProviderId}" requires an API key for task "${taskType}". Please provide an API key or configure tools backend.`,
     );
@@ -291,6 +338,73 @@ export async function executeNativeAiTask(
         "You are a specialized text task assistant. Fulfill the user request directly and accurately without conversational filler.",
     },
   );
+
+  if (isHeadlessMode() && effectiveProviderId === "transformers_js_local") {
+    const executor =
+      _nodeTransformersTaskExecutor ??
+      (globalThis as any).__nodeTransformersTaskExecutor;
+
+    if (executor) {
+      const rawResult = await executor({
+        modelId: effectiveModel,
+        messages: body?.messages || [{ role: "user", content: prompt }],
+        maxTokens: options.maxTokens || 2048,
+        abortSignal: options.abortSignal,
+        onProgress: options.onProgress,
+      });
+      const parsed = parseResponse(provider, rawResult);
+      const textResult =
+        parsed.content
+          ?.filter((b: any) => b.type === "text")
+          ?.map((b: any) => b.text)
+          ?.join("")
+          ?.trim() || "";
+
+      if (taskType === "detect-language") {
+        try {
+          const detected = JSON.parse(textResult);
+          return Array.isArray(detected) ? detected : [detected];
+        } catch {
+          return [{ detectedLanguage: "en", confidence: 0.8 }];
+        }
+      }
+
+      return textResult;
+    }
+  }
+
+  if (isHeadlessMode() && effectiveProviderId === "llamafile") {
+    const executor =
+      _nodeLlamafileTaskExecutor ??
+      (globalThis as any).__nodeLlamafileTaskExecutor;
+
+    if (executor) {
+      const rawResult = await executor({
+        model: effectiveModel,
+        messages: body?.messages || [{ role: "user", content: prompt }],
+        maxTokens: options.maxTokens || 2048,
+        abortSignal: options.abortSignal,
+      });
+      const parsed = parseResponse(provider, rawResult);
+      const textResult =
+        parsed.content
+          ?.filter((b: any) => b.type === "text")
+          ?.map((b: any) => b.text)
+          ?.join("")
+          ?.trim() || "";
+
+      if (taskType === "detect-language") {
+        try {
+          const detected = JSON.parse(textResult);
+          return Array.isArray(detected) ? detected : [detected];
+        } catch {
+          return [{ detectedLanguage: "en", confidence: 0.8 }];
+        }
+      }
+
+      return textResult;
+    }
+  }
 
   const res = await fetch(provider.baseUrl, {
     body: JSON.stringify(body),

@@ -286,4 +286,124 @@ describe("executeNativeAiTask", () => {
       setHeadlessMode(false);
     });
   });
+
+  describe("headless in-process executor dispatch", () => {
+    it("executes translate task in-process via node transformers task executor in headless mode", async () => {
+      const { setHeadlessMode } = await import("../../config/headless.js");
+      const { setNodeTransformersTaskExecutor } =
+        await import("./executeNativeAiTask.js");
+      setHeadlessMode(true);
+
+      mockGetProvider.mockReturnValue({
+        id: "transformers_js_local",
+        name: "Transformers.js (Local Proxy)",
+        baseUrl: "http://localhost:8888/v1/chat/completions",
+        format: "openai",
+        defaultModel: "onnx-community/gemma-3-1b-it-ONNX-GQA",
+      });
+
+      mockFormatRequest.mockReturnValue({
+        messages: [
+          {
+            role: "user",
+            content: "Translate the following text from en to fr: Good morning",
+          },
+        ],
+      });
+
+      mockParseResponse.mockReturnValue({
+        content: [{ type: "text", text: "Bonjour" }],
+      });
+
+      const mockExecutor = jest.fn<any>().mockResolvedValue({
+        choices: [{ message: { content: "Bonjour" } }],
+      });
+      setNodeTransformersTaskExecutor(mockExecutor);
+
+      const mockFetch = jest.fn<any>();
+      globalThis.fetch = mockFetch;
+
+      try {
+        const result = await executeNativeAiTask({
+          taskType: "translate",
+          input: {
+            text: "Good morning",
+            sourceLanguage: "en",
+            targetLanguage: "fr",
+          },
+          providerId: "transformers_js_local",
+        });
+
+        expect(result).toBe("Bonjour");
+        expect(mockExecutor).toHaveBeenCalledWith(
+          expect.objectContaining({
+            modelId: "onnx-community/gemma-3-1b-it-ONNX-GQA",
+            messages: expect.arrayContaining([
+              expect.objectContaining({
+                role: "user",
+              }),
+            ]),
+          }),
+        );
+        expect(mockFetch).not.toHaveBeenCalled();
+      } finally {
+        setNodeTransformersTaskExecutor(null);
+        setHeadlessMode(false);
+      }
+    });
+
+    it("executes task in-process via node llamafile task executor in headless mode", async () => {
+      const { setHeadlessMode } = await import("../../config/headless.js");
+      const { setNodeLlamafileTaskExecutor } =
+        await import("./executeNativeAiTask.js");
+      setHeadlessMode(true);
+
+      mockGetProvider.mockReturnValue({
+        id: "llamafile",
+        name: "Llamafile",
+        baseUrl: "http://localhost:8080/v1/chat/completions",
+        format: "openai",
+        defaultModel: "LLaMA_CPP",
+      });
+
+      mockFormatRequest.mockReturnValue({
+        messages: [{ role: "user", content: "Translate: Good morning" }],
+      });
+
+      mockParseResponse.mockReturnValue({
+        content: [{ type: "text", text: "Bonjour" }],
+      });
+
+      const mockExecutor = jest.fn<any>().mockResolvedValue({
+        choices: [{ message: { content: "Bonjour" } }],
+      });
+      setNodeLlamafileTaskExecutor(mockExecutor);
+
+      const mockFetch = jest.fn<any>();
+      globalThis.fetch = mockFetch;
+
+      try {
+        const result = await executeNativeAiTask({
+          taskType: "translate",
+          input: {
+            text: "Good morning",
+            sourceLanguage: "en",
+            targetLanguage: "fr",
+          },
+          providerId: "llamafile",
+        });
+
+        expect(result).toBe("Bonjour");
+        expect(mockExecutor).toHaveBeenCalledWith(
+          expect.objectContaining({
+            model: "LLaMA_CPP",
+          }),
+        );
+        expect(mockFetch).not.toHaveBeenCalled();
+      } finally {
+        setNodeLlamafileTaskExecutor(null);
+        setHeadlessMode(false);
+      }
+    });
+  });
 });

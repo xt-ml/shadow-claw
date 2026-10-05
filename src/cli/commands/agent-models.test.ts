@@ -69,13 +69,24 @@ describe("agent model command and declarative agent config", () => {
     };
     await writeFile(configPath, JSON.stringify(customConfig), "utf8");
 
+    // Mark the model as cached so no download prompt or error occurs in CI
+    await mkdir(path.join(tmpDir, "onnx-community/gemma-4-E4B-it-ONNX"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(tmpDir, "onnx-community/gemma-4-E4B-it-ONNX", "model.onnx"),
+      "x",
+    );
+
     const mockDb = {};
     const mockCore = {
       getConfig: jest.fn<any>().mockResolvedValue(null),
       getProvider: jest.fn((id: any) => ({ id, defaultModel: "default" })),
     };
 
-    const resolved = await resolveAgentProvider(mockDb, mockCore, tmpDir, {});
+    const resolved = await resolveAgentProvider(mockDb, mockCore, tmpDir, {
+      cacheDir: tmpDir,
+    });
     expect(resolved.providerId).toBe("transformers_js_local");
     expect(resolved.model).toBe("onnx-community/gemma-4-E4B-it-ONNX");
   });
@@ -182,6 +193,8 @@ describe("agent model command and declarative agent config", () => {
       "automatically triggers download when %s flag is passed",
       async (flag) => {
         const { resolveAgentProvider } = await import("./agent.js");
+        const { PassThrough } = await import("node:stream");
+        const mockStdout = new PassThrough();
         const emptyCacheDir = await mkdtemp(
           path.join(tmpdir(), "sc-empty-cache-"),
         );
@@ -196,6 +209,8 @@ describe("agent model command and declarative agent config", () => {
             cacheDir: emptyCacheDir,
             model: "onnx-community/gemma-3-1b-it-ONNX-GQA",
             provider: "transformers_js_local",
+            stdout: mockStdout,
+            quiet: true,
             [flag]: true,
             _transformersService: mockService,
           });

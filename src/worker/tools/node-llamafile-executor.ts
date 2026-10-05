@@ -15,6 +15,7 @@ import {
 } from "../../server/services/llamafile-manager.js";
 import { ulid } from "../../utils/ulid.js";
 import { setNodeLlamafileCompletionExecutor } from "../utils/handleInvoke.js";
+import { setNodeLlamafileTaskExecutor } from "../../subsystems/providers/executeNativeAiTask.js";
 
 let defaultService: LlamafileManagerService | null = null;
 
@@ -203,3 +204,4 @@ export async function executeNodeLlamafileCompletion(
 
 // Automatically register for headless mode execution
 setNodeLlamafileCompletionExecutor(executeNodeLlamafileCompletion);
+setNodeLlamafileTaskExecutor(executeNodeLlamafileCompletion);

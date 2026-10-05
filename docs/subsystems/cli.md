@@ -260,7 +260,7 @@ In headless mode, model inference does not require an external browser tab or ru
 
 - **Transformers.js Local (`node-transformers-executor.ts`)**: Runs ONNX models directly in the Node.js process using `@huggingface/transformers` (device: CPU/q4). Downloads missing files automatically on-demand with progress reporting on `stderr`.
 - **Llamafile Local (`node-llamafile-executor.ts`)**: Downloads and spawns host-native Llamafile binaries on dynamic ports, verifies health, streams tokens, and terminates cleanly when finished.
-- **Built-in AI Tasks (`executeNativeAiTask.ts`)**: Headless agent dispatches task-based tools (`summarize_text`, `rewrite_text`, etc.) through the node runtime.
+- **Built-in AI Tasks (`executeNativeAiTask.ts`)**: Headless agent dispatches task-based tools (`translate_text`, `summarize_text`, `rewrite_text`, `proofread_text`, `detect_language`, etc.) directly to in-process local model executors (`node-transformers-executor.ts` / `node-llamafile-executor.ts`) or configured providers without requiring an external HTTP server.
 
 #### Standard Input (stdin), Piping & Output Redirection
 
@@ -284,6 +284,7 @@ echo "how are you doing today" | npx shadow-claw agent tool rewrite_text
 
 # Pipe JSON input directly
 echo '{"path":"file.txt","content":"hello"}' | npx shadow-claw agent tool write_file
+echo '{"text":"Good morning","sourceLanguage":"en","targetLanguage":"fr"}' | npx shadow-claw agent tool translate_text
 
 # Quiet mode: suppress all non-error output and save to file
 npx shadow-claw agent tool read_file '{"path":"README.md"}' -q -o readme.txt

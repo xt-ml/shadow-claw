@@ -144,6 +144,7 @@ npx shadow-claw agent tool bash '{"command": "uname -a"}'
 
 # Pipe JSON input directly from stdin
 echo '{"path":"file.txt","content":"hello"}' | npx shadow-claw agent tool write_file
+echo '{"text":"Good morning","sourceLanguage":"en","targetLanguage":"fr"}' | npx shadow-claw agent tool translate_text
 
 # Pipe plain text — automatically mapped to the tool's schema field (text > prompt > content > input)
 echo "how are you doing today" | npx shadow-claw agent tool rewrite_text

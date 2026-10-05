@@ -10,6 +10,10 @@ import {
   setNodeTransformersCompletionExecutor,
   setNodeLlamafileCompletionExecutor,
 } from "./utils/handleInvoke.js";
+import {
+  setNodeTransformersTaskExecutor,
+  setNodeLlamafileTaskExecutor,
+} from "../subsystems/providers/executeNativeAiTask.js";
 import { executeNodeTransformersCompletion } from "./tools/node-transformers-executor.js";
 import { executeNodeLlamafileCompletion } from "./tools/node-llamafile-executor.js";
 import { setHeadlessEvalExecutor } from "./utils/sandboxedEval.js";
@@ -20,7 +24,9 @@ import { nativePeerClientFactory } from "./tools/peer/native-peer-client.js";
 // Automatically wire native OS process execution for headless CLI agent
 setHeadlessBashExecutor(nativeBashExecutor);
 setNodeTransformersCompletionExecutor(executeNodeTransformersCompletion);
+setNodeTransformersTaskExecutor(executeNodeTransformersCompletion);
 setNodeLlamafileCompletionExecutor(executeNodeLlamafileCompletion);
+setNodeLlamafileTaskExecutor(executeNodeLlamafileCompletion);
 setHeadlessEvalExecutor(nativeEvalExecutor);
 setPeerClientFactory(nativePeerClientFactory);
 
@@ -82,7 +88,11 @@ export { getConfig } from "../db/getConfig.js";
 export { setConfig } from "../db/setConfig.js";
 export { saveMessage } from "../db/saveMessage.js";
 export { getRecentMessages } from "../db/getRecentMessages.js";
-export { executeNativeAiTask } from "../subsystems/providers/executeNativeAiTask.js";
+export {
+  executeNativeAiTask,
+  setNodeTransformersTaskExecutor,
+  setNodeLlamafileTaskExecutor,
+} from "../subsystems/providers/executeNativeAiTask.js";
 export {
   setNativeAiTaskHandler,
   executeRewriteText,

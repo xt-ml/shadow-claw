@@ -7,7 +7,14 @@ import {
   afterEach,
   jest,
 } from "@jest/globals";
-import { mkdtemp, rm, readFile, writeFile, access } from "node:fs/promises";
+import {
+  mkdtemp,
+  rm,
+  readFile,
+  writeFile,
+  access,
+  mkdir,
+} from "node:fs/promises";
 import { constants } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -1083,6 +1090,66 @@ Instructions for make-file
 
       core.setNativeAiTaskHandler(null);
     });
+
+    it("runAgentTool directly executes translate_text with in-process transformers local provider", async () => {
+      const { runAgentTool } = await import("./agent.js");
+      const core = await (
+        await import("../utils/agent-core.js")
+      ).getAgentCore();
+
+      const mockExecutor = jest.fn<any>().mockResolvedValue({
+        choices: [
+          {
+            message: {
+              role: "assistant",
+              content: "Bonjour",
+            },
+          },
+        ],
+      });
+      core.setNodeTransformersTaskExecutor(mockExecutor);
+
+      // Mock local model weights so uncached model error is not thrown in CI
+      await mkdir(path.join(tmpDir, "onnx-community/gemma-3-1b-it-ONNX-GQA"), {
+        recursive: true,
+      });
+      await writeFile(
+        path.join(
+          tmpDir,
+          "onnx-community/gemma-3-1b-it-ONNX-GQA",
+          "model.onnx",
+        ),
+        "x",
+      );
+
+      const result = await runAgentTool(
+        "translate_text",
+        '{"text":"Good morning","sourceLanguage":"en","targetLanguage":"fr"}',
+        {
+          workspace: tmpDir,
+          cacheDir: tmpDir,
+          provider: "transformers_js_local",
+          model: "onnx-community/gemma-3-1b-it-ONNX-GQA",
+          quiet: true,
+        },
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.output).toBe("Bonjour");
+      expect(mockExecutor).toHaveBeenCalledWith(
+        expect.objectContaining({
+          modelId: "onnx-community/gemma-3-1b-it-ONNX-GQA",
+          messages: expect.arrayContaining([
+            expect.objectContaining({
+              role: "user",
+              content: expect.stringContaining("Good morning"),
+            }),
+          ]),
+        }),
+      );
+
+      core.setNodeTransformersTaskExecutor(null);
+    });
   });
 });
 
@@ -1151,6 +1218,49 @@ describe("runAgentTool — stdin piping", () => {
     expect(result.success).toBe(true);
     const content = await readFile(path.join(tmpDir, "dash-arg.txt"), "utf8");
     expect(content).toBe("from dash");
+  });
+
+  it("reads JSON from _stdinData and executes translate_text with in-process transformers local provider", async () => {
+    const { runAgentTool } = await import("./agent.js");
+    const core = await (await import("../utils/agent-core.js")).getAgentCore();
+
+    const mockExecutor = jest.fn<any>().mockResolvedValue({
+      choices: [
+        {
+          message: {
+            role: "assistant",
+            content: "Bonjour",
+          },
+        },
+      ],
+    });
+    core.setNodeTransformersTaskExecutor(mockExecutor);
+
+    // Mock local model weights so uncached model error is not thrown in CI
+    await mkdir(path.join(tmpDir, "onnx-community/gemma-3-1b-it-ONNX-GQA"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(tmpDir, "onnx-community/gemma-3-1b-it-ONNX-GQA", "model.onnx"),
+      "x",
+    );
+
+    const result = await runAgentTool("translate_text", undefined, {
+      workspace: tmpDir,
+      cacheDir: tmpDir,
+      provider: "transformers_js_local",
+      model: "onnx-community/gemma-3-1b-it-ONNX-GQA",
+      quiet: true,
+      _stdinData: JSON.stringify({
+        text: "Good morning",
+        sourceLanguage: "en",
+        targetLanguage: "fr",
+      }),
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.output).toBe("Bonjour");
+    core.setNodeTransformersTaskExecutor(null);
   });
 
   it("falls back to inspect mode when _stdinData is null and no inputArg given", async () => {

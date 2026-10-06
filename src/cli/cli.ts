@@ -105,7 +105,7 @@ const program = new Command();
 program
   .name("shadow-claw")
   .description("Multi-runtime AI assistant and static site publisher")
-  .version(version, "-v, --version", "Output the current version");
+  .version(version, "-V, --version", "Output the current version");
 
 // ---------------------------------------------------------------------------
 // DEVELOPMENT COMMANDS

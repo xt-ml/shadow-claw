@@ -96,6 +96,15 @@ export function getModelAttachmentCapabilities(
     }
   }
 
+  const isExplicitlyNonVision =
+    normalizedModelId.includes("no-vision") ||
+    normalizedModelId.includes("non-vision") ||
+    normalizedModelId.includes("text-only");
+
+  const isRouter =
+    normalizedModelId === "openrouter/free" ||
+    normalizedModelId === "openrouter/auto";
+
   const multimodalPatterns = [
     "gpt-4o",
     "gpt-4.1",
@@ -106,25 +115,29 @@ export function getModelAttachmentCapabilities(
     "claude-haiku",
     "claude-opus",
     "gemini",
+    "omni",
     "llava",
     "qwen-vl",
+    "-vl",
+    "vision",
     "pixtral",
   ];
-  const heuristicMatch = multimodalPatterns.some((pattern) =>
-    normalizedModelId.includes(pattern),
-  );
+  const heuristicMatch =
+    !isExplicitlyNonVision &&
+    multimodalPatterns.some((pattern) => normalizedModelId.includes(pattern));
 
   // Claude 3.5+, 3.7+, and Claude 4 family all support PDFs natively via Anthropic's
   // document content block. Claude 4 models follow the "claude-<name>-4" naming pattern
   // (e.g. "claude-sonnet-4", "claude-haiku-4") in addition to "claude-4-*" variants.
   const supportsDocuments =
-    normalizedModelId.includes("claude-3-5") ||
-    normalizedModelId.includes("claude-3.5") ||
-    normalizedModelId.includes("claude-3-7") ||
-    normalizedModelId.includes("claude-3.7") ||
-    normalizedModelId.includes("claude-4") ||
-    normalizedModelId.includes("gemini") ||
-    /claude-(?:sonnet|haiku|opus)-\d/.test(normalizedModelId);
+    !isExplicitlyNonVision &&
+    (normalizedModelId.includes("claude-3-5") ||
+      normalizedModelId.includes("claude-3.5") ||
+      normalizedModelId.includes("claude-3-7") ||
+      normalizedModelId.includes("claude-3.7") ||
+      normalizedModelId.includes("claude-4") ||
+      normalizedModelId.includes("gemini") ||
+      /claude-(?:sonnet|haiku|opus)-\d/.test(normalizedModelId));
 
   if (heuristicMatch) {
     return {
@@ -134,9 +147,10 @@ export function getModelAttachmentCapabilities(
         normalizedModelId.includes("audio"),
       video:
         normalizedModelId.includes("omni") ||
-        normalizedModelId.includes("video"),
+        normalizedModelId.includes("video") ||
+        normalizedModelId.includes("gemini"),
       documents: supportsDocuments,
-      routerByFeatures: normalizedModelId === "openrouter/free",
+      routerByFeatures: isRouter,
       source: "heuristic",
     };
   }
@@ -146,7 +160,7 @@ export function getModelAttachmentCapabilities(
     audio: false,
     video: false,
     documents: false,
-    routerByFeatures: normalizedModelId === "openrouter/free",
+    routerByFeatures: isRouter,
     source: "unknown",
   };
 }

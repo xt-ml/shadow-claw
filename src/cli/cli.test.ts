@@ -62,6 +62,17 @@ describe("shadow-claw CLI", () => {
     expect(stdout.trim()).toBe(pkg.version);
   });
 
+  it("outputs version with -V", async () => {
+    const pkgStr = await readFile(
+      path.join(toolchainRoot, "package.json"),
+      "utf8",
+    );
+    const pkg = JSON.parse(pkgStr);
+
+    const { stdout } = await execFileAsync(process.execPath, [cliPath, "-V"]);
+    expect(stdout.trim()).toBe(pkg.version);
+  });
+
   it("outputs command help with --help", async () => {
     const { stdout } = await execFileAsync(process.execPath, [
       cliPath,

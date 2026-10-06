@@ -130,5 +130,53 @@ describe("attachment-capabilities", () => {
       expect(caps.documents).toBe(false);
       expect(caps.source).toBe("unknown");
     });
+
+    it("recognizes Qwen VL and Llama Vision models via heuristic", () => {
+      const qwenCaps = getModelAttachmentCapabilities(
+        "qwen/qwen-2.5-vl-72b-instruct",
+      );
+      expect(qwenCaps.images).toBe(true);
+
+      const llamaCaps = getModelAttachmentCapabilities(
+        "meta-llama/llama-3.2-11b-vision-instruct",
+      );
+      expect(llamaCaps.images).toBe(true);
+    });
+
+    it("explicitly non-vision / text-only models return all false despite pattern keywords", () => {
+      const noVisionCaps = getModelAttachmentCapabilities(
+        "text-only-model-no-vision",
+      );
+      expect(noVisionCaps.images).toBe(false);
+      expect(noVisionCaps.source).toBe("unknown");
+
+      const nonVisionCaps = getModelAttachmentCapabilities(
+        "claude-3-5-non-vision",
+      );
+      expect(nonVisionCaps.images).toBe(false);
+      expect(nonVisionCaps.documents).toBe(false);
+      expect(nonVisionCaps.source).toBe("unknown");
+
+      const textOnlyCaps = getModelAttachmentCapabilities("gpt-4o-text-only");
+      expect(textOnlyCaps.images).toBe(false);
+      expect(textOnlyCaps.source).toBe("unknown");
+    });
+
+    it("recognizes openrouter router models with routerByFeatures=true", () => {
+      const freeCaps = getModelAttachmentCapabilities("openrouter/free");
+      expect(freeCaps.routerByFeatures).toBe(true);
+
+      const autoCaps = getModelAttachmentCapabilities("openrouter/auto");
+      expect(autoCaps.routerByFeatures).toBe(true);
+    });
+
+    it("recognizes Omni multimodal models via heuristic", () => {
+      const omniCaps = getModelAttachmentCapabilities(
+        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+      );
+      expect(omniCaps.images).toBe(true);
+      expect(omniCaps.audio).toBe(true);
+      expect(omniCaps.video).toBe(true);
+    });
   });
 });

@@ -2,7 +2,7 @@
 
 > MIME-aware attachment handling and modality detection for native vs fallback delivery.
 
-**Source:** `src/content/attachment-capabilities.ts` · `src/content/message-attachments.ts`
+**Source:** `src/content/buildAttachmentContentBlocks.ts` · `src/content/attachment-capabilities.ts` · `src/content/message-attachments.ts`
 
 ## Overview
 
@@ -38,16 +38,20 @@ Model capabilities are resolved via a two-stage process:
 
 ## Delivery Methods
 
-### 1. Native Delivery
+### 1. Inlined Text Delivery
+
+Text and structured code attachments (`.ts`, `.json`, `.md`, `.txt`, etc.) at or below 100 KB are inlined directly into model-facing user message content as code-fenced `text` blocks. This ensures both cloud LLMs and compact local ONNX/GGUF models immediately inspect the file contents without requiring redundant tool call loops.
+
+### 2. Native Delivery
 
 If a model is detected to support a specific modality, the attachment is delivered using the provider's native block format (e.g., `image` or `document` blocks in Anthropic; base64 data URLs in OpenAI).
 
-### 2. Fallback Delivery
+### 3. Fallback Delivery
 
 If a model does not support the modality (or is unknown), ShadowClaw performs a "markdown-optimized" conversion:
 
 - **PDFs**: Extracted as text or OCR-style representation (if tools are available).
-- **Images/Media**: Delivered as a text description or link, encouraging the agent to use tools (like `read_file` or specialized analysis tools) to process the content if needed.
+- **Images/Media**: Delivered as a text description or link, encouraging the agent to use tools (like `read_file` or specialized analysis tools) to process the content if needed. On the CLI, a warning is printed to stderr when an attached media file cannot be natively ingested by the active model.
 - **General Files**: Provided as a file path reference, allowing the agent to decide if it needs to `read_file` (if text-based) or use `bash` to inspect the binary.
 
 ## Architecture

@@ -1553,6 +1553,9 @@ describe("runAgentRun — --file attachments", () => {
   });
 
   afterEach(async () => {
+    const { closeSqliteDatabase } =
+      await import("../../db/sqlite/openSqliteDatabase.js");
+    closeSqliteDatabase?.();
     await rm(tmpDir, { recursive: true, force: true });
   });
 
@@ -1568,6 +1571,260 @@ describe("runAgentRun — --file attachments", () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/nope\.png/);
+  });
+
+  it("inlines attached text file into model-facing user message content", async () => {
+    const { runAgentRun } = await import("./agent.js");
+    const filePath = path.join(tmpDir, "foo.txt");
+    await writeFile(filePath, "it works", "utf8");
+
+    let capturedPayload: any = null;
+    const result = await runAgentRun("What is this", {
+      workspace: tmpDir,
+      provider: "openrouter",
+      apiKey: "sk-test",
+      quiet: true,
+      file: [filePath],
+      _stdinData: null,
+      invokeHandler: async (_db, payload) => {
+        capturedPayload = payload;
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(capturedPayload).not.toBeNull();
+    const lastMsg = capturedPayload.messages.at(-1);
+    expect(Array.isArray(lastMsg.content)).toBe(true);
+    expect(lastMsg.content).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "text", text: "What is this" }),
+        expect.objectContaining({
+          type: "text",
+          text: expect.stringMatching(/foo\.txt[\s\S]*it works/),
+        }),
+      ]),
+    );
+  });
+
+  it("formats attached image file as base64 attachment content block", async () => {
+    const { runAgentRun } = await import("./agent.js");
+    const imgPath = path.join(tmpDir, "test.png");
+    // Minimal 1x1 PNG bytes
+    const pngBytes = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "base64",
+    );
+    await writeFile(imgPath, pngBytes);
+
+    let capturedPayload: any = null;
+    const result = await runAgentRun("What is this image", {
+      workspace: tmpDir,
+      provider: "openrouter",
+      apiKey: "sk-test",
+      quiet: true,
+      file: [imgPath],
+      _stdinData: null,
+      invokeHandler: async (_db, payload) => {
+        capturedPayload = payload;
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(capturedPayload).not.toBeNull();
+    const lastMsg = capturedPayload.messages.at(-1);
+    expect(Array.isArray(lastMsg.content)).toBe(true);
+    expect(lastMsg.content).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "text", text: "What is this image" }),
+        expect.objectContaining({
+          type: "attachment",
+          mediaType: "image",
+          mimeType: "image/png",
+          data: expect.any(String),
+        }),
+      ]),
+    );
+  });
+
+  it("supports multiple attached files in order", async () => {
+    const { runAgentRun } = await import("./agent.js");
+    const file1 = path.join(tmpDir, "first.txt");
+    const file2 = path.join(tmpDir, "second.txt");
+    await writeFile(file1, "First content", "utf8");
+    await writeFile(file2, "Second content", "utf8");
+
+    let capturedPayload: any = null;
+    const result = await runAgentRun("Compare these", {
+      workspace: tmpDir,
+      provider: "openrouter",
+      apiKey: "sk-test",
+      quiet: true,
+      file: [file1, file2],
+      _stdinData: null,
+      invokeHandler: async (_db, payload) => {
+        capturedPayload = payload;
+      },
+    });
+
+    expect(result.success).toBe(true);
+    const lastMsg = capturedPayload.messages.at(-1);
+    expect(Array.isArray(lastMsg.content)).toBe(true);
+    expect(lastMsg.content).toHaveLength(3); // Prompt + 2 files
+  });
+
+  it("preserves string content and metadata attachments in the persisted database message", async () => {
+    const { runAgentRun } = await import("./agent.js");
+    const { getAgentCore } = await import("../utils/agent-core.js");
+    const core = await getAgentCore();
+
+    const filePath = path.join(tmpDir, "notes.txt");
+    await writeFile(filePath, "my notes", "utf8");
+
+    let savedMessage: any = null;
+    const originalSaveMessage = core.saveMessage;
+    core.saveMessage = async (_db, msg) => {
+      if (msg.role === "user") {
+        savedMessage = msg;
+      }
+      return originalSaveMessage?.(_db, msg);
+    };
+
+    try {
+      await runAgentRun("Analyze notes", {
+        workspace: tmpDir,
+        provider: "openrouter",
+        apiKey: "sk-test",
+        quiet: true,
+        file: [filePath],
+        _stdinData: null,
+        invokeHandler: async () => {},
+      });
+
+      expect(savedMessage).not.toBeNull();
+      expect(typeof savedMessage.content).toBe("string");
+      expect(savedMessage.content).toBe("Analyze notes");
+      expect(Array.isArray(savedMessage.attachments)).toBe(true);
+      expect(savedMessage.attachments[0].fileName).toBe("notes.txt");
+    } finally {
+      core.saveMessage = originalSaveMessage;
+    }
+  });
+
+  it("warns on stderr when an image is attached for a model that does not support image input", async () => {
+    const { runAgentRun } = await import("./agent.js");
+    const imgPath = path.join(tmpDir, "diagram.png");
+    await writeFile(imgPath, Buffer.from([1, 2, 3]));
+
+    let stderrOutput = "";
+    const originalStderrWrite = process.stderr.write;
+    process.stderr.write = ((chunk: any) => {
+      stderrOutput += String(chunk);
+      return true;
+    }) as any;
+
+    try {
+      await runAgentRun("Explain diagram", {
+        workspace: tmpDir,
+        provider: "openrouter",
+        model: "meta-llama/llama-3-8b-instruct",
+        apiKey: "sk-test",
+        quiet: false,
+        file: [imgPath],
+        _stdinData: null,
+        invokeHandler: async () => {},
+      });
+
+      expect(stderrOutput).toContain(
+        'Warning: Model "meta-llama/llama-3-8b-instruct" does not accept image input; "diagram.png" will be passed as a reference only.',
+      );
+    } finally {
+      process.stderr.write = originalStderrWrite;
+    }
+  });
+
+  it("does not warn about image input for router models like openrouter/free", async () => {
+    const { runAgentRun } = await import("./agent.js");
+    const imgPath = path.join(tmpDir, "photo.jpg");
+    await writeFile(imgPath, "fake-jpg-data");
+
+    let stderrOutput = "";
+    const originalStderrWrite = process.stderr.write;
+    process.stderr.write = ((chunk: any) => {
+      stderrOutput += String(chunk);
+      return true;
+    }) as any;
+
+    try {
+      await runAgentRun("Explain photo", {
+        workspace: tmpDir,
+        provider: "openrouter",
+        model: "openrouter/free",
+        quiet: false,
+        apiKey: "fake-key",
+        file: [imgPath],
+        _stdinData: null,
+        invokeHandler: async () => {},
+      });
+
+      expect(stderrOutput).not.toContain("does not accept image input");
+    } finally {
+      process.stderr.write = originalStderrWrite;
+    }
+  });
+
+  it("expands prior history messages with attachments into content blocks", async () => {
+    const { runAgentRun } = await import("./agent.js");
+    const { getAgentCore } = await import("../utils/agent-core.js");
+    const core = await getAgentCore();
+
+    const originalGetRecent = core.getRecentMessages;
+    core.getRecentMessages = async () => [
+      {
+        id: "msg_1",
+        role: "user",
+        content: "Here is an earlier file",
+        attachments: [
+          {
+            fileName: "earlier.txt",
+            mimeType: "text/plain",
+            size: 10,
+          },
+        ],
+      },
+    ];
+
+    try {
+      let capturedPayload: any = null;
+      await runAgentRun("Follow up question", {
+        workspace: tmpDir,
+        provider: "openrouter",
+        apiKey: "sk-test",
+        quiet: true,
+        _stdinData: null,
+        invokeHandler: async (_db, payload) => {
+          capturedPayload = payload;
+        },
+      });
+
+      expect(capturedPayload).not.toBeNull();
+      const historyMsg = capturedPayload.messages[0];
+      expect(historyMsg.role).toBe("user");
+      expect(Array.isArray(historyMsg.content)).toBe(true);
+      expect(historyMsg.content).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            type: "text",
+            text: "Here is an earlier file",
+          }),
+          expect.objectContaining({
+            type: "attachment",
+            fileName: "earlier.txt",
+          }),
+        ]),
+      );
+    } finally {
+      core.getRecentMessages = originalGetRecent;
+    }
   });
 });
 

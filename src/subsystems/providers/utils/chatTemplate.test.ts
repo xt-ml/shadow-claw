@@ -88,6 +88,27 @@ describe("chatTemplate", () => {
       );
     });
 
+    it("preserves inlined text attachment blocks in user turns", () => {
+      const raw = [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "What is this" },
+            {
+              type: "text",
+              text: "Attachment: foo.txt\n```\nit works\n```",
+            },
+          ],
+        },
+      ];
+      const normalized = normalizeMessagesForChatTemplate(raw);
+      expect(normalized).toHaveLength(1);
+      expect(normalized[0].role).toBe("user");
+      expect(normalized[0].content).toContain("What is this");
+      expect(normalized[0].content).toContain("Attachment: foo.txt");
+      expect(normalized[0].content).toContain("it works");
+    });
+
     it("preserves tool_call_id and resolves tool name on tool messages", () => {
       const raw = [
         { role: "user", content: "List files" },

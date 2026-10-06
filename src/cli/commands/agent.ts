@@ -32,6 +32,12 @@ import {
   normalizeFileOption,
 } from "../utils/load-cli-attachments.js";
 import { persistMessageAttachments } from "../../content/message-attachments.js";
+import { buildAttachmentContentBlocks } from "../../content/buildAttachmentContentBlocks.js";
+import {
+  getAttachmentCategory,
+  getModelAttachmentCapabilities,
+} from "../../content/attachment-capabilities.js";
+import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
 
 const BROWSER_ONLY_TOOLS = new Set([
   "ask_user",
@@ -1023,9 +1029,21 @@ export async function runAgentRun(
   }
 
   let attachments: any[] = [];
+  const attachmentByteMap = new Map<string, Uint8Array>();
   try {
     const loaded = await loadCliAttachments(normalizeFileOption(options.file));
+    for (const item of loaded) {
+      if (item.source?.kind === "local-file") {
+        const arrayBuf = await item.source.file.arrayBuffer();
+        attachmentByteMap.set(item.fileName, new Uint8Array(arrayBuf));
+      }
+    }
     attachments = await persistMessageAttachments(db, groupId, loaded);
+    for (const att of attachments) {
+      if (att.path && attachmentByteMap.has(att.fileName)) {
+        attachmentByteMap.set(att.path, attachmentByteMap.get(att.fileName)!);
+      }
+    }
   } catch (err: any) {
     if (!options.quiet) console.error(err.message);
     process.exitCode = 1;
@@ -1102,13 +1120,42 @@ export async function runAgentRun(
   }
 
   // 4. Load recent message history
-  let history = [];
+  let history: any[] = [];
   if (
     options.history !== false &&
     typeof core.getRecentMessages === "function"
   ) {
     try {
-      history = await core.getRecentMessages(db, groupId, 50);
+      const rawHistory = await core.getRecentMessages(db, groupId, 50);
+      history = await Promise.all(
+        rawHistory.map(async (msg: any) => {
+          if (
+            msg?.role === "user" &&
+            Array.isArray(msg?.attachments) &&
+            msg.attachments.length > 0
+          ) {
+            const blocks = await buildAttachmentContentBlocks(
+              msg.attachments,
+              async (att) => {
+                if (att.path && db) {
+                  try {
+                    return await readGroupFileBytes(db, groupId, att.path);
+                  } catch {}
+                }
+                return null;
+              },
+            );
+            if (blocks.length > 0) {
+              const text = typeof msg.content === "string" ? msg.content : "";
+              return {
+                ...msg,
+                content: text ? [{ type: "text", text }, ...blocks] : blocks,
+              };
+            }
+          }
+          return msg;
+        }),
+      );
     } catch {}
   }
 
@@ -1129,6 +1176,33 @@ export async function runAgentRun(
     try {
       await core.saveMessage(db, userMessage);
     } catch {}
+  }
+
+  let invokeUserMessage: any = userMessage;
+  if (attachments.length > 0) {
+    const blocks = await buildAttachmentContentBlocks(
+      attachments,
+      async (att) => {
+        if (att.path && attachmentByteMap.has(att.path)) {
+          return attachmentByteMap.get(att.path)!;
+        }
+        if (attachmentByteMap.has(att.fileName)) {
+          return attachmentByteMap.get(att.fileName)!;
+        }
+        if (att.path && db) {
+          try {
+            return await readGroupFileBytes(db, groupId, att.path);
+          } catch {}
+        }
+        return null;
+      },
+    );
+    if (blocks.length > 0) {
+      invokeUserMessage = {
+        ...userMessage,
+        content: prompt ? [{ type: "text", text: prompt }, ...blocks] : blocks,
+      };
+    }
   }
 
   const supportsStreaming = providerConfig?.supportsStreaming === true;
@@ -1302,6 +1376,46 @@ export async function runAgentRun(
     }
   }
 
+  if (attachments.length > 0 && !options.quiet) {
+    const capabilities = getModelAttachmentCapabilities(model);
+    for (const att of attachments) {
+      const category = getAttachmentCategory(att.mimeType, att.fileName);
+      if (
+        category === "image" &&
+        !capabilities.images &&
+        !capabilities.routerByFeatures
+      ) {
+        process.stderr.write(
+          `[Agent] Warning: Model "${model}" does not accept image input; "${att.fileName}" will be passed as a reference only.\n`,
+        );
+      } else if (
+        category === "audio" &&
+        !capabilities.audio &&
+        !capabilities.routerByFeatures
+      ) {
+        process.stderr.write(
+          `[Agent] Warning: Model "${model}" does not accept audio input; "${att.fileName}" will be passed as a reference only.\n`,
+        );
+      } else if (
+        category === "video" &&
+        !capabilities.video &&
+        !capabilities.routerByFeatures
+      ) {
+        process.stderr.write(
+          `[Agent] Warning: Model "${model}" does not accept video input; "${att.fileName}" will be passed as a reference only.\n`,
+        );
+      } else if (
+        category === "document" &&
+        !capabilities.documents &&
+        !capabilities.routerByFeatures
+      ) {
+        process.stderr.write(
+          `[Agent] Warning: Model "${model}" does not accept PDF/document input; "${att.fileName}" will be passed as a reference only.\n`,
+        );
+      }
+    }
+  }
+
   const DEFAULT_SYSTEM_PROMPT =
     "You are ShadowClaw, a helpful AI assistant operating in a headless workspace. Answer concisely.";
 
@@ -1386,7 +1500,7 @@ export async function runAgentRun(
     enabledTools,
     groupId,
     maxTokens,
-    messages: [...history, userMessage],
+    messages: [...history, invokeUserMessage],
     model,
     provider: providerId,
     streaming: isStreaming,

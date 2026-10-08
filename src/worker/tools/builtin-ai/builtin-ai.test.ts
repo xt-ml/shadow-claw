@@ -70,6 +70,31 @@ describe("builtin-ai worker tools", () => {
         }),
       );
     });
+
+    it("forwards outputLanguage, overridePrompt, and sharedContext to main thread", async () => {
+      mockMainThreadResponse("Resumen");
+
+      const res = await executeSummarizeText({
+        text: "Long article",
+        outputLanguage: "es",
+        overridePrompt: "Custom summarizer prompt",
+        sharedContext: "Tech domain",
+      });
+      expect(res).toBe("Resumen");
+      expect(mockPost).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "request-native-ai-task",
+          payload: expect.objectContaining({
+            taskType: "summarize",
+            input: expect.objectContaining({
+              outputLanguage: "es",
+              overridePrompt: "Custom summarizer prompt",
+              sharedContext: "Tech domain",
+            }),
+          }),
+        }),
+      );
+    });
   });
 
   describe("executeWriteText", () => {
@@ -87,6 +112,35 @@ describe("builtin-ai worker tools", () => {
         expect.objectContaining({
           type: "request-native-ai-task",
           payload: expect.objectContaining({ taskType: "write" }),
+        }),
+      );
+    });
+
+    it("forwards tone, format, length, outputLanguage, and sharedContext to main thread", async () => {
+      mockMainThreadResponse("Formal report");
+
+      const res = await executeWriteText({
+        prompt: "Draft an announcement",
+        tone: "formal",
+        format: "markdown",
+        length: "long",
+        outputLanguage: "en",
+        sharedContext: "Company memo",
+      });
+      expect(res).toBe("Formal report");
+      expect(mockPost).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "request-native-ai-task",
+          payload: expect.objectContaining({
+            taskType: "write",
+            input: expect.objectContaining({
+              tone: "formal",
+              format: "markdown",
+              length: "long",
+              outputLanguage: "en",
+              sharedContext: "Company memo",
+            }),
+          }),
         }),
       );
     });
@@ -110,6 +164,33 @@ describe("builtin-ai worker tools", () => {
         expect.objectContaining({
           type: "request-native-ai-task",
           payload: expect.objectContaining({ taskType: "rewrite" }),
+        }),
+      );
+    });
+
+    it("forwards format, outputLanguage, and sharedContext to main thread", async () => {
+      mockMainThreadResponse("Polite email");
+
+      const res = await executeRewriteText({
+        text: "Need this done asap",
+        tone: "more-formal",
+        format: "markdown",
+        length: "longer",
+        outputLanguage: "en",
+        sharedContext: "Workplace email",
+      });
+      expect(res).toBe("Polite email");
+      expect(mockPost).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "request-native-ai-task",
+          payload: expect.objectContaining({
+            taskType: "rewrite",
+            input: expect.objectContaining({
+              format: "markdown",
+              outputLanguage: "en",
+              sharedContext: "Workplace email",
+            }),
+          }),
         }),
       );
     });

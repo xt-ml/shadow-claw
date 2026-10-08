@@ -20,6 +20,7 @@ const {
   translateText,
   proofreadText,
   embedText,
+  setCustomLegacyTaskFactories,
 } = await import("./builtin-ai-tasks.js");
 
 describe("builtin-ai-tasks subsystem", () => {
@@ -33,6 +34,9 @@ describe("builtin-ai-tasks subsystem", () => {
     originalGlobals.LanguageDetector = (globalThis as any).LanguageDetector;
     originalGlobals.Translator = (globalThis as any).Translator;
     delete (globalThis as any).TRANSFORMERS_CONFIG;
+    if (typeof setCustomLegacyTaskFactories === "function") {
+      setCustomLegacyTaskFactories(null);
+    }
   });
 
   afterEach(() => {
@@ -43,6 +47,9 @@ describe("builtin-ai-tasks subsystem", () => {
     (globalThis as any).LanguageDetector = originalGlobals.LanguageDetector;
     (globalThis as any).Translator = originalGlobals.Translator;
     delete (globalThis as any).TRANSFORMERS_CONFIG;
+    if (typeof setCustomLegacyTaskFactories === "function") {
+      setCustomLegacyTaskFactories(null);
+    }
   });
 
   describe("isWebGpuAdapterAvailable", () => {
@@ -397,7 +404,7 @@ describe("builtin-ai-tasks subsystem", () => {
   });
 
   describe("summarizeText", () => {
-    it("calls Summarizer.create and summarizer.summarize", async () => {
+    it("calls Summarizer.create and summarizer.summarize (Tier 1)", async () => {
       const mockSummarize = jest.fn<any>().mockResolvedValue("Short summary.");
       const mockDestroy = jest.fn<any>();
 
@@ -424,20 +431,115 @@ describe("builtin-ai-tasks subsystem", () => {
       expect(mockDestroy).toHaveBeenCalled();
     });
 
-    it("throws clear error when Summarizer API fails or is missing", async () => {
+    it("falls back to Tier 2 (legacy polyfill) when Tier 1 fails", async () => {
       (globalThis as any).Summarizer = {
-        create: jest.fn<any>().mockImplementation(() => {
-          throw new Error("Summarizer API is not supported or polyfilled");
+        create: jest
+          .fn<any>()
+          .mockRejectedValue(new Error("Native Summarizer not supported")),
+      };
+
+      const mockLegacySummarize = jest
+        .fn<any>()
+        .mockResolvedValue("Legacy polyfill summary.");
+      setCustomLegacyTaskFactories({
+        summarizer: {
+          create: jest.fn<any>().mockResolvedValue({
+            summarize: mockLegacySummarize,
+            destroy: jest.fn<any>(),
+          }),
+        },
+      });
+
+      const result = await summarizeText("Article content", {
+        type: "key-points",
+      });
+      expect(result).toBe("Legacy polyfill summary.");
+      expect(mockLegacySummarize).toHaveBeenCalled();
+    });
+
+    it("falls back to Tier 3 (Prompt API session) when Tier 1 and Tier 2 fail", async () => {
+      delete (globalThis as any).Summarizer;
+      setCustomLegacyTaskFactories({
+        summarizer: {
+          create: jest
+            .fn<any>()
+            .mockRejectedValue(new Error("Legacy polyfill failed")),
+        },
+      });
+
+      const mockPrompt = jest
+        .fn<any>()
+        .mockResolvedValue("Prompt API generated summary.");
+      const mockDestroy = jest.fn<any>();
+      (globalThis as any).LanguageModel = {
+        create: jest.fn<any>().mockResolvedValue({
+          prompt: mockPrompt,
+          destroy: mockDestroy,
         }),
       };
+
+      const result = await summarizeText("Important briefing", {
+        type: "headline",
+      });
+      expect(result).toBe("Prompt API generated summary.");
+      expect((globalThis as any).LanguageModel.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          systemPrompt: expect.stringMatching(/headline/i),
+        }),
+      );
+      expect(mockPrompt).toHaveBeenCalledWith("TEXT: Important briefing");
+      expect(mockDestroy).toHaveBeenCalled();
+    });
+
+    it("uses overridePrompt in Tier 3 when overridePrompt is provided", async () => {
+      delete (globalThis as any).Summarizer;
+      setCustomLegacyTaskFactories({
+        summarizer: {
+          create: jest.fn<any>().mockRejectedValue(new Error("Unavailable")),
+        },
+      });
+
+      const customPrompt = "You are a specialized legal document summarizer.";
+      const mockPrompt = jest
+        .fn<any>()
+        .mockResolvedValue("Custom prompt summary.");
+      (globalThis as any).LanguageModel = {
+        create: jest.fn<any>().mockResolvedValue({
+          prompt: mockPrompt,
+          destroy: jest.fn<any>(),
+        }),
+      };
+
+      const result = await summarizeText("Legal contract text", {
+        overridePrompt: customPrompt,
+      });
+      expect(result).toBe("Custom prompt summary.");
+      expect((globalThis as any).LanguageModel.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          systemPrompt: customPrompt,
+        }),
+      );
+    });
+
+    it("throws clear error when all three tiers fail", async () => {
+      (globalThis as any).Summarizer = {
+        create: jest.fn<any>().mockRejectedValue(new Error("Native failed")),
+      };
+      setCustomLegacyTaskFactories({
+        summarizer: {
+          create: jest.fn<any>().mockRejectedValue(new Error("Legacy failed")),
+        },
+      });
+      delete (globalThis as any).LanguageModel;
+
       await expect(summarizeText("Test text")).rejects.toThrow(
-        "Summarizer API is not supported",
+        /Summarizer task failed across all tiers/i,
       );
     });
   });
 
   describe("writeText", () => {
-    it("calls Writer.create and writer.write", async () => {
+    it("calls Writer.create and writer.write (Tier 1)", async () => {
       const mockWrite = jest.fn<any>().mockResolvedValue("Generated output.");
       const mockDestroy = jest.fn<any>();
 
@@ -460,10 +562,92 @@ describe("builtin-ai-tasks subsystem", () => {
       });
       expect(mockDestroy).toHaveBeenCalled();
     });
+
+    it("falls back to Tier 2 (legacy polyfill) when Tier 1 throws NotSupportedError or fails", async () => {
+      (globalThis as any).Writer = {
+        create: jest
+          .fn<any>()
+          .mockRejectedValue(
+            new DOMException(
+              "The writer polyfill requires the LanguageModel API",
+              "NotSupportedError",
+            ),
+          ),
+      };
+
+      const mockLegacyWrite = jest
+        .fn<any>()
+        .mockResolvedValue("Legacy polyfill writer output.");
+      setCustomLegacyTaskFactories({
+        writer: {
+          create: jest.fn<any>().mockResolvedValue({
+            write: mockLegacyWrite,
+            destroy: jest.fn<any>(),
+          }),
+        },
+      });
+
+      const result = await writeText("Draft an email", { tone: "formal" });
+      expect(result).toBe("Legacy polyfill writer output.");
+      expect(mockLegacyWrite).toHaveBeenCalled();
+    });
+
+    it("falls back to Tier 3 (Prompt API session) when Tier 1 and Tier 2 both fail", async () => {
+      delete (globalThis as any).Writer;
+      setCustomLegacyTaskFactories({
+        writer: {
+          create: jest
+            .fn<any>()
+            .mockRejectedValue(new Error("Legacy polyfill unavailable")),
+        },
+      });
+
+      const mockPrompt = jest
+        .fn<any>()
+        .mockResolvedValue("Prompt API generated writing.");
+      const mockDestroy = jest.fn<any>();
+      (globalThis as any).LanguageModel = {
+        create: jest.fn<any>().mockResolvedValue({
+          prompt: mockPrompt,
+          destroy: mockDestroy,
+        }),
+      };
+
+      const result = await writeText("Write a blog post", {
+        tone: "casual",
+        length: "medium",
+        outputLanguage: "en",
+      });
+
+      expect(result).toBe("Prompt API generated writing.");
+      expect((globalThis as any).LanguageModel.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          systemPrompt: expect.stringContaining("casual"),
+        }),
+      );
+      expect(mockPrompt).toHaveBeenCalledWith("TEXT: Write a blog post");
+      expect(mockDestroy).toHaveBeenCalled();
+    });
+
+    it("throws clear error when all three tiers fail", async () => {
+      delete (globalThis as any).Writer;
+      setCustomLegacyTaskFactories({
+        writer: {
+          create: jest
+            .fn<any>()
+            .mockRejectedValue(new Error("Legacy polyfill failed")),
+        },
+      });
+      delete (globalThis as any).LanguageModel;
+
+      await expect(writeText("Write something")).rejects.toThrow(
+        /Writer task failed across all tiers/i,
+      );
+    });
   });
 
   describe("rewriteText", () => {
-    it("calls Rewriter.create and rewriter.rewrite", async () => {
+    it("calls Rewriter.create and rewriter.rewrite (Tier 1)", async () => {
       const mockRewrite = jest.fn<any>().mockResolvedValue("Rewritten text.");
       const mockDestroy = jest.fn<any>();
 
@@ -483,6 +667,82 @@ describe("builtin-ai-tasks subsystem", () => {
       });
       expect(mockRewrite).toHaveBeenCalledWith("Original text", undefined);
       expect(mockDestroy).toHaveBeenCalled();
+    });
+
+    it("falls back to Tier 2 (legacy polyfill) when Tier 1 fails", async () => {
+      (globalThis as any).Rewriter = {
+        create: jest
+          .fn<any>()
+          .mockRejectedValue(new Error("Native Rewriter unavailable")),
+      };
+
+      const mockLegacyRewrite = jest
+        .fn<any>()
+        .mockResolvedValue("Legacy polyfill rewritten text.");
+      setCustomLegacyTaskFactories({
+        rewriter: {
+          create: jest.fn<any>().mockResolvedValue({
+            rewrite: mockLegacyRewrite,
+            destroy: jest.fn<any>(),
+          }),
+        },
+      });
+
+      const result = await rewriteText("Rough draft", { tone: "more-casual" });
+      expect(result).toBe("Legacy polyfill rewritten text.");
+      expect(mockLegacyRewrite).toHaveBeenCalled();
+    });
+
+    it("falls back to Tier 3 (Prompt API session) when Tier 1 and Tier 2 both fail", async () => {
+      delete (globalThis as any).Rewriter;
+      setCustomLegacyTaskFactories({
+        rewriter: {
+          create: jest
+            .fn<any>()
+            .mockRejectedValue(new Error("Legacy polyfill unavailable")),
+        },
+      });
+
+      const mockPrompt = jest
+        .fn<any>()
+        .mockResolvedValue("Prompt API rewritten text.");
+      const mockDestroy = jest.fn<any>();
+      (globalThis as any).LanguageModel = {
+        create: jest.fn<any>().mockResolvedValue({
+          prompt: mockPrompt,
+          destroy: mockDestroy,
+        }),
+      };
+
+      const result = await rewriteText("Original draft", {
+        tone: "more-formal",
+        length: "shorter",
+      });
+
+      expect(result).toBe("Prompt API rewritten text.");
+      expect((globalThis as any).LanguageModel.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          systemPrompt: expect.stringMatching(/Distinguished Senior Editor/i),
+        }),
+      );
+      expect(mockPrompt).toHaveBeenCalledWith("TEXT: Original draft");
+      expect(mockDestroy).toHaveBeenCalled();
+    });
+
+    it("throws clear error when all three tiers fail", async () => {
+      delete (globalThis as any).Rewriter;
+      setCustomLegacyTaskFactories({
+        rewriter: {
+          create: jest
+            .fn<any>()
+            .mockRejectedValue(new Error("Legacy polyfill failed")),
+        },
+      });
+      delete (globalThis as any).LanguageModel;
+
+      await expect(rewriteText("Rewrite this")).rejects.toThrow(
+        /Rewriter task failed across all tiers/i,
+      );
     });
   });
 

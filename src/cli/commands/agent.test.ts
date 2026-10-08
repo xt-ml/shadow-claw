@@ -1354,6 +1354,25 @@ describe("runAgentTool — stdin piping", () => {
     core.setNativeAiTaskHandler(null);
   });
 
+  it("maps plain-text _stdinData to the `prompt` field for write_text", async () => {
+    const { runAgentTool } = await import("./agent.js");
+    const core = await (await import("../utils/agent-core.js")).getAgentCore();
+
+    core.setNativeAiTaskHandler(async (_taskType, input) => {
+      return `Drafted: ${input.prompt}`;
+    });
+
+    const result = await runAgentTool("write_text", undefined, {
+      workspace: tmpDir,
+      quiet: true,
+      _stdinData: "draft an introductory blog post",
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.output).toBe("Drafted: draft an introductory blog post");
+    core.setNativeAiTaskHandler(null);
+  });
+
   it('uses "-" as inputArg to trigger _stdinData read', async () => {
     const { runAgentTool } = await import("./agent.js");
     const result = await runAgentTool("write_file", "-", {

@@ -41,11 +41,13 @@ jest.unstable_mockModule("./builtin-ai-tasks.js", () => ({
 }));
 
 let executeNativeAiTask: any;
+let buildTaskPrompt: any;
 
 describe("executeNativeAiTask", () => {
   beforeAll(async () => {
     const mod = await import("./executeNativeAiTask.js");
     executeNativeAiTask = mod.executeNativeAiTask;
+    buildTaskPrompt = mod.buildTaskPrompt;
   });
 
   beforeEach(() => {
@@ -53,36 +55,118 @@ describe("executeNativeAiTask", () => {
     mockEnsureBuiltinAiPolyfills.mockResolvedValue(undefined);
   });
 
+  describe("buildTaskPrompt", () => {
+    it("uses overridePrompt directly for summarize task when provided", () => {
+      const prompt = buildTaskPrompt("summarize", {
+        text: "Long article content",
+        overridePrompt: "You are a custom AI summarizer.",
+      });
+      expect(prompt).toBe(
+        "You are a custom AI summarizer.\n\nLong article content",
+      );
+    });
+
+    it("includes tone, format, and length in write prompt", () => {
+      const prompt = buildTaskPrompt("write", {
+        prompt: "Draft an invite",
+        tone: "formal",
+        format: "markdown",
+        length: "medium",
+      });
+      expect(prompt).toContain("tone: formal");
+      expect(prompt).toContain("format: markdown");
+      expect(prompt).toContain("length: medium");
+      expect(prompt).toContain("Draft an invite");
+    });
+
+    it("includes tone, format, and length in rewrite prompt", () => {
+      const prompt = buildTaskPrompt("rewrite", {
+        text: "Rough draft",
+        tone: "more-casual",
+        format: "plain-text",
+        length: "shorter",
+      });
+      expect(prompt).toContain("tone: more-casual");
+      expect(prompt).toContain("format: plain-text");
+      expect(prompt).toContain("length: shorter");
+      expect(prompt).toContain("Rough draft");
+    });
+  });
+
   describe("local tools backend", () => {
-    it("calls rewriteText when toolsBackendPref is local", async () => {
+    it("calls rewriteText with extended options when toolsBackendPref is local", async () => {
       mockRewriteText.mockResolvedValue("Happy day greeting!");
 
       const result = await executeNativeAiTask({
         taskType: "rewrite",
-        input: { text: "how are you doing", tone: "more-casual" },
+        input: {
+          text: "how are you doing",
+          tone: "more-casual",
+          format: "markdown",
+          length: "shorter",
+          outputLanguage: "es",
+        },
         toolsBackendPref: "local",
       });
 
       expect(result).toBe("Happy day greeting!");
       expect(mockRewriteText).toHaveBeenCalledWith(
         "how are you doing",
-        expect.objectContaining({ tone: "more-casual" }),
+        expect.objectContaining({
+          tone: "more-casual",
+          format: "markdown",
+          length: "shorter",
+          outputLanguage: "es",
+        }),
       );
     });
 
-    it("calls summarizeText when toolsBackendPref is local", async () => {
+    it("calls writeText with extended options when toolsBackendPref is local", async () => {
+      mockWriteText.mockResolvedValue("Generated story");
+
+      const result = await executeNativeAiTask({
+        taskType: "write",
+        input: {
+          prompt: "Write a poem",
+          tone: "formal",
+          format: "plain-text",
+          length: "short",
+          outputLanguage: "fr",
+        },
+        toolsBackendPref: "local",
+      });
+
+      expect(result).toBe("Generated story");
+      expect(mockWriteText).toHaveBeenCalledWith(
+        "Write a poem",
+        expect.objectContaining({
+          tone: "formal",
+          format: "plain-text",
+          length: "short",
+          outputLanguage: "fr",
+        }),
+      );
+    });
+
+    it("calls summarizeText with overridePrompt when toolsBackendPref is local", async () => {
       mockSummarizeText.mockResolvedValue("Summary output");
 
       const result = await executeNativeAiTask({
         taskType: "summarize",
-        input: { text: "A very long document" },
+        input: {
+          text: "A very long document",
+          overridePrompt: "Custom prompt",
+        },
         toolsBackendPref: "local",
       });
 
       expect(result).toBe("Summary output");
       expect(mockSummarizeText).toHaveBeenCalledWith(
         "A very long document",
-        expect.objectContaining({ text: "A very long document" }),
+        expect.objectContaining({
+          text: "A very long document",
+          overridePrompt: "Custom prompt",
+        }),
       );
     });
 

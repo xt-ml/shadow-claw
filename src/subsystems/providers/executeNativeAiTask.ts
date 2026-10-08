@@ -87,13 +87,16 @@ export function buildTaskPrompt(
     return `Translate the following text from ${input.sourceLanguage || "auto"} to ${input.targetLanguage}. Provide ONLY the raw translated text without commentary or quotation marks:\n\n${input.text}`;
   }
   if (taskType === "summarize") {
+    if (input.overridePrompt) {
+      return `${input.overridePrompt}\n\n${input.text}`;
+    }
     return `Summarize the following text (type: ${input.type || "tldr"}, format: ${input.format || "plain-text"}, length: ${input.length || "medium"}). Provide ONLY the summary:\n\n${input.text}`;
   }
   if (taskType === "write") {
-    return `Draft content for the following request (context: ${input.context || "none"}):\n\n${input.prompt}`;
+    return `Draft content for the following request (tone: ${input.tone || "neutral"}, format: ${input.format || "plain-text"}, length: ${input.length || "short"}, context: ${input.context || "none"}):\n\n${input.prompt}`;
   }
   if (taskType === "rewrite") {
-    return `Rewrite the following text (tone: ${input.tone || "standard"}, length: ${input.length || "as-is"}):\n\n${input.text}`;
+    return `Rewrite the following text (tone: ${input.tone || "as-is"}, format: ${input.format || "as-is"}, length: ${input.length || "as-is"}, context: ${input.context || "none"}):\n\n${input.text}`;
   }
   if (taskType === "proofread") {
     return `Proofread and correct grammar, spelling, and style in the following text. Provide ONLY the corrected text:\n\n${input.text}`;

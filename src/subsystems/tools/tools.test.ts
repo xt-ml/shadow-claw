@@ -98,4 +98,26 @@ describe("TOOL_DEFINITIONS", () => {
 
     expect(tool!.input_schema.properties.body.type).toBe("string");
   });
+
+  it("write_text schema supports tone, format, length, outputLanguage, and sharedContext", () => {
+    const tool: any = TOOL_DEFINITIONS.find((d) => d.name === "write_text");
+    expect(tool).toBeDefined();
+    expect(tool.input_schema.properties.prompt).toBeDefined();
+    expect(tool.input_schema.properties.tone).toBeDefined();
+    expect(tool.input_schema.properties.format).toBeDefined();
+    expect(tool.input_schema.properties.length).toBeDefined();
+    expect(tool.input_schema.properties.outputLanguage).toBeDefined();
+    expect(tool.input_schema.properties.sharedContext).toBeDefined();
+  });
+
+  it("rewrite_text schema supports format, outputLanguage, and sharedContext", () => {
+    const tool: any = TOOL_DEFINITIONS.find((d) => d.name === "rewrite_text");
+    expect(tool).toBeDefined();
+    expect(tool.input_schema.properties.text).toBeDefined();
+    expect(tool.input_schema.properties.tone).toBeDefined();
+    expect(tool.input_schema.properties.format).toBeDefined();
+    expect(tool.input_schema.properties.length).toBeDefined();
+    expect(tool.input_schema.properties.outputLanguage).toBeDefined();
+    expect(tool.input_schema.properties.sharedContext).toBeDefined();
+  });
 });

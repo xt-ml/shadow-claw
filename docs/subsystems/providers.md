@@ -142,6 +142,7 @@ Backed by the `builtin-ai-tasks` subsystem with dynamic polyfill loading and a M
   - Model download progress is aggregated via `promptApiProgressAggregator`, dynamically calculating model sizes and suppressing initial false 0% states.
 - **Configurable Task Tools Backend**:
   - `BUILTIN_AI_TOOLS_BACKEND` setting defaults to **Active Conversation LLM** (`active_provider`) so native tasks (summarize, rewrite, translate) route to the main LLM provider, with option to select local browser WebGPU/WASM polyfills (`local`).
+  - When executing task APIs locally or via Prompt API, ShadowClaw employs a 3-tier fallback architecture: Tier 1 (Native / `writer-rewriter-polyfills`), Tier 2 (Legacy `built-in-ai-task-apis-polyfills`), and Tier 3 (Direct `window.LanguageModel` with Chrome-internal prompt builders `WriterPromptBuilder`, `RewriterPromptBuilder`, `SummarizerPromptBuilder`).
 - **Sampling Parameters**:
   - Supports sampling parameters (`samplingMode`, `temperature`, `topK`) passed to model session initialization per Chrome Built-in AI / W3C Prompt API explainer.
 

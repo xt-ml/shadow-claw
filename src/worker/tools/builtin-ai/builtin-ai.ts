@@ -83,6 +83,9 @@ export async function executeSummarizeText(
         length: input.length,
         preference: input.preference,
         context: input.context,
+        outputLanguage: input.outputLanguage,
+        overridePrompt: input.overridePrompt,
+        sharedContext: input.sharedContext,
       },
       context,
     );
@@ -108,6 +111,11 @@ export async function executeWriteText(
       {
         prompt,
         context: input.context,
+        tone: input.tone,
+        format: input.format,
+        length: input.length,
+        outputLanguage: input.outputLanguage,
+        sharedContext: input.sharedContext,
       },
       context,
     );
@@ -133,8 +141,11 @@ export async function executeRewriteText(
       {
         text,
         tone: input.tone,
+        format: input.format,
         length: input.length,
         context: input.context,
+        outputLanguage: input.outputLanguage,
+        sharedContext: input.sharedContext,
       },
       context,
     );

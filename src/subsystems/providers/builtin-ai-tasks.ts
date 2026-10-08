@@ -19,6 +19,27 @@ import {
   CONFIG_KEYS,
   DEFAULT_PROMPT_API_FALLBACK_MODEL,
 } from "../../config/config.js";
+import {
+  WriterPromptBuilder,
+  RewriterPromptBuilder,
+  SummarizerPromptBuilder,
+} from "./builtin-ai-prompt-builders.js";
+
+export type TaskFactory = { create: (opts?: any) => Promise<any> };
+
+export interface CustomLegacyTaskFactories {
+  writer?: TaskFactory | null;
+  rewriter?: TaskFactory | null;
+  summarizer?: TaskFactory | null;
+}
+
+let customLegacyTaskFactories: CustomLegacyTaskFactories | null = null;
+
+export function setCustomLegacyTaskFactories(
+  factories: CustomLegacyTaskFactories | null,
+): void {
+  customLegacyTaskFactories = factories;
+}
 
 export type BuiltinTaskType =
   | "summarizer"
@@ -50,18 +71,26 @@ export interface SummarizeOptions extends BaseBuiltinTaskOptions {
   sharedContext?: string;
   context?: string;
   preference?: "capability" | "speed" | "auto";
+  outputLanguage?: string;
+  overridePrompt?: string;
 }
 
 export interface WriteOptions extends BaseBuiltinTaskOptions {
   context?: string;
   sharedContext?: string;
+  tone?: "formal" | "neutral" | "casual";
+  format?: "plain-text" | "markdown";
+  length?: "short" | "medium" | "long";
+  outputLanguage?: string;
 }
 
 export interface RewriteOptions extends BaseBuiltinTaskOptions {
   context?: string;
   sharedContext?: string;
   tone?: "as-is" | "more-formal" | "more-casual";
+  format?: "as-is" | "plain-text" | "markdown";
   length?: "as-is" | "shorter" | "longer";
+  outputLanguage?: string;
 }
 
 export interface TranslateOptions extends BaseBuiltinTaskOptions {
@@ -435,24 +464,46 @@ export async function ensureBuiltinAiPolyfills(): Promise<void> {
   }
   if (!getWriterFactory()) {
     tasks.push(
-      import("built-in-ai-task-apis-polyfills/writer")
+      import("writer-rewriter-polyfills/writer")
         .then((mod) => {
           if (mod?.Writer && !g.Writer) {
             g.Writer = mod.Writer;
           }
         })
-        .catch(() => {}),
+        .catch(() => {})
+        .then(async () => {
+          if (!getWriterFactory()) {
+            const mod =
+              await import("built-in-ai-task-apis-polyfills/writer").catch(
+                () => null,
+              );
+            if (mod?.Writer && !g.Writer) {
+              g.Writer = mod.Writer;
+            }
+          }
+        }),
     );
   }
   if (!getRewriterFactory()) {
     tasks.push(
-      import("built-in-ai-task-apis-polyfills/rewriter")
+      import("writer-rewriter-polyfills/rewriter")
         .then((mod) => {
           if (mod?.Rewriter && !g.Rewriter) {
             g.Rewriter = mod.Rewriter;
           }
         })
-        .catch(() => {}),
+        .catch(() => {})
+        .then(async () => {
+          if (!getRewriterFactory()) {
+            const mod =
+              await import("built-in-ai-task-apis-polyfills/rewriter").catch(
+                () => null,
+              );
+            if (mod?.Rewriter && !g.Rewriter) {
+              g.Rewriter = mod.Rewriter;
+            }
+          }
+        }),
     );
   }
   if (!getLanguageDetectorFactory()) {
@@ -551,99 +602,371 @@ function createMonitorHandler(
 }
 
 /**
- * Summarize text using Chrome's Summarizer API or polyfill fallback.
+ * Summarize text using Chrome's Summarizer API or polyfill fallback with 3-tier degradation:
+ * Tier 1: Native Summarizer API
+ * Tier 2: Legacy task polyfill (built-in-ai-task-apis-polyfills)
+ * Tier 3: Plain Prompt API failover (LanguageModel.create + SummarizerPromptBuilder)
  */
 export async function summarizeText(
   text: string,
   options?: SummarizeOptions,
 ): Promise<string> {
   await ensureBuiltinAiPolyfills();
-  const Summarizer = getSummarizerFactory();
-  if (!Summarizer) {
-    throw new Error("Summarizer API is not supported or polyfilled");
-  }
-
   const monitor = createMonitorHandler("Summarizer", options?.onProgress);
   const createOpts = {
     ...(options || {}),
     ...(monitor ? { monitor } : {}),
   };
-  const summarizer = await createTaskInstanceWithFallback(
-    Summarizer,
-    createOpts,
-  );
-  try {
-    return await summarizer.summarize(
-      text,
-      options?.context ? { context: options.context } : undefined,
-    );
-  } finally {
-    if (typeof summarizer.destroy === "function") {
-      summarizer.destroy();
+
+  const errors: string[] = [];
+
+  // Tier 1: Native Summarizer API (Chrome expert model)
+  const tier1Factory = getSummarizerFactory();
+  if (tier1Factory) {
+    try {
+      const summarizer = await createTaskInstanceWithFallback(
+        tier1Factory,
+        createOpts,
+      );
+      try {
+        return await summarizer.summarize(
+          text,
+          options?.context ? { context: options.context } : undefined,
+        );
+      } finally {
+        if (typeof summarizer?.destroy === "function") {
+          summarizer.destroy();
+        }
+      }
+    } catch (err: any) {
+      errors.push(`Tier 1 (Summarizer): ${err?.message || err}`);
     }
+  } else {
+    errors.push("Tier 1 (Summarizer): Factory not available");
   }
+
+  // Tier 2: Existing task polyfill (built-in-ai-task-apis-polyfills)
+  let tier2Factory = customLegacyTaskFactories?.summarizer;
+  if (!tier2Factory) {
+    try {
+      const mod = await import("built-in-ai-task-apis-polyfills/summarizer");
+      tier2Factory = mod?.Summarizer;
+    } catch {}
+  }
+
+  if (tier2Factory) {
+    try {
+      const summarizer = await createTaskInstanceWithFallback(
+        tier2Factory,
+        createOpts,
+      );
+      try {
+        return await summarizer.summarize(
+          text,
+          options?.context ? { context: options.context } : undefined,
+        );
+      } finally {
+        if (typeof summarizer?.destroy === "function") {
+          summarizer.destroy();
+        }
+      }
+    } catch (err: any) {
+      errors.push(`Tier 2 (Legacy Task Polyfill): ${err?.message || err}`);
+    }
+  } else {
+    errors.push("Tier 2 (Legacy Task Polyfill): Factory not available");
+  }
+
+  // Tier 3: Plain Prompt API Failover (LanguageModel.create + SummarizerPromptBuilder)
+  const g = globalThis as any;
+  const LanguageModel = g.LanguageModel || g.ai?.languageModel;
+  if (LanguageModel && typeof LanguageModel.create === "function") {
+    try {
+      const promptBuilder = new SummarizerPromptBuilder(options);
+      const { systemPrompt, userPrompt } = promptBuilder.buildPrompt(
+        text,
+        options,
+      );
+
+      let session;
+      try {
+        session = await LanguageModel.create({
+          systemPrompt,
+          ...(monitor ? { monitor } : {}),
+        });
+      } catch {
+        session = await LanguageModel.create();
+      }
+
+      if (session) {
+        try {
+          return await session.prompt(userPrompt);
+        } finally {
+          if (typeof session?.destroy === "function") {
+            session.destroy();
+          }
+        }
+      }
+    } catch (err: any) {
+      errors.push(`Tier 3 (Prompt API): ${err?.message || err}`);
+    }
+  } else {
+    errors.push("Tier 3 (Prompt API): LanguageModel API not available");
+  }
+
+  throw new Error(
+    `Summarizer task failed across all tiers: [${errors.join("; ")}]`,
+  );
 }
 
 /**
- * Draft/write text using Chrome's Writer API or polyfill fallback.
+ * Draft/write text using Chrome's Writer API or polyfill fallback with 3-tier degradation:
+ * Tier 1: Native Writer or new polyfill (writer-rewriter-polyfills)
+ * Tier 2: Legacy task polyfill (built-in-ai-task-apis-polyfills)
+ * Tier 3: Plain Prompt API failover (LanguageModel.create + WriterPromptBuilder)
  */
 export async function writeText(
   prompt: string,
   options?: WriteOptions,
 ): Promise<string> {
   await ensureBuiltinAiPolyfills();
-  const Writer = getWriterFactory();
-  if (!Writer) {
-    throw new Error("Writer API is not supported or polyfilled");
-  }
-
   const monitor = createMonitorHandler("Writer", options?.onProgress);
   const createOpts = {
     ...(options || {}),
     ...(monitor ? { monitor } : {}),
   };
-  const writer = await createTaskInstanceWithFallback(Writer, createOpts);
-  try {
-    return await writer.write(
-      prompt,
-      options?.context ? { context: options.context } : undefined,
-    );
-  } finally {
-    if (typeof writer.destroy === "function") {
-      writer.destroy();
-    }
+
+  const errors: string[] = [];
+
+  // Tier 1: Native Writer or new polyfill (writer-rewriter-polyfills)
+  let tier1Factory = getWriterFactory();
+  if (!tier1Factory) {
+    try {
+      const mod = await import("writer-rewriter-polyfills/writer");
+      tier1Factory = mod?.Writer;
+    } catch {}
   }
+
+  if (tier1Factory) {
+    try {
+      const writer = await createTaskInstanceWithFallback(
+        tier1Factory,
+        createOpts,
+      );
+      try {
+        return await writer.write(
+          prompt,
+          options?.context ? { context: options.context } : undefined,
+        );
+      } finally {
+        if (typeof writer?.destroy === "function") {
+          writer.destroy();
+        }
+      }
+    } catch (err: any) {
+      errors.push(`Tier 1 (Writer): ${err?.message || err}`);
+    }
+  } else {
+    errors.push("Tier 1 (Writer): Factory not available");
+  }
+
+  // Tier 2: Existing task polyfill (built-in-ai-task-apis-polyfills)
+  let tier2Factory = customLegacyTaskFactories?.writer;
+  if (!tier2Factory) {
+    try {
+      const mod = await import("built-in-ai-task-apis-polyfills/writer");
+      tier2Factory = mod?.Writer;
+    } catch {}
+  }
+
+  if (tier2Factory) {
+    try {
+      const writer = await createTaskInstanceWithFallback(
+        tier2Factory,
+        createOpts,
+      );
+      try {
+        return await writer.write(
+          prompt,
+          options?.context ? { context: options.context } : undefined,
+        );
+      } finally {
+        if (typeof writer?.destroy === "function") {
+          writer.destroy();
+        }
+      }
+    } catch (err: any) {
+      errors.push(`Tier 2 (Legacy Task Polyfill): ${err?.message || err}`);
+    }
+  } else {
+    errors.push("Tier 2 (Legacy Task Polyfill): Factory not available");
+  }
+
+  // Tier 3: Plain Prompt API Failover (LanguageModel.create + WriterPromptBuilder)
+  const g = globalThis as any;
+  const LanguageModel = g.LanguageModel || g.ai?.languageModel;
+  if (LanguageModel && typeof LanguageModel.create === "function") {
+    try {
+      const promptBuilder = new WriterPromptBuilder(options);
+      const { systemPrompt, userPrompt } = promptBuilder.buildPrompt(
+        prompt,
+        options,
+      );
+
+      let session;
+      try {
+        session = await LanguageModel.create({
+          systemPrompt,
+          ...(monitor ? { monitor } : {}),
+        });
+      } catch {
+        session = await LanguageModel.create();
+      }
+
+      if (session) {
+        try {
+          return await session.prompt(userPrompt);
+        } finally {
+          if (typeof session?.destroy === "function") {
+            session.destroy();
+          }
+        }
+      }
+    } catch (err: any) {
+      errors.push(`Tier 3 (Prompt API): ${err?.message || err}`);
+    }
+  } else {
+    errors.push("Tier 3 (Prompt API): LanguageModel API not available");
+  }
+
+  throw new Error(
+    `Writer task failed across all tiers: [${errors.join("; ")}]`,
+  );
 }
 
 /**
- * Rewrite/rephrase text using Chrome's Rewriter API or polyfill fallback.
+ * Rewrite/rephrase text using Chrome's Rewriter API or polyfill fallback with 3-tier degradation:
+ * Tier 1: Native Rewriter or new polyfill (writer-rewriter-polyfills)
+ * Tier 2: Legacy task polyfill (built-in-ai-task-apis-polyfills)
+ * Tier 3: Plain Prompt API failover (LanguageModel.create + RewriterPromptBuilder)
  */
 export async function rewriteText(
   text: string,
   options?: RewriteOptions,
 ): Promise<string> {
   await ensureBuiltinAiPolyfills();
-  const Rewriter = getRewriterFactory();
-  if (!Rewriter) {
-    throw new Error("Rewriter API is not supported or polyfilled");
-  }
-
   const monitor = createMonitorHandler("Rewriter", options?.onProgress);
   const createOpts = {
     ...(options || {}),
     ...(monitor ? { monitor } : {}),
   };
-  const rewriter = await createTaskInstanceWithFallback(Rewriter, createOpts);
-  try {
-    return await rewriter.rewrite(
-      text,
-      options?.context ? { context: options.context } : undefined,
-    );
-  } finally {
-    if (typeof rewriter.destroy === "function") {
-      rewriter.destroy();
-    }
+
+  const errors: string[] = [];
+
+  // Tier 1: Native Rewriter or new polyfill (writer-rewriter-polyfills)
+  let tier1Factory = getRewriterFactory();
+  if (!tier1Factory) {
+    try {
+      const mod = await import("writer-rewriter-polyfills/rewriter");
+      tier1Factory = mod?.Rewriter;
+    } catch {}
   }
+
+  if (tier1Factory) {
+    try {
+      const rewriter = await createTaskInstanceWithFallback(
+        tier1Factory,
+        createOpts,
+      );
+      try {
+        return await rewriter.rewrite(
+          text,
+          options?.context ? { context: options.context } : undefined,
+        );
+      } finally {
+        if (typeof rewriter?.destroy === "function") {
+          rewriter.destroy();
+        }
+      }
+    } catch (err: any) {
+      errors.push(`Tier 1 (Rewriter): ${err?.message || err}`);
+    }
+  } else {
+    errors.push("Tier 1 (Rewriter): Factory not available");
+  }
+
+  // Tier 2: Existing task polyfill (built-in-ai-task-apis-polyfills)
+  let tier2Factory = customLegacyTaskFactories?.rewriter;
+  if (!tier2Factory) {
+    try {
+      const mod = await import("built-in-ai-task-apis-polyfills/rewriter");
+      tier2Factory = mod?.Rewriter;
+    } catch {}
+  }
+
+  if (tier2Factory) {
+    try {
+      const rewriter = await createTaskInstanceWithFallback(
+        tier2Factory,
+        createOpts,
+      );
+      try {
+        return await rewriter.rewrite(
+          text,
+          options?.context ? { context: options.context } : undefined,
+        );
+      } finally {
+        if (typeof rewriter?.destroy === "function") {
+          rewriter.destroy();
+        }
+      }
+    } catch (err: any) {
+      errors.push(`Tier 2 (Legacy Task Polyfill): ${err?.message || err}`);
+    }
+  } else {
+    errors.push("Tier 2 (Legacy Task Polyfill): Factory not available");
+  }
+
+  // Tier 3: Plain Prompt API Failover (LanguageModel.create + RewriterPromptBuilder)
+  const g = globalThis as any;
+  const LanguageModel = g.LanguageModel || g.ai?.languageModel;
+  if (LanguageModel && typeof LanguageModel.create === "function") {
+    try {
+      const promptBuilder = new RewriterPromptBuilder(options);
+      const { systemPrompt, userPrompt } = promptBuilder.buildPrompt(
+        text,
+        options,
+      );
+
+      let session;
+      try {
+        session = await LanguageModel.create({
+          systemPrompt,
+          ...(monitor ? { monitor } : {}),
+        });
+      } catch {
+        session = await LanguageModel.create();
+      }
+
+      if (session) {
+        try {
+          return await session.prompt(userPrompt);
+        } finally {
+          if (typeof session?.destroy === "function") {
+            session.destroy();
+          }
+        }
+      }
+    } catch (err: any) {
+      errors.push(`Tier 3 (Prompt API): ${err?.message || err}`);
+    }
+  } else {
+    errors.push("Tier 3 (Prompt API): LanguageModel API not available");
+  }
+
+  throw new Error(
+    `Rewriter task failed across all tiers: [${errors.join("; ")}]`,
+  );
 }
 
 /**

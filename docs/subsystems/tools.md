@@ -215,12 +215,24 @@ The utility in `src/worker/utils/wrapUntrustedContent.ts` wraps externally-sourc
 
 ### Built-in AI tools
 
-- **`summarize_text`** — Summarizes text via configured Task Tools Backend (`BUILTIN_AI_TOOLS_BACKEND`, defaulting to Active Conversation LLM with opt-in local browser Task API polyfills).
-- **`write_text`** — Drafts content for a prompt via configured Task Tools Backend.
-- **`rewrite_text`** — Rewrites text with specified tone/length parameters via configured Task Tools Backend.
+- **`summarize_text`** — Summarizes text via configured Task Tools Backend (`BUILTIN_AI_TOOLS_BACKEND`, defaulting to Active Conversation LLM with opt-in local browser Task API polyfills). Supports optional `overridePrompt`, `format`, `length`, `type`, `sharedContext`, and `outputLanguage`.
+- **`write_text`** — Drafts content for a prompt via configured Task Tools Backend. Supports optional `tone`, `format`, `length`, `context`, `sharedContext`, and `outputLanguage`.
+- **`rewrite_text`** — Rewrites text with specified parameters via configured Task Tools Backend. Supports optional `tone`, `format`, `length`, `context`, `sharedContext`, and `outputLanguage`.
 - **`proofread_text`** — Corrects grammar, spelling, and style via configured Task Tools Backend.
 - **`detect_language`** — Identifies the primary language of a text snippet (returns BCP 47 language codes with confidence scores).
 - **`translate_text`** — Translates text from source to target language via configured Task Tools Backend.
+
+#### 3-Tier Fallback Architecture for Task APIs
+
+To adapt to Chrome Built-in AI's evolution and deprecation of experimental Writer and Rewriter task APIs in favor of the foundational Prompt API (`window.LanguageModel`), ShadowClaw implements a robust 3-tier progressive degradation ladder:
+
+1. **Tier 1 (Native / Direct Polyfill)**: Attempts native task APIs (`ai.writer`, `ai.rewriter`, `ai.summarizer`) or Chrome Labs `writer-rewriter-polyfills` (which maps directly onto `window.LanguageModel`).
+2. **Tier 2 (Legacy Task Polyfill)**: If Tier 1 is unavailable or throws `NotSupportedError`, falls back to `built-in-ai-task-apis-polyfills` backed by `prompt-api-polyfill` (WASM / WebGPU / Transformers.js).
+3. **Tier 3 (Prompt API Direct with Chrome-Internal Prompt Builders)**: If Tier 2 fails or is unsupported, directly creates a `LanguageModel` session (`window.LanguageModel.create()`) using Chrome's exact internal system prompt builders:
+   - `WriterPromptBuilder`: Formats persona, shared context, tone, length, format, and task prompt with strict formatting rules.
+   - `RewriterPromptBuilder`: Formats tone/length/format transformations while preserving original meaning.
+   - `SummarizerPromptBuilder`: Formats summary types (TLDR, key points, teaser, headline), length constraints, format, or applies a custom `overridePrompt` system prompt.
+
 
 ### Agentic tools
 

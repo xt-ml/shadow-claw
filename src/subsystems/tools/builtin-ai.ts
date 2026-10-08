@@ -35,6 +35,19 @@ export const summarize_text: ToolDefinition = {
         type: "string",
         description: "Optional background context for summarization.",
       },
+      outputLanguage: {
+        type: "string",
+        description: "Optional target language code (e.g. 'en', 'es').",
+      },
+      sharedContext: {
+        type: "string",
+        description: "Optional shared context passed to the underlying model.",
+      },
+      overridePrompt: {
+        type: "string",
+        description:
+          "Optional custom system prompt overriding default summarization instructions.",
+      },
     },
     required: ["text"],
   },
@@ -51,9 +64,32 @@ export const write_text: ToolDefinition = {
         type: "string",
         description: "The prompt or writing instructions.",
       },
+      tone: {
+        type: "string",
+        enum: ["formal", "neutral", "casual"],
+        description: "Tone for drafting (default: neutral).",
+      },
+      format: {
+        type: "string",
+        enum: ["plain-text", "markdown"],
+        description: "Output format (default: plain-text).",
+      },
+      length: {
+        type: "string",
+        enum: ["short", "medium", "long"],
+        description: "Target length (default: short).",
+      },
       context: {
         type: "string",
         description: "Optional background context for writing.",
+      },
+      outputLanguage: {
+        type: "string",
+        description: "Optional target language code (e.g. 'en', 'es').",
+      },
+      sharedContext: {
+        type: "string",
+        description: "Optional shared context passed to the underlying model.",
       },
     },
     required: ["prompt"],
@@ -76,6 +112,11 @@ export const rewrite_text: ToolDefinition = {
         enum: ["as-is", "more-formal", "more-casual"],
         description: "Tone adjustment (default: as-is).",
       },
+      format: {
+        type: "string",
+        enum: ["as-is", "plain-text", "markdown"],
+        description: "Format adjustment (default: as-is).",
+      },
       length: {
         type: "string",
         enum: ["as-is", "shorter", "longer"],
@@ -84,6 +125,14 @@ export const rewrite_text: ToolDefinition = {
       context: {
         type: "string",
         description: "Optional background context for rewriting.",
+      },
+      outputLanguage: {
+        type: "string",
+        description: "Optional target language code (e.g. 'en', 'es').",
+      },
+      sharedContext: {
+        type: "string",
+        description: "Optional shared context passed to the underlying model.",
       },
     },
     required: ["text"],

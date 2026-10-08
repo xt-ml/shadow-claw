@@ -197,5 +197,71 @@ describe("executeTool headless-safe tools work with SQLite + NodeFs", () => {
       expect(res).toBe("Rewritten: how are you doing (happier)");
       setNativeAiTaskHandler(null);
     });
+
+    it("executes write_text and forwards tone, format, length options", async () => {
+      const { executeTool } = await import("./executeTool.js");
+      const { setNativeAiTaskHandler } =
+        await import("../tools/builtin-ai/builtin-ai.js");
+
+      let receivedInput: any;
+      setNativeAiTaskHandler(async (_taskType, input) => {
+        receivedInput = input;
+        return `Written: ${input.prompt}`;
+      });
+
+      const res = await executeTool(
+        db,
+        "write_text",
+        {
+          prompt: "Draft an email",
+          tone: "formal",
+          format: "plain-text",
+          length: "short",
+        },
+        "server:main",
+      );
+
+      expect(res).toBe("Written: Draft an email");
+      expect(receivedInput).toEqual(
+        expect.objectContaining({
+          prompt: "Draft an email",
+          tone: "formal",
+          format: "plain-text",
+          length: "short",
+        }),
+      );
+      setNativeAiTaskHandler(null);
+    });
+
+    it("executes summarize_text and forwards overridePrompt option", async () => {
+      const { executeTool } = await import("./executeTool.js");
+      const { setNativeAiTaskHandler } =
+        await import("../tools/builtin-ai/builtin-ai.js");
+
+      let receivedInput: any;
+      setNativeAiTaskHandler(async (_taskType, input) => {
+        receivedInput = input;
+        return `Summary of: ${input.text}`;
+      });
+
+      const res = await executeTool(
+        db,
+        "summarize_text",
+        {
+          text: "Article text here",
+          overridePrompt: "Custom summarizer prompt",
+        },
+        "server:main",
+      );
+
+      expect(res).toBe("Summary of: Article text here");
+      expect(receivedInput).toEqual(
+        expect.objectContaining({
+          text: "Article text here",
+          overridePrompt: "Custom summarizer prompt",
+        }),
+      );
+      setNativeAiTaskHandler(null);
+    });
   });
 });

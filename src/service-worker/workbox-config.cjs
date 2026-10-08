@@ -29,6 +29,7 @@ module.exports = {
     "tsconfig.json",
     "package-lock.json",
     "**/routes.json",
+    "files/**",
   ],
   swDest: "dist/public/service-worker.js",
   sourcemap: false,
@@ -43,7 +44,8 @@ module.exports = {
   navigateFallback: "index.html",
   navigateFallbackAllowlist: [
     /^\/$/,
-    /^\/(chat|files|pages|tasks|settings)(?:\/.*)?$/,
+    /^(?:\/[^/]+)*\/$/,
+    /^(?:\/[^/]+)*\/(chat|files|pages|tasks|settings)(?:\/.*)?$/,
   ],
   navigateFallbackDenylist: [
     /\/assets\//,

@@ -44,6 +44,10 @@ describe("service-worker fetch proxy", () => {
       this._bodySource = body;
     }
 
+    get body(): any {
+      return this._bodySource;
+    }
+
     async arrayBuffer(): Promise<ArrayBuffer> {
       if (
         this._bodySource &&
@@ -241,12 +245,62 @@ describe("service-worker fetch proxy", () => {
     expect(networkFetch).not.toHaveBeenCalled();
   });
 
-  it("intercepts same-origin navigation requests to inject Origin-Agent-Cluster", async () => {
-    const navigationRequest = createWorkspaceImageRequest({
+  it("serves SPA app shell (index.html) with Origin-Agent-Cluster for app route navigation requests (e.g. /files/...)", async () => {
+    const navigationRequest = {
+      url: `${globalThis.location.origin}/files/main/~/docs/example/article.html`,
       method: "GET",
       mode: "navigate",
       destination: "document",
+      headers: new TestHeaders(),
+    };
+
+    const response = await dispatchFetch(navigationRequest);
+
+    expect(networkFetch).toHaveBeenCalledWith(
+      `${globalThis.location.origin}/index.html`,
+    );
+    expect(response.headers.get("Origin-Agent-Cluster")).toBe("?1");
+  });
+
+  it("serves app shell from cache when available for app route navigation requests", async () => {
+    const cachedShell = new TestResponse("cached-app-shell", {
+      status: 200,
+      headers: { "Content-Type": "text/html; charset=utf-8" },
     });
+    const matchMock = jest.fn(async () => cachedShell);
+    Object.defineProperty(globalThis, "caches", {
+      configurable: true,
+      writable: true,
+      value: { match: matchMock },
+    });
+
+    try {
+      const navigationRequest = {
+        url: `${globalThis.location.origin}/files/main/~/docs/example/article.html`,
+        method: "GET",
+        mode: "navigate",
+        destination: "document",
+        headers: new TestHeaders(),
+      };
+
+      const response = await dispatchFetch(navigationRequest);
+
+      expect(networkFetch).not.toHaveBeenCalled();
+      expect(await response.text()).toBe("cached-app-shell");
+      expect(response.headers.get("Origin-Agent-Cluster")).toBe("?1");
+    } finally {
+      delete (globalThis as any).caches;
+    }
+  });
+
+  it("intercepts non-app-route same-origin navigation requests to inject Origin-Agent-Cluster", async () => {
+    const navigationRequest = {
+      url: `${globalThis.location.origin}/standalone-document.html`,
+      method: "GET",
+      mode: "navigate",
+      destination: "document",
+      headers: new TestHeaders(),
+    };
 
     const response = await dispatchFetch(navigationRequest);
 
@@ -261,11 +315,13 @@ describe("service-worker fetch proxy", () => {
         headers: { "Origin-Agent-Cluster": "?0" },
       }) as unknown as Response,
     );
-    const navigationRequest = createWorkspaceImageRequest({
+    const navigationRequest = {
+      url: `${globalThis.location.origin}/standalone-document.html`,
       method: "GET",
       mode: "navigate",
       destination: "document",
-    });
+      headers: new TestHeaders(),
+    };
 
     const response = await dispatchFetch(navigationRequest);
 

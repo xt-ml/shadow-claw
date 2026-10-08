@@ -1,8 +1,10 @@
 /// <reference types="@types/serviceworker" />
 
 import {
+  applyBasePath,
   getDeploymentNamespace,
   getWorkspaceRouteRequestPath,
+  isPossibleAppRoute,
 } from "../core/app-routes.js";
 import { shouldBypassFetchProxy } from "./fetch-proxy-rules.js";
 
@@ -131,6 +133,26 @@ function isNavigationRequest(request: Request): boolean {
   return request.mode === "navigate" || request.destination === "document";
 }
 
+function ensureOriginAgentClusterHeader(response: Response): Response {
+  if (response.headers.get("Origin-Agent-Cluster")) {
+    return response;
+  }
+
+  const headers: Record<string, string> = {};
+  response.headers.forEach((value, key) => {
+    headers[key] = value;
+  });
+  headers["Origin-Agent-Cluster"] = "?1";
+
+  const body = (response as any).body ?? (response as any)._bodySource;
+
+  return new Response(body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 // GitHub Pages (and other static hosts) cannot send the Origin-Agent-Cluster
 // response header, which Firefox requires to origin-isolate the page (Chrome
 // isolates HTTPS origins automatically). Once this service worker controls
@@ -142,21 +164,42 @@ async function fetchWithOriginAgentCluster(
   request: Request,
 ): Promise<Response> {
   const response = await fetch(request);
-  if (response.headers.get("Origin-Agent-Cluster")) {
-    return response;
+
+  return ensureOriginAgentClusterHeader(response);
+}
+
+async function fetchAppShellWithOriginAgentCluster(): Promise<Response> {
+  const shellPath = applyBasePath("index.html");
+  const shellUrl = new URL(shellPath, location.origin);
+
+  let response: Response | undefined;
+  if (typeof caches !== "undefined") {
+    try {
+      response =
+        (await caches.match(shellUrl.href)) ||
+        (await caches.match(shellPath)) ||
+        (await caches.match("index.html"));
+    } catch {
+      // Ignore CacheStorage lookup errors and fall back to network fetch
+    }
   }
 
-  const headers: Record<string, string> = {};
-  response.headers.forEach((value, key) => {
-    headers[key] = value;
-  });
-  headers["Origin-Agent-Cluster"] = "?1";
+  if (!response) {
+    try {
+      response = await fetch(shellUrl.href);
+    } catch (err) {
+      if (typeof caches !== "undefined") {
+        try {
+          response = (await caches.match("index.html")) || undefined;
+        } catch {}
+      }
+      if (!response) {
+        throw err;
+      }
+    }
+  }
 
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
+  return ensureOriginAgentClusterHeader(response);
 }
 
 // On every SW startup (including after the browser terminates and restarts the SW
@@ -204,6 +247,12 @@ self.addEventListener("fetch", (event: FetchEvent) => {
   const requestUrl = new URL(event.request.url);
   if (requestUrl.origin === location.origin) {
     if (isNavigationRequest(event.request)) {
+      if (isPossibleAppRoute(requestUrl.pathname)) {
+        event.respondWith(fetchAppShellWithOriginAgentCluster());
+
+        return;
+      }
+
       event.respondWith(fetchWithOriginAgentCluster(event.request));
 
       return;

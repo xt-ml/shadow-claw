@@ -37,6 +37,29 @@ describe("workbox runtime caching rules", () => {
     ).toBe(true);
     expect(allowlist.some((pattern) => pattern.test("/settings"))).toBe(true);
     expect(allowlist.some((pattern) => pattern.test("/chat/main/"))).toBe(true);
+
+    // Subpath deployments (e.g. GitHub Pages /shadow-claw/)
+    expect(
+      allowlist.some((pattern) =>
+        pattern.test("/shadow-claw/files/main/README.md"),
+      ),
+    ).toBe(true);
+    expect(
+      allowlist.some((pattern) =>
+        pattern.test("/shadow-claw/files/main/~/docs/example/article.html"),
+      ),
+    ).toBe(true);
+    expect(allowlist.some((pattern) => pattern.test("/shadow-claw/"))).toBe(
+      true,
+    );
+    expect(
+      allowlist.some((pattern) => pattern.test("/shadow-claw/chat/main/")),
+    ).toBe(true);
+  });
+
+  it("excludes files/** from precache glob patterns so user files are not treated as core app assets", () => {
+    const globIgnores = (workboxConfig as any).globIgnores ?? [];
+    expect(globIgnores).toContain("files/**");
   });
 
   it("does not allow SPA navigation fallback for non-app routes", () => {

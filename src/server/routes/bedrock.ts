@@ -23,6 +23,12 @@ import {
 import { fromNodeProviderChain, fromSSO } from "@aws-sdk/credential-providers";
 
 import { getFirstHeaderValue } from "../utils/proxy-helpers.js";
+import {
+  cacheAdaptiveThinkingCapability,
+  supportsAdaptiveThinking,
+} from "./bedrock-adaptive.js";
+
+export { supportsAdaptiveThinking };
 
 import type {
   ConverseCommandInput,
@@ -35,7 +41,6 @@ import type { Express } from "express";
 
 const BEDROCK_REGION = env.BEDROCK_REGION || "";
 const BEDROCK_PROFILE = env.BEDROCK_PROFILE || "";
-const ADAPTIVE_THINKING_CAPABILITY_BY_MODEL_ID = new Map<string, boolean>();
 
 function getBedrockRuntimeOptions(req: any): {
   region: string;
@@ -368,82 +373,6 @@ function effortFromBudget(
   }
 
   return "low";
-}
-
-function inferAdaptiveThinkingCapability(value: unknown): boolean | undefined {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    return undefined;
-  }
-
-  const id = value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-
-  if (
-    id.includes("claude-sonnet-5") ||
-    id.includes("claude-opus-4-7") ||
-    id.includes("claude-opus-5") ||
-    id.includes("claude-opus-4-8") ||
-    id.includes("claude-mythos-5")
-  ) {
-    return true;
-  }
-
-  if (id.includes("claude-sonnet-4-6")) {
-    return false;
-  }
-
-  return undefined;
-}
-
-function cacheAdaptiveThinkingCapability(
-  modelId: unknown,
-  modelName?: unknown,
-): void {
-  if (typeof modelId !== "string" || modelId.trim().length === 0) {
-    return;
-  }
-
-  const byId = inferAdaptiveThinkingCapability(modelId);
-  const byName = inferAdaptiveThinkingCapability(modelName);
-  const inferred = byName ?? byId;
-
-  if (typeof inferred === "boolean") {
-    ADAPTIVE_THINKING_CAPABILITY_BY_MODEL_ID.set(
-      modelId.toLowerCase(),
-      inferred,
-    );
-  }
-}
-
-function supportsAdaptiveThinking(
-  modelId: string,
-  resolvedModelId: string,
-): boolean {
-  const raw = modelId.toLowerCase();
-  const resolved = resolvedModelId.toLowerCase();
-
-  if (ADAPTIVE_THINKING_CAPABILITY_BY_MODEL_ID.has(raw)) {
-    return ADAPTIVE_THINKING_CAPABILITY_BY_MODEL_ID.get(raw) === true;
-  }
-
-  if (ADAPTIVE_THINKING_CAPABILITY_BY_MODEL_ID.has(resolved)) {
-    return ADAPTIVE_THINKING_CAPABILITY_BY_MODEL_ID.get(resolved) === true;
-  }
-
-  const inferredRaw = inferAdaptiveThinkingCapability(raw);
-  if (typeof inferredRaw === "boolean") {
-    return inferredRaw;
-  }
-
-  const inferredResolved = inferAdaptiveThinkingCapability(resolved);
-  if (typeof inferredResolved === "boolean") {
-    return inferredResolved;
-  }
-
-  return false;
 }
 
 function buildBedrockModelRequestFields(

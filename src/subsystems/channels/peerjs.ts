@@ -191,8 +191,8 @@ export class PeerJsChannel implements Channel {
 
   /** Handler for inbound multi-party room notifications (`room/*`). */
   private _roomNotificationHandler:
-    | ((fromPeerId: string, method: string, params: unknown) => void)
-    | null = null;
+    ((fromPeerId: string, method: string, params: unknown) => void) | null =
+    null;
   /** Per-connection task managers keyed by remote peer ID */
   private _taskManagers = new Map<string, PeerTaskManager>();
   /** Inbound multi-chunk file transfers keyed by transferId */

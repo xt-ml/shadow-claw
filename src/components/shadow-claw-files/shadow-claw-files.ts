@@ -1635,9 +1635,7 @@ export class ShadowClawFiles extends ShadowClawElement {
 
       const finish = (
         result:
-          | { action: "overwrite" }
-          | { action: "rename"; name: string }
-          | null,
+          { action: "overwrite" } | { action: "rename"; name: string } | null,
       ) => {
         if (resolved) {
           return;

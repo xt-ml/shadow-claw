@@ -17,13 +17,7 @@ export {
 let cachedBasePath: string | null = null;
 
 export type ShadowClawPageRoute =
-  | "chat"
-  | "files"
-  | "tasks"
-  | "pages"
-  | "settings"
-  | "tools"
-  | "channels";
+  "chat" | "files" | "tasks" | "pages" | "settings" | "tools" | "channels";
 
 export interface ShadowClawAppRoute {
   page: ShadowClawPageRoute;

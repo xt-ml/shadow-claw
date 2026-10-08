@@ -315,10 +315,7 @@ export type FunctionCall =
  * - `{ "$dataModel": "/key" }` — resolved by the runtime but not spec-compliant.
  */
 export type DynamicString =
-  | StaticString
-  | PathRef
-  | DataModelRef
-  | FunctionCall;
+  StaticString | PathRef | DataModelRef | FunctionCall;
 
 /**
  * A boolean that may be resolved dynamically at render time.

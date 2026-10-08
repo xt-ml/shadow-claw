@@ -27,7 +27,7 @@ jest.unstable_mockModule("workbox-window", () => ({
 
 describe("service-worker init", () => {
   let setTimeoutSpy: jest.SpiedFunction<typeof globalThis.setTimeout>;
-  let requestDialog: jest.Mock<any>;
+  let requestDialog: jest.Mock<(...args: any[]) => Promise<any>>;
   let querySpy: jest.SpiedFunction<typeof document.querySelector>;
 
   beforeEach(() => {

@@ -204,14 +204,12 @@ export async function reconnectMcpOAuth(
 
   if (ref.accountId) {
     account = serviceAccounts.find((acct) => acct.id === ref.accountId) as
-      | OAuthAccountLike
-      | undefined;
+      OAuthAccountLike | undefined;
 
     accountStore = "service";
   } else if (ref.gitAccountId) {
     account = gitAccounts.find((acct) => acct.id === ref.gitAccountId) as
-      | OAuthAccountLike
-      | undefined;
+      OAuthAccountLike | undefined;
 
     accountStore = "git";
   }

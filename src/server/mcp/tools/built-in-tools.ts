@@ -235,8 +235,7 @@ async function handleReadState(
   }
 
   const res = (await controlPlane.sendCommand?.(targetId, "read-state", {})) as
-    | { success?: boolean; data?: unknown }
-    | undefined;
+    { success?: boolean; data?: unknown } | undefined;
   return {
     content: [
       {

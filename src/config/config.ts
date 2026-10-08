@@ -38,8 +38,12 @@ export const MODEL_OUTPUT_LIMITS: Array<{
   pattern: string;
   maxTokens: number;
 }> = [
-  // Anthropic Claude Fable 5 — 128k max output (1M context)
+  // Anthropic Claude Fable 5 / Fable family — 128k max output (1M context)
   { pattern: "claude-fable-5", maxTokens: 128000 },
+  { pattern: "claude-fable", maxTokens: 128000 },
+  // Anthropic Claude Mythos 5 / Mythos family — 128k max output (1M context)
+  { pattern: "claude-mythos-5", maxTokens: 128000 },
+  { pattern: "claude-mythos", maxTokens: 128000 },
   // Anthropic Claude Sonnet 5 — 128k max output (1M context)
   { pattern: "claude-sonnet-5", maxTokens: 128000 },
   // Anthropic Claude Opus 5 — 128k max output (1M context); must precede claude-opus-4
@@ -50,14 +54,26 @@ export const MODEL_OUTPUT_LIMITS: Array<{
   { pattern: "claude-opus-4", maxTokens: 128000 },
   // Anthropic Claude Sonnet 4.x — 64k max output
   { pattern: "claude-sonnet-4", maxTokens: 64000 },
+  // Anthropic Claude Haiku 5 — 128k max output
+  { pattern: "claude-haiku-5", maxTokens: 128000 },
   // Anthropic Claude Haiku 4.x — 64k max output
   { pattern: "claude-haiku-4", maxTokens: 64000 },
   // Anthropic Claude 3.5 family — 8192 max output
   { pattern: "claude-3-5", maxTokens: 8192 },
   // Anthropic Claude 3 family — 4096 max output
   { pattern: "claude-3", maxTokens: 4096 },
+  // OpenAI GPT-6 series (Astra, Sol, Luna) — up to 128k max output
+  { pattern: "gpt-6-luna", maxTokens: 64000 },
+  { pattern: "gpt-6-sol", maxTokens: 128000 },
+  { pattern: "gpt-6-astra", maxTokens: 128000 },
+  { pattern: "astra", maxTokens: 128000 },
+  { pattern: "gpt-6", maxTokens: 128000 },
   // OpenAI GPT-5 variants — 128k max output
   { pattern: "gpt-5", maxTokens: 128000 },
+  // Google Gemini 3.x and 2.5/2.0 families — 65536 max output
+  { pattern: "gemini-3", maxTokens: 65536 },
+  { pattern: "gemini-2.5", maxTokens: 65536 },
+  { pattern: "gemini-2.0", maxTokens: 65536 },
   // OpenAI GPT-4o variants — 16384 max output
   { pattern: "gpt-4o", maxTokens: 16384 },
   // OpenAI GPT-4.1 — 32768 max output (1M context); must precede gpt-4 catch-all
@@ -332,18 +348,10 @@ export interface ProviderConfig {
 export type ProviderAuthMode = "token" | "basic" | "oauth";
 
 export type ServiceType =
-  | "http_api"
-  | "git_remote"
-  | "mcp_remote"
-  | "webmcp_local";
+  "http_api" | "git_remote" | "mcp_remote" | "webmcp_local";
 
 export type AuthType =
-  | "none"
-  | "token"
-  | "oauth"
-  | "basic_userpass"
-  | "custom_header"
-  | "ssh_key";
+  "none" | "token" | "oauth" | "basic_userpass" | "custom_header" | "ssh_key";
 
 export type OAuthClientAuthMethod = "request_body" | "basic_header";
 
@@ -782,7 +790,7 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
     format: "anthropic",
     apiKeyHeader: "Authorization",
     headers: {},
-    defaultModel: "anthropic.claude-sonnet-4-6-v1:0",
+    defaultModel: "anthropic.claude-sonnet-5-v1:0",
     modelsUrl: BEDROCK_PROXY_MODELS_URL,
     requiresApiKey: false,
     supportsStreaming: true,

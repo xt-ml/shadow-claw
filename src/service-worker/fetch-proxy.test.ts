@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 describe("service-worker fetch proxy", () => {
   let fetchListener: ((event: any) => void) | null = null;
   let messageListener: ((event: any) => void) | null = null;
-  let networkFetch: jest.Mock<any>;
+  let networkFetch: jest.Mock<(...args: any[]) => Promise<any>>;
 
   const imageBytes = new Uint8Array([255, 216, 255, 217]);
 

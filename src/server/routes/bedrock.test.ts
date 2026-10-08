@@ -4,6 +4,7 @@ describe("bedrock-routes", () => {
   let routes: Map<string, any>;
   let mockBedrockSend: any;
   let mockBedrockRuntimeSend: any;
+  let supportsAdaptiveThinking: any;
 
   function createResponse() {
     const res: any = {
@@ -77,7 +78,9 @@ describe("bedrock-routes", () => {
       getFirstHeaderValue: (val: any) => (Array.isArray(val) ? val[0] : val),
     }));
 
-    const { registerBedrockRoutes } = await import("./bedrock.js");
+    const { registerBedrockRoutes, supportsAdaptiveThinking: sat } =
+      await import("./bedrock.js");
+    supportsAdaptiveThinking = sat;
 
     const app = {
       get: jest.fn((path: string, handler: any) => {
@@ -372,6 +375,30 @@ describe("bedrock-routes", () => {
     expect(command.input.additionalModelRequestFields).toEqual({
       thinking: { type: "enabled", budget_tokens: 2048 },
     });
+  });
+
+  it("infers adaptive thinking capability for Claude Fable 5 and 5.1", () => {
+    expect(
+      supportsAdaptiveThinking(
+        "anthropic.claude-fable-5-v1:0",
+        "anthropic.claude-fable-5-v1:0",
+      ),
+    ).toBe(true);
+    expect(supportsAdaptiveThinking("claude-fable-5", "claude-fable-5")).toBe(
+      true,
+    );
+    expect(
+      supportsAdaptiveThinking("claude-fable-5-1", "claude-fable-5-1"),
+    ).toBe(true);
+  });
+
+  it("does NOT infer Claude adaptive thinking for non-Anthropic models (e.g. Astra)", () => {
+    expect(
+      supportsAdaptiveThinking(
+        "openai.gpt-6-astra-v1:0",
+        "openai.gpt-6-astra-v1:0",
+      ),
+    ).toBe(false);
   });
 
   it("uses adaptive-thinking capability learned from /models profile name signal", async () => {

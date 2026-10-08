@@ -19,11 +19,7 @@ export type ChannelType = KnownChannelType | (string & {});
 export type ChannelTypingCallback = (groupId: string, typing: boolean) => void;
 
 export type KnownChannelType =
-  | "browser"
-  | "imessage"
-  | "peerjs"
-  | "room"
-  | "telegram";
+  "browser" | "imessage" | "peerjs" | "room" | "telegram";
 
 export interface Channel {
   ensureConnected?(force?: boolean): void;

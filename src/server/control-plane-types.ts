@@ -123,7 +123,4 @@ export type ClientToServerType =
   | "backup:ready";
 
 export type ServerToClientType =
-  | "command:execute"
-  | "backup:ack"
-  | "server:registered"
-  | "server:error";
+  "command:execute" | "backup:ack" | "server:registered" | "server:error";

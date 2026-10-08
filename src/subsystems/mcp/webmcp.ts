@@ -440,8 +440,7 @@ export function getWebMcpEventTarget(
  */
 export function addWebMcpEventListener<
   T extends "toolactivated" | "toolcancel" | string =
-    | "toolactivated"
-    | "toolcancel",
+    "toolactivated" | "toolcancel",
 >(
   type: T,
   listener: (

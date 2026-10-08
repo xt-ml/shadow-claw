@@ -2,12 +2,7 @@ import { modelRegistry } from "../subsystems/providers/model-registry.js";
 import { getMimeType } from "../utils/mime.js";
 
 export type AttachmentCategory =
-  | "text"
-  | "image"
-  | "audio"
-  | "video"
-  | "document"
-  | "file";
+  "text" | "image" | "audio" | "video" | "document" | "file";
 
 export interface ModelAttachmentCapabilities {
   images: boolean;
@@ -108,12 +103,18 @@ export function getModelAttachmentCapabilities(
   const multimodalPatterns = [
     "gpt-4o",
     "gpt-4.1",
+    "gpt-5",
+    "gpt-6",
+    "astra",
     "claude-3",
     "claude-4",
+    "claude-5",
     // Claude 4-family uses "claude-<name>-<version>" (e.g. claude-sonnet-4)
     "claude-sonnet",
     "claude-haiku",
     "claude-opus",
+    "claude-fable",
+    "claude-mythos",
     "gemini",
     "omni",
     "llava",
@@ -126,9 +127,8 @@ export function getModelAttachmentCapabilities(
     !isExplicitlyNonVision &&
     multimodalPatterns.some((pattern) => normalizedModelId.includes(pattern));
 
-  // Claude 3.5+, 3.7+, and Claude 4 family all support PDFs natively via Anthropic's
-  // document content block. Claude 4 models follow the "claude-<name>-4" naming pattern
-  // (e.g. "claude-sonnet-4", "claude-haiku-4") in addition to "claude-4-*" variants.
+  // Claude 3.5+, 3.7+, 4, and 5 families, Gemini, and frontier GPT models (GPT-4.1, GPT-5, GPT-6, Astra)
+  // support PDFs/documents natively.
   const supportsDocuments =
     !isExplicitlyNonVision &&
     (normalizedModelId.includes("claude-3-5") ||
@@ -136,8 +136,15 @@ export function getModelAttachmentCapabilities(
       normalizedModelId.includes("claude-3-7") ||
       normalizedModelId.includes("claude-3.7") ||
       normalizedModelId.includes("claude-4") ||
+      normalizedModelId.includes("claude-5") ||
+      normalizedModelId.includes("claude-fable") ||
+      normalizedModelId.includes("claude-mythos") ||
       normalizedModelId.includes("gemini") ||
-      /claude-(?:sonnet|haiku|opus)-\d/.test(normalizedModelId));
+      normalizedModelId.includes("gpt-4.1") ||
+      normalizedModelId.includes("gpt-5") ||
+      normalizedModelId.includes("gpt-6") ||
+      normalizedModelId.includes("astra") ||
+      /claude-(?:sonnet|haiku|opus|fable|mythos)-\d/.test(normalizedModelId));
 
   if (heuristicMatch) {
     return {

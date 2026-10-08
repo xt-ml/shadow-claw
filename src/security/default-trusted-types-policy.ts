@@ -49,8 +49,7 @@ export function ensureDefaultTrustedTypesPolicy(): void {
   }
 
   const factory = Reflect.get(globalThis, "trustedTypes") as
-    | TrustedTypesFactoryLike
-    | undefined;
+    TrustedTypesFactoryLike | undefined;
 
   if (!factory || typeof factory.createPolicy !== "function") {
     return;

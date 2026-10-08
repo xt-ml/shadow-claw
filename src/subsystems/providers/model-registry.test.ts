@@ -513,4 +513,39 @@ describe("ModelRegistry", () => {
       (globalThis as any).fetch = originalFetch;
     }
   });
+
+  it("extracts supportsDocumentInput when input_modalities includes document or pdf", async () => {
+    const mockProvider: any = {
+      id: "test_provider",
+      name: "Test",
+      baseUrl: "http://test",
+      format: "openai",
+      apiKeyHeader: "Authorization",
+      headers: {},
+      defaultModel: "test-model",
+      modelsUrl: "http://test/models",
+    };
+
+    const originalFetch = (globalThis as any).fetch;
+    (globalThis as any).fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        data: [
+          {
+            id: "frontier-agent-1",
+            context_length: 1000000,
+            input_modalities: ["text", "image", "document"],
+          },
+        ],
+      }),
+    });
+
+    try {
+      await modelRegistry.fetchModelInfo(mockProvider);
+      const info = modelRegistry.getModelInfo("frontier-agent-1");
+      expect(info?.supportsDocumentInput).toBe(true);
+    } finally {
+      (globalThis as any).fetch = originalFetch;
+    }
+  });
 });

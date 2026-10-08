@@ -3,7 +3,7 @@
 > The LLM provider registry — multiple API formats, streaming, key management,
 > and the special browser Prompt API path.
 
-**Source:** `src/config/config.ts` · `src/subsystems/providers/providers.ts` · `src/subsystems/providers/prompt-api-provider.ts` · `src/subsystems/providers/model-registry.ts`
+**Source:** `src/config/config.ts` · `src/config/model-catalog.ts` · `src/subsystems/providers/providers.ts` · `src/subsystems/providers/prompt-api-provider.ts` · `src/subsystems/providers/model-registry.ts` · `src/server/routes/bedrock-adaptive.ts`
 
 ## Provider Architecture
 
@@ -202,17 +202,29 @@ For providers that do not emit rate limit headers, users can configure a fixed `
 
 ## Model Registry
 
-**File:** `src/subsystems/providers/model-registry.ts`
+**File:** `src/subsystems/providers/model-registry.ts` · `src/config/model-catalog.ts`
 
-The `ModelRegistry` is a dynamic metadata store that caches model information fetched from provider APIs (e.g., OpenRouter's `/v1/models` or HuggingFace Router).
+The `ModelRegistry` is a metadata store that combines dynamic information fetched from provider APIs (e.g., OpenRouter's `/v1/models` or HuggingFace Router) with a centralized static fallback catalog (`STATIC_MODEL_CATALOG` in `src/config/model-catalog.ts`).
 
 ### Metadata Fields
 
 - `contextWindow`: Total tokens (input + output) allowed.
 - `maxOutput`: Provider-enforced completion token limit.
 - `supportsTools`: Whether the model explicitly supports tool calling.
-- `inputModalities` / `outputModalities`: Modalities supported (text, image, audio, video).
+- `inputModalities` / `outputModalities`: Modalities supported (text, image, audio, video, document/pdf).
+- `supportsImageInput` / `supportsDocumentInput`: Explicit input format capabilities extracted from API schemas or static catalog definitions.
 - `routesByRequestFeatures`: Whether the provider (like `openrouter/free`) adapts routing based on request content.
+- `supportsPromptCaching`: Whether the model supports ephemeral cache control.
+
+### Static Model Catalog & Seeding
+
+`STATIC_MODEL_CATALOG` defines declarative baseline metadata for canonical frontier models across major ecosystems:
+
+- **Anthropic Claude 5**: Fable 5 (1M context / 128k output), Sonnet 5 (1M / 128k), Opus 5 (1M / 128k), Haiku 5 (1M / 128k), Mythos 5 (1M / 128k) with native document and adaptive thinking support.
+- **OpenAI GPT-6 Series**: Astra (1.05M context / 128k output, full multimodal), Sol (1.05M / 128k), Luna (1M / 64k), and GPT-5 (400k / 128k).
+- **Google Gemini**: Gemini 3.5 Pro (2M context / 64k output), Gemini 3.5 Flash / 3.8 Flash (1M / 64k), and Gemini 2.5 Pro / Flash (1M / 64k).
+
+`seedStaticModelCatalog()` (or `modelRegistry.seedStaticCatalog()`) populates the registry so that offline, local, or direct providers without a `/models` endpoint immediately resolve accurate context windows, output limits, and attachment capabilities without relying solely on ad-hoc regexes.
 
 ### Capability Detection
 
@@ -220,7 +232,7 @@ The registry provides the backbone for:
 
 - **Context Limits**: `getContextLimit()` resolves limits by checking the registry first, then built-in family patterns, then generic fallbacks.
 - **Tooling**: Adapter logic uses registry hints to decide whether to format and send tools.
-- **Multimodal Routing**: The `AttachmentCapabilities` system relies on registry modalities to choose between native and fallback delivery.
+- **Multimodal Routing**: The `AttachmentCapabilities` system relies on registry modalities (`supportsImageInput`, `supportsDocumentInput`) to choose between native and fallback delivery.
 
 ### Dynamic Fetching
 
@@ -262,6 +274,11 @@ The Bedrock client is initialized with:
 - `requestTimeout: 60 000 ms` — prevents hanging on slow inference.
 
 On `ThrottlingException` (HTTP 429) the proxy returns `429` to the browser so the client-side rate limiter can apply `retry-after` back-off rather than treating the response as a generic `502`.
+
+### Default Model & Adaptive Thinking
+
+- **Default Model**: Configured in `PROVIDERS.bedrock_proxy` as `anthropic.claude-sonnet-5-v1:0` (1M context window, 128k output).
+- **Adaptive Thinking**: Resolved via `supportsAdaptiveThinking()` in `src/server/routes/bedrock-adaptive.ts`. Claude Sonnet 5, Opus 5 (including 4.7 / 4.8), Mythos 5, and Fable 5 models translate legacy `thinking: { type: "enabled", budget_tokens }` requests into native Bedrock `additionalModelRequestFields.thinking: { type: "adaptive" }` with dynamic effort mapping (`output_config.effort`), while preserving standard thinking configurations on earlier Claude models.
 
 ### Gemini and Vertex AI
 

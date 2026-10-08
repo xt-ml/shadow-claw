@@ -115,6 +115,30 @@ describe("attachment-capabilities", () => {
       expect(caps.source).toBe("heuristic");
     });
 
+    it("heuristic: recognizes Claude Fable and Mythos as multimodal with document support", () => {
+      const fableCaps = getModelAttachmentCapabilities("claude-fable-5");
+      expect(fableCaps.images).toBe(true);
+      expect(fableCaps.documents).toBe(true);
+      expect(fableCaps.source).toBe("heuristic");
+
+      const mythosCaps = getModelAttachmentCapabilities("claude-mythos-5");
+      expect(mythosCaps.images).toBe(true);
+      expect(mythosCaps.documents).toBe(true);
+      expect(mythosCaps.source).toBe("heuristic");
+    });
+
+    it("heuristic: recognizes GPT-6 Astra and GPT-5 as multimodal with document support", () => {
+      const astraCaps = getModelAttachmentCapabilities("gpt-6-astra");
+      expect(astraCaps.images).toBe(true);
+      expect(astraCaps.documents).toBe(true);
+      expect(astraCaps.source).toBe("heuristic");
+
+      const gpt5Caps = getModelAttachmentCapabilities("gpt-5-preview");
+      expect(gpt5Caps.images).toBe(true);
+      expect(gpt5Caps.documents).toBe(true);
+      expect(gpt5Caps.source).toBe("heuristic");
+    });
+
     it("heuristic: gpt-4o model gets documents=false (no Claude heuristic)", () => {
       const caps = getModelAttachmentCapabilities("gpt-4o");
       expect(caps.images).toBe(true);

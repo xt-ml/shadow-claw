@@ -473,14 +473,12 @@ export async function seedStaticMainSite(
     try {
       await deleteGroupDirectory(db, groupId, ".agents/skills/main");
     } catch (error) {
-      if (
-        !(
-          error &&
-          typeof error === "object" &&
-          "name" in error &&
-          error.name === "NotFoundError"
-        )
-      ) {
+      if (!(
+        error &&
+        typeof error === "object" &&
+        "name" in error &&
+        error.name === "NotFoundError"
+      )) {
         throw error;
       }
     }
@@ -488,14 +486,12 @@ export async function seedStaticMainSite(
       await deleteGroupDirectory(db, groupId, ".agents/tools/main");
     } catch (error) {
       // A fresh workspace has no bundled-tool directory to remove yet.
-      if (
-        !(
-          error &&
-          typeof error === "object" &&
-          "name" in error &&
-          error.name === "NotFoundError"
-        )
-      ) {
+      if (!(
+        error &&
+        typeof error === "object" &&
+        "name" in error &&
+        error.name === "NotFoundError"
+      )) {
         throw error;
       }
     }

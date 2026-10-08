@@ -13,8 +13,19 @@ import {
 
 import { setAssistantName } from "../../core/orchestrator/utils/operations/provider.js";
 import { getDb } from "../../db/db.js";
+import { getConfig } from "../../db/getConfig.js";
+import { setConfig } from "../../db/setConfig.js";
+import {
+  DEFAULT_ALLOWED_IFRAME_HOST_PATTERNS,
+  setAllowedIframeHostPatterns,
+} from "../../security/iframe-sanitizer.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
-import { showError, showInfo, showSuccess } from "../../ui/toast.js";
+import {
+  showError,
+  showInfo,
+  showSuccess,
+  showWarning,
+} from "../../ui/toast.js";
 import { formatDateForFilename } from "../../utils/utils.js";
 import { isTruthyConfigValue } from "../../utils/parseBooleanConfig.js";
 import { getPrerenderSkeletonDefault } from "../../utils/prerenderSkeletonDefault.js";
@@ -580,7 +591,6 @@ export class ShadowClawSettings extends ShadowClawElement {
     }
 
     try {
-      const { setConfig } = await import("../../db/setConfig.js");
       await setConfig(
         this.db,
         CONFIG_KEYS.ACTIVITY_LOG_DISK_LOGGING_ENABLED,
@@ -608,7 +618,6 @@ export class ShadowClawSettings extends ShadowClawElement {
     }
 
     try {
-      const { setConfig } = await import("../../db/setConfig.js");
       await setConfig(
         this.db,
         CONFIG_KEYS.CHAT_SPLIT_VIEW_ENABLED,
@@ -650,7 +659,6 @@ export class ShadowClawSettings extends ShadowClawElement {
     }
 
     try {
-      const { setConfig } = await import("../../db/setConfig.js");
       await setConfig(
         this.db,
         CONFIG_KEYS.OVERRIDE_PRERENDER_SKELETON,
@@ -680,7 +688,6 @@ export class ShadowClawSettings extends ShadowClawElement {
     const sec = Math.max(0, Math.min(valSec, 86400));
 
     try {
-      const { setConfig } = await import("../../db/setConfig.js");
       await setConfig(
         this.db,
         CONFIG_KEYS.PAGES_AUTO_REFRESH_INTERVAL,
@@ -711,7 +718,6 @@ export class ShadowClawSettings extends ShadowClawElement {
     }
 
     try {
-      const { setConfig } = await import("../../db/setConfig.js");
       await setConfig(
         this.db,
         CONFIG_KEYS.SIDEBAR_CHAT_HIDDEN,
@@ -742,7 +748,6 @@ export class ShadowClawSettings extends ShadowClawElement {
     }
 
     try {
-      const { setConfig } = await import("../../db/setConfig.js");
       await setConfig(
         this.db,
         CONFIG_KEYS.SIDEBAR_FILES_HIDDEN,
@@ -773,7 +778,6 @@ export class ShadowClawSettings extends ShadowClawElement {
     }
 
     try {
-      const { setConfig } = await import("../../db/setConfig.js");
       await setConfig(
         this.db,
         CONFIG_KEYS.SIDEBAR_PAGES_HIDDEN,
@@ -804,7 +808,6 @@ export class ShadowClawSettings extends ShadowClawElement {
     }
 
     try {
-      const { setConfig } = await import("../../db/setConfig.js");
       await setConfig(
         this.db,
         CONFIG_KEYS.SIDEBAR_TASKS_HIDDEN,
@@ -839,7 +842,6 @@ export class ShadowClawSettings extends ShadowClawElement {
       '[data-setting="assistant-name-input"]',
     ) as HTMLInputElement | null;
     if (nameInput) {
-      const { getConfig } = await import("../../db/getConfig.js");
       const storedAssistantName = await getConfig(
         this.db,
         CONFIG_KEYS.ASSISTANT_NAME,
@@ -854,7 +856,6 @@ export class ShadowClawSettings extends ShadowClawElement {
         ASSISTANT_NAME;
     }
 
-    const { getConfig } = await import("../../db/getConfig.js");
     const rawActivityLogDiskLoggingEnabled = (await getConfig(
       this.db,
       CONFIG_KEYS.ACTIVITY_LOG_DISK_LOGGING_ENABLED,
@@ -1035,12 +1036,8 @@ export class ShadowClawSettings extends ShadowClawElement {
         storedDomHosts.trim().length > 0
       ) {
         domHostsTextarea.value = storedDomHosts;
-        const { setAllowedIframeHostPatterns } =
-          await import("../../security/iframe-sanitizer.js");
         setAllowedIframeHostPatterns(storedDomHosts);
       } else {
-        const { DEFAULT_ALLOWED_IFRAME_HOST_PATTERNS } =
-          await import("../../security/iframe-sanitizer.js");
         domHostsTextarea.value =
           DEFAULT_ALLOWED_IFRAME_HOST_PATTERNS.join("\n");
       }
@@ -1248,7 +1245,6 @@ export class ShadowClawSettings extends ShadowClawElement {
 
     const name = nameInput.value.trim();
     if (!name) {
-      const { showWarning } = await import("../../ui/toast.js");
       showWarning("Please enter a name", 3000);
 
       return;
@@ -1262,7 +1258,6 @@ export class ShadowClawSettings extends ShadowClawElement {
         this.orchestrator = orchestrator;
         await setAssistantName(orchestrator, this.db, name);
       } else {
-        const { setConfig } = await import("../../db/setConfig.js");
         await setConfig(this.db, CONFIG_KEYS.ASSISTANT_NAME, name);
       }
     } catch (e) {
@@ -1305,7 +1300,6 @@ export class ShadowClawSettings extends ShadowClawElement {
     ) as HTMLInputElement | null;
 
     try {
-      const { setConfig } = await import("../../db/setConfig.js");
       const valueToSave = lines.join("\n");
       await setConfig(
         this.db,
@@ -1337,8 +1331,6 @@ export class ShadowClawSettings extends ShadowClawElement {
         String(markdownFrontmatterTasksToggle?.checked ?? true),
       );
 
-      const { setAllowedIframeHostPatterns } =
-        await import("../../security/iframe-sanitizer.js");
       setAllowedIframeHostPatterns(lines);
 
       showSuccess("DOM iframe embed settings saved", 2500);

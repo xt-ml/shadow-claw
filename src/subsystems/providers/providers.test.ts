@@ -75,6 +75,29 @@ describe("providers.js", () => {
       expect(getContextLimit("o3-mini")).toBe(200000);
     });
 
+    it("returns 1M+ context for GPT-6 family and Astra", () => {
+      expect(getContextLimit("gpt-6-astra")).toBe(1050000);
+      expect(getContextLimit("astra")).toBe(1050000);
+      expect(getContextLimit("gpt-6-sol")).toBe(1050000);
+      expect(getContextLimit("gpt-6")).toBe(1050000);
+      expect(getContextLimit("gpt-6-luna")).toBe(1000000);
+    });
+
+    it("returns 1M context for Claude 5+ families including Fable, Sonnet 5, Opus 5, Mythos 5", () => {
+      expect(getContextLimit("claude-fable-5")).toBe(1000000);
+      expect(getContextLimit("claude-fable-5.1")).toBe(1000000);
+      expect(getContextLimit("claude-sonnet-5")).toBe(1000000);
+      expect(getContextLimit("claude-opus-5")).toBe(1000000);
+      expect(getContextLimit("claude-opus-4-8")).toBe(1000000);
+      expect(getContextLimit("claude-mythos-5")).toBe(1000000);
+    });
+
+    it("returns 1M-2M context for Gemini 2.5 and 3.x", () => {
+      expect(getContextLimit("gemini-3.5-pro")).toBe(2097152);
+      expect(getContextLimit("gemini-3.5-flash")).toBe(1048576);
+      expect(getContextLimit("gemini-3.8-flash")).toBe(1048576);
+    });
+
     it("should return correct limit for Gemini models", () => {
       expect(getContextLimit("gemini-1.5-pro")).toBe(2097152);
       expect(getContextLimit("gemini-2.0-flash")).toBe(1048576);
@@ -1240,6 +1263,12 @@ describe("providers.js", () => {
       expect(supportsPromptCaching("claude-4-sonnet")).toBe(true);
       expect(supportsPromptCaching("claude-sonnet-5")).toBe(true);
       expect(supportsPromptCaching("claude-opus-5")).toBe(true);
+    });
+
+    it("supports prompt caching for Claude Fable and Mythos 4+ and 5+", () => {
+      expect(supportsPromptCaching("claude-fable-5")).toBe(true);
+      expect(supportsPromptCaching("claude-fable-5.1")).toBe(true);
+      expect(supportsPromptCaching("claude-mythos-5")).toBe(true);
     });
 
     it("identifies AWS Bedrock inference profile IDs", () => {

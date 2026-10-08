@@ -380,9 +380,7 @@ export async function renderPageHtml(
   pageContent: string,
   pagePath: string,
   options?:
-    | { approvedScripts?: string[] | Set<string> }
-    | string[]
-    | Set<string>,
+    { approvedScripts?: string[] | Set<string> } | string[] | Set<string>,
 ): Promise<string> {
   const ext = path.extname(pagePath).toLowerCase();
   const isHtml = ext === ".html" || ext === ".htm" || ext === ".xhtml";

@@ -274,50 +274,6 @@ export class ShadowClawTasks extends ShadowClawElement {
   }
 
   /**
-   * Update the disabled/checked state of the push notifications checkbox
-   */
-  async updatePushNotificationsCheckboxState(
-    preserveCheckedIfEnabled?: boolean,
-  ): Promise<void> {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const pushInput = root.querySelector(
-      "#tasksPushNotificationsInput",
-    ) as HTMLInputElement | null;
-    if (!pushInput) {
-      return;
-    }
-
-    const scheduleInput = root.querySelector(
-      "input[name='schedule']",
-    ) as HTMLInputElement | null;
-    const scheduleVal = scheduleInput?.value.trim() ?? "";
-
-    let hasSubscription = false;
-    try {
-      const sub = await getCurrentSubscription();
-      hasSubscription = !!sub;
-    } catch {
-      hasSubscription = false;
-    }
-
-    const canEnablePush =
-      scheduleVal.length > 0 &&
-      orchestratorStore.taskServerEnabled &&
-      hasSubscription;
-
-    pushInput.disabled = !canEnablePush;
-    if (!canEnablePush) {
-      pushInput.checked = false;
-    } else if (preserveCheckedIfEnabled !== undefined) {
-      pushInput.checked = preserveCheckedIfEnabled;
-    }
-  }
-
-  /**
    * Open dialog to add a new task
    */
   handleAdd() {
@@ -1090,6 +1046,50 @@ export class ShadowClawTasks extends ShadowClawElement {
     showInfo(options.message, 4000);
 
     return false;
+  }
+
+  /**
+   * Update the disabled/checked state of the push notifications checkbox
+   */
+  async updatePushNotificationsCheckboxState(
+    preserveCheckedIfEnabled?: boolean,
+  ): Promise<void> {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const pushInput = root.querySelector(
+      "#tasksPushNotificationsInput",
+    ) as HTMLInputElement | null;
+    if (!pushInput) {
+      return;
+    }
+
+    const scheduleInput = root.querySelector(
+      "input[name='schedule']",
+    ) as HTMLInputElement | null;
+    const scheduleVal = scheduleInput?.value.trim() ?? "";
+
+    let hasSubscription = false;
+    try {
+      const sub = await getCurrentSubscription();
+      hasSubscription = !!sub;
+    } catch {
+      hasSubscription = false;
+    }
+
+    const canEnablePush =
+      scheduleVal.length > 0 &&
+      orchestratorStore.taskServerEnabled &&
+      hasSubscription;
+
+    pushInput.disabled = !canEnablePush;
+    if (!canEnablePush) {
+      pushInput.checked = false;
+    } else if (preserveCheckedIfEnabled !== undefined) {
+      pushInput.checked = preserveCheckedIfEnabled;
+    }
   }
 
   async updateTaskList(db: ShadowClawDatabase) {

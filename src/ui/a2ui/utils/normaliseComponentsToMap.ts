@@ -28,9 +28,9 @@ export function normaliseComponentsToMap(
       if (Array.isArray(spec.children)) {
         if (spec.children.length > 0 && typeof spec.children[0] === "object") {
           // Ensure it is not an array containing a template
-          if (
-            !("path" in spec.children[0] && "componentId" in spec.children[0])
-          ) {
+          if (!(
+            "path" in spec.children[0] && "componentId" in spec.children[0]
+          )) {
             walk(spec.children);
           }
         }

@@ -381,8 +381,7 @@ export async function resolveGitCredentials(
   options: ResolveGitCredentialsOptions = {},
 ): Promise<ResolvedGitCredentials> {
   const accounts = (await getConfig(db, CONFIG_KEYS.GIT_ACCOUNTS)) as
-    | GitAccount[]
-    | undefined;
+    GitAccount[] | undefined;
 
   if (Array.isArray(accounts) && accounts.length > 0) {
     return resolveFromAccounts(db, accounts, url, options);

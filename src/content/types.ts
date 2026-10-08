@@ -1,8 +1,5 @@
 export type ContentBlock =
-  | AttachmentContent
-  | TextContent
-  | ToolResultContent
-  | ToolUseContent;
+  AttachmentContent | TextContent | ToolResultContent | ToolUseContent;
 
 export type MessageAttachmentSource =
   | InlineTextAttachmentSource

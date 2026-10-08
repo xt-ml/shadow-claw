@@ -14,8 +14,7 @@ const SCHEDULED_TASK_BLOCKED_TOOLS = new Set([
 
 export function toAllowedToolNameSet(
   allowedTools:
-    | ReadonlyArray<string | { name?: unknown } | undefined>
-    | undefined,
+    ReadonlyArray<string | { name?: unknown } | undefined> | undefined,
 ): Set<string> | null {
   if (!Array.isArray(allowedTools)) {
     return null;

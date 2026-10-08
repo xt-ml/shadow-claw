@@ -1,4 +1,8 @@
 import type { ProviderConfig } from "../../config/config.js";
+import {
+  setDefaultModelRegistry,
+  seedStaticModelCatalog,
+} from "../../config/model-catalog.js";
 
 export interface ModelMetadata {
   contextWindow: number;
@@ -94,6 +98,13 @@ class ModelRegistry {
   }
 
   /**
+   * Seed registry with static fallback definitions from STATIC_MODEL_CATALOG.
+   */
+  seedStaticCatalog() {
+    seedStaticModelCatalog(this);
+  }
+
+  /**
    * Fetch model info from a provider's modelsUrl and populate the registry.
    * Handles OpenRouter and any OpenAI-compatible provider that returns
    * {data: [{id, context_length, top_provider: {max_completion_tokens}}]}
@@ -186,6 +197,13 @@ class ModelRegistry {
           inputModalities,
           "video",
         );
+        const supportsDocumentInput =
+          this.modalitiesInclude(inputModalities, "document", "pdf", "file") ||
+          (typeof model.supports_document_input === "boolean"
+            ? model.supports_document_input
+            : typeof model.supportsDocumentInput === "boolean"
+              ? model.supportsDocumentInput
+              : undefined);
         const routesByRequestFeatures =
           model.id === "openrouter/free" ||
           this.supportedParametersInclude(
@@ -228,6 +246,7 @@ class ModelRegistry {
           ...(supportsImageInput !== undefined && { supportsImageInput }),
           ...(supportsAudioInput !== undefined && { supportsAudioInput }),
           ...(supportsVideoInput !== undefined && { supportsVideoInput }),
+          ...(supportsDocumentInput !== undefined && { supportsDocumentInput }),
           ...(reasoning && { reasoning }),
           ...(routesByRequestFeatures && { routesByRequestFeatures }),
           ...(supportsPromptCaching !== undefined && { supportsPromptCaching }),
@@ -387,3 +406,6 @@ class ModelRegistry {
 }
 
 export const modelRegistry = new ModelRegistry();
+setDefaultModelRegistry(modelRegistry);
+
+export { seedStaticModelCatalog } from "../../config/model-catalog.js";

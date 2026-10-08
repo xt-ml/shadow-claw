@@ -73,10 +73,7 @@ export function coerceUidArray(value: unknown): number[] {
 export function coerceArray<T = any>(
   value: unknown,
   modeOrMapper:
-    | "string"
-    | "uid"
-    | "number"
-    | ((item: unknown) => T | undefined) = "string",
+    "string" | "uid" | "number" | ((item: unknown) => T | undefined) = "string",
 ): T[] {
   if (!Array.isArray(value)) {
     return [];

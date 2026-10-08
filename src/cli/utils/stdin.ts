@@ -74,8 +74,7 @@ export function readStdin(opts: ReadStdinOptions = {}): Promise<string | null> {
 export function mapTextToToolInput(
   text: string,
   inputSchema?:
-    | { properties?: Record<string, unknown> }
-    | Record<string, unknown>,
+    { properties?: Record<string, unknown> } | Record<string, unknown>,
 ): Record<string, string> {
   const props =
     inputSchema && typeof inputSchema === "object"

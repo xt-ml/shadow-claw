@@ -14,8 +14,7 @@ let workboxConfig: WorkboxConfigShape;
 
 beforeAll(async () => {
   const imported = (await import("./workbox-config.cjs")) as
-    | WorkboxConfigShape
-    | { default: WorkboxConfigShape };
+    WorkboxConfigShape | { default: WorkboxConfigShape };
   workboxConfig =
     "default" in imported ? imported.default : (imported as WorkboxConfigShape);
 });

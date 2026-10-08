@@ -226,6 +226,12 @@ describe("config.js", () => {
       expect(PROVIDERS.vertex_ai.reasoningParam).toBe("thinkingConfig");
     });
 
+    it("bedrock_proxy should use claude-sonnet-5 default model", () => {
+      expect(PROVIDERS.bedrock_proxy.defaultModel).toBe(
+        "anthropic.claude-sonnet-5-v1:0",
+      );
+    });
+
     it("llamafile provider should have required fields", () => {
       const provider = PROVIDERS.llamafile;
       expect(provider.id).toBe("llamafile");
@@ -624,6 +630,30 @@ describe("config.js", () => {
       expect(getModelMaxTokens("anthropic.claude-fable-5-v1:0")).toBe(128000);
       expect(getModelMaxTokens("claude-fable-5")).toBe(128000);
       expect(getModelMaxTokens("anthropic/claude-fable-5")).toBe(128000);
+    });
+
+    it("resolves output tokens for GPT-6 Astra, Sol, and Luna", () => {
+      expect(getModelMaxTokens("gpt-6-astra")).toBe(128000);
+      expect(getModelMaxTokens("openai/gpt-6-astra")).toBe(128000);
+      expect(getModelMaxTokens("astra")).toBe(128000);
+      expect(getModelMaxTokens("gpt-6-sol")).toBe(128000);
+      expect(getModelMaxTokens("gpt-6-luna")).toBe(64000);
+      expect(getModelMaxTokens("gpt-6")).toBe(128000);
+    });
+
+    it("resolves output tokens for Claude Fable and Mythos families", () => {
+      expect(getModelMaxTokens("claude-fable-5")).toBe(128000);
+      expect(getModelMaxTokens("claude-fable-5.1")).toBe(128000);
+      expect(getModelMaxTokens("claude-fable")).toBe(128000);
+      expect(getModelMaxTokens("claude-mythos-5")).toBe(128000);
+      expect(getModelMaxTokens("claude-mythos")).toBe(128000);
+    });
+
+    it("resolves output tokens for Gemini 2.5 and 3.x families", () => {
+      expect(getModelMaxTokens("gemini-3.5-pro")).toBe(65536);
+      expect(getModelMaxTokens("gemini-3.5-flash")).toBe(65536);
+      expect(getModelMaxTokens("gemini-2.5-pro")).toBe(65536);
+      expect(getModelMaxTokens("gemini-2.5-flash")).toBe(65536);
     });
 
     it("should return 128000 for Claude Sonnet 5 models", () => {

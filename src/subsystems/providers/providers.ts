@@ -252,11 +252,13 @@ export function supportsPromptCaching(model: string): boolean {
     return true;
   }
 
-  // Claude 4+ & 5+ families (Sonnet 4+, Opus 4+, Haiku 4+, Sonnet 5, Opus 5, etc.)
-  // Matches "claude-sonnet-4", "claude-opus-4", "claude-haiku-4", "claude-sonnet-5", "claude-4-sonnet", etc.
+  // Claude 4+ & 5+ families (Sonnet 4+, Opus 4+, Haiku 4+, Fable 4+, Mythos 4+, Sonnet 5, Opus 5, etc.)
+  // Matches "claude-sonnet-4", "claude-opus-4", "claude-haiku-4", "claude-fable-5", "claude-mythos-5", "claude-4-sonnet", etc.
   if (
-    /claude-(?:sonnet|opus|haiku)-[4-9]/.test(id) ||
-    /claude-[4-9]-(?:sonnet|opus|haiku)/.test(id)
+    /claude-(?:sonnet|opus|haiku|fable|mythos)-[4-9]/.test(id) ||
+    /claude-[4-9]-(?:sonnet|opus|haiku|fable|mythos)/.test(id) ||
+    id.includes("claude-fable") ||
+    id.includes("claude-mythos")
   ) {
     return true;
   }
@@ -1246,7 +1248,15 @@ export function getContextLimit(model: string): number {
 
   const m = model.toLowerCase();
 
-  // OpenAI / Azure OpenAI
+  // OpenAI / Azure OpenAI / OpenRouter
+  if (m.includes("gpt-6-luna")) {
+    return 1_000_000;
+  }
+
+  if (m.includes("gpt-6") || m.includes("astra")) {
+    return 1_050_000;
+  }
+
   if (m.includes("gpt-4.1")) {
     return 1_047_576;
   }
@@ -1280,7 +1290,14 @@ export function getContextLimit(model: string): number {
   }
 
   // Anthropic / Bedrock
-  if (m.includes("claude-opus-4") || m.includes("claude-sonnet-4")) {
+  if (
+    /claude-(?:sonnet|opus|haiku|fable|mythos)-[4-9]/.test(m) ||
+    /claude-[4-9]-(?:sonnet|opus|haiku|fable|mythos)/.test(m) ||
+    m.includes("claude-opus-4") ||
+    m.includes("claude-sonnet-4") ||
+    m.includes("claude-fable") ||
+    m.includes("claude-mythos")
+  ) {
     return 1_000_000;
   }
 
@@ -1293,11 +1310,16 @@ export function getContextLimit(model: string): number {
     return 4_096;
   }
 
-  if (m.includes("gemini-1.5-pro")) {
+  if (
+    m.includes("gemini-3.5-pro") ||
+    m.includes("gemini-3-pro") ||
+    m.includes("gemini-1.5-pro")
+  ) {
     return 2_097_152;
   }
 
   if (
+    m.includes("gemini-3") ||
     m.includes("gemini-2.5") ||
     m.includes("gemini-2.0") ||
     m.includes("gemini-1.5")

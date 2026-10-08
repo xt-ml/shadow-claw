@@ -108,10 +108,7 @@ import type {
 import type { A2UIAction } from "../ui/a2ui/types.js";
 
 export type OrchestratorDisplayState =
-  | "idle"
-  | "thinking"
-  | "responding"
-  | "error";
+  "idle" | "thinking" | "responding" | "error";
 
 type TaskSyncOutboxOperation =
   | {
@@ -1519,8 +1516,7 @@ export class OrchestratorStore {
     }
 
     const lastPage = (await getConfig(db, CONFIG_KEYS.LAST_ACTIVE_PAGE)) as
-      | string
-      | null;
+      string | null;
     if (lastPage) {
       this._activePage.set(lastPage);
       this._hadPersistedActivePage = true;

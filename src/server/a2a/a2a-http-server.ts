@@ -162,8 +162,7 @@ export class A2AHttpServer {
 
         case A2A_METHOD.CANCEL_TASK: {
           const p = params as
-            | { taskId?: string; id?: string; reason?: string }
-            | undefined;
+            { taskId?: string; id?: string; reason?: string } | undefined;
           const taskId = p?.taskId ?? p?.id;
           if (!taskId) {
             return {

@@ -37,8 +37,6 @@ export default {
         "^highlight\\.js$": "<rootDir>/src/__mocks__/highlightjs.cjs",
         "^pdfjs-dist$": "<rootDir>/src/__mocks__/pdfjs-dist.cjs",
         "^just-bash$": "<rootDir>/src/__mocks__/just-bash.cjs",
-        "^node:sqlite$":
-          "<rootDir>/src/subsystems/notifications/__mocks__/node-sqlite.cjs",
       },
       testPathIgnorePatterns: [
         "/dist/",
@@ -60,10 +58,6 @@ export default {
       transform: {
         "^.+\\.ts$": "<rootDir>/src/testing/jest-ts-transform.cjs",
       },
-      moduleNameMapper: {
-        "^node:sqlite$":
-          "<rootDir>/src/subsystems/notifications/__mocks__/node-sqlite.cjs",
-      },
     },
     {
       displayName: "notifications",
@@ -81,10 +75,6 @@ export default {
         "<rootDir>/src/subsystems/notifications/push-routes.test.ts",
         "<rootDir>/src/subsystems/notifications/push-client.test.ts",
       ],
-      moduleNameMapper: {
-        "^node:sqlite$":
-          "<rootDir>/src/subsystems/notifications/__mocks__/node-sqlite.cjs",
-      },
     },
     {
       displayName: "task-schedule",
@@ -102,10 +92,6 @@ export default {
         "<rootDir>/src/subsystems/notifications/task-schedule-routes.test.ts",
         "<rootDir>/src/subsystems/notifications/task-scheduler-server.test.ts",
       ],
-      moduleNameMapper: {
-        "^node:sqlite$":
-          "<rootDir>/src/subsystems/notifications/__mocks__/node-sqlite.cjs",
-      },
     },
     {
       displayName: "cli",
@@ -117,10 +103,6 @@ export default {
       extensionsToTreatAsEsm: [".ts"],
       transform: {
         "^.+\\.ts$": "<rootDir>/src/testing/jest-ts-transform.cjs",
-      },
-      moduleNameMapper: {
-        "^node:sqlite$":
-          "<rootDir>/src/subsystems/notifications/__mocks__/node-sqlite.cjs",
       },
       testMatch: ["<rootDir>/src/cli/**/*.test.ts"],
     },

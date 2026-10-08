@@ -442,9 +442,7 @@ export interface A2AJsonRpcNotification {
 
 /** Union of all wire message types */
 export type A2AWireMessage =
-  | A2AJsonRpcRequest
-  | A2AJsonRpcResponse
-  | A2AJsonRpcNotification;
+  A2AJsonRpcRequest | A2AJsonRpcResponse | A2AJsonRpcNotification;
 
 // =============================================================================
 // Wire Protocol Methods

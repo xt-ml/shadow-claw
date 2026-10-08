@@ -455,9 +455,7 @@ export class ShadowClawIntegrations extends ShadowClawElement {
 
   setConfigFieldValue(slot: Element, field: string, value: string) {
     const node = slot.querySelector(`#cfg-${field}`) as
-      | HTMLInputElement
-      | HTMLSelectElement
-      | null;
+      HTMLInputElement | HTMLSelectElement | null;
     if (!node) {
       return;
     }

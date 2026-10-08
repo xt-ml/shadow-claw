@@ -93,12 +93,10 @@ export async function discoverServerSkills(
 
   scanDir(skillsDir);
 
-  return skills.map(
-    (skill): AgentSkill => ({
-      id: skill.name,
-      name: skill.name,
-      description: skill.description,
-      tags: tagsMap.get(skill.name) ?? [],
-    }),
-  );
+  return skills.map((skill): AgentSkill => ({
+    id: skill.name,
+    name: skill.name,
+    description: skill.description,
+    tags: tagsMap.get(skill.name) ?? [],
+  }));
 }

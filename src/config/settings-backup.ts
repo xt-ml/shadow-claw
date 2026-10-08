@@ -93,8 +93,7 @@ async function collectAndStripPasswordData(
       for (let i = 0; i < value.length; i += 1) {
         const record = value[i] as Record<string, unknown>;
         const credentialRef = record?.credentialRef as
-          | Record<string, unknown>
-          | undefined;
+          Record<string, unknown> | undefined;
 
         const encryptedSecret = credentialRef?.encryptedSecret;
         if (typeof encryptedSecret === "string" && encryptedSecret) {
@@ -118,8 +117,7 @@ async function collectAndStripPasswordData(
       for (let i = 0; i < value.length; i += 1) {
         const record = value[i] as Record<string, unknown>;
         const credentialRef = record?.credentialRef as
-          | Record<string, unknown>
-          | undefined;
+          Record<string, unknown> | undefined;
 
         const encryptedValue = credentialRef?.encryptedValue;
         if (typeof encryptedValue === "string" && encryptedValue) {

@@ -149,9 +149,7 @@ describe("initSidebarResize", () => {
 
   it("should restore saved sidebar width if present in DB", async () => {
     const savedWidth = 350;
-    const dummyDb: ShadowClawDatabase = {
-      /* mocked DB */
-    } as any;
+    const dummyDb: ShadowClawDatabase = {/* mocked DB */} as any;
     (mockGetConfig as jest.Mock<any>).mockResolvedValue(savedWidth);
 
     // Spy on mockSetSidebarWidth

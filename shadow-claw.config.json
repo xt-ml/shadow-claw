@@ -6,6 +6,7 @@
     "themeColor": "#fff"
   },
   "branding": {
+    "siteUrl": "https://xt-ml.github.io/shadow-claw/",
     "faviconPath": "assets/icons/favicon.ico",
     "appleTouchIconPath": "assets/icons/180.png",
     "notFoundPath": "404.html"
@@ -14,7 +15,6 @@
     "manifestPath": "manifest.json",
     "themeColor": "#000000"
   },
-  "sitemapPath": "sitemap.xml",
   "assets": [
     "assets"
   ],

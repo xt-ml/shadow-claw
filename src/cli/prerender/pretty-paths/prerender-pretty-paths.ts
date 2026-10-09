@@ -356,6 +356,7 @@ export async function prerenderPrettyPaths(
   } catch {}
 
   const generatedPaths: string[] = [];
+  let processedRouteCount = 0;
 
   for (const [routeKey, routeDef] of routeEntries) {
     if (!routeDef || !routeDef.prettyPath) {
@@ -519,17 +520,27 @@ export async function prerenderPrettyPaths(
     }
 
     generatedPaths.push(targetRelativePath.replace(/\\/g, "/"));
+
+    if (!cleanPrettyPath.endsWith(".html") && cleanPrettyPath.length > 0) {
+      const flatRelativePath = `${cleanPrettyPath}.html`;
+      const flatFilePath = path.join(publicDir, flatRelativePath);
+      await mkdir(path.dirname(flatFilePath), { recursive: true });
+      await writeFile(flatFilePath, finalHtml, "utf8");
+      generatedPaths.push(flatRelativePath.replace(/\\/g, "/"));
+    }
+
+    processedRouteCount++;
   }
 
   const isSilent = options.silent ?? process.env.NODE_ENV === "test";
   if (!isSilent) {
     console.log(
-      `Prerendered ${generatedPaths.length} pretty path page${generatedPaths.length === 1 ? "" : "s"} from ${routesPath} (prerender-pages: ${prerenderPages}).`,
+      `Prerendered ${processedRouteCount} pretty path page${processedRouteCount === 1 ? "" : "s"} from ${routesPath} (prerender-pages: ${prerenderPages}).`,
     );
   }
 
   return {
-    count: generatedPaths.length,
+    count: processedRouteCount,
     generatedPaths,
     skipped: false,
   };

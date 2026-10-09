@@ -134,6 +134,14 @@ function isNavigationRequest(request: Request): boolean {
 }
 
 function ensureOriginAgentClusterHeader(response: Response): Response {
+  if (
+    response.type === "opaqueredirect" ||
+    response.status === 0 ||
+    (response.status >= 300 && response.status < 400)
+  ) {
+    return response;
+  }
+
   if (response.headers.get("Origin-Agent-Cluster")) {
     return response;
   }
@@ -163,7 +171,21 @@ function ensureOriginAgentClusterHeader(response: Response): Response {
 async function fetchWithOriginAgentCluster(
   request: Request,
 ): Promise<Response> {
-  const response = await fetch(request);
+  let response: Response;
+  try {
+    if (isNavigationRequest(request)) {
+      response = await fetch(request.url, {
+        method: request.method,
+        headers: request.headers,
+        credentials: request.credentials,
+        redirect: "follow",
+      });
+    } else {
+      response = await fetch(request);
+    }
+  } catch {
+    response = await fetch(request);
+  }
 
   return ensureOriginAgentClusterHeader(response);
 }
@@ -253,7 +275,31 @@ self.addEventListener("fetch", (event: FetchEvent) => {
         return;
       }
 
-      event.respondWith(fetchWithOriginAgentCluster(event.request));
+      event.respondWith(
+        (async () => {
+          if (typeof caches !== "undefined") {
+            try {
+              const pathname = requestUrl.pathname;
+              const cleanPath = pathname.replace(/\/+$/, "");
+              const candidates = [
+                requestUrl.href,
+                pathname,
+                `${cleanPath}/`,
+                `${cleanPath}/index.html`,
+                `${cleanPath}.html`,
+              ];
+              for (const candidate of candidates) {
+                const match = await caches.match(candidate);
+                if (match) {
+                  return ensureOriginAgentClusterHeader(match);
+                }
+              }
+            } catch {}
+          }
+
+          return fetchWithOriginAgentCluster(event.request);
+        })(),
+      );
 
       return;
     }

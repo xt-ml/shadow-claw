@@ -173,6 +173,17 @@ describe("prerenderPrettyPaths", () => {
     const prettyHtml = await readFile(prettyHtmlPath, "utf8");
 
     expect(prettyHtml).toContain("On Developing Loops");
+
+    // Also assert that sibling .html file exists for clean URL direct serving
+    expect(result.generatedPaths).toContain(
+      "2026/06/30/on-developing-loops.html",
+    );
+    const flatHtmlPath = path.join(
+      publicDir,
+      "2026/06/30/on-developing-loops.html",
+    );
+    const flatHtml = await readFile(flatHtmlPath, "utf8");
+    expect(flatHtml).toContain("On Developing Loops");
     expect(prettyHtml).toContain("This is SSR content for pretty path.");
     expect(prettyHtml).toContain('id="shadow-claw-static-routing"');
     expect(prettyHtml).toContain('id="shadow-claw-static-manifest"');

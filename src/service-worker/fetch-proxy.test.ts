@@ -33,10 +33,22 @@ describe("service-worker fetch proxy", () => {
   class TestResponse {
     readonly headers: TestHeaders;
     readonly status: number;
+    readonly statusText: string;
+    readonly type: string;
     private readonly _bodySource: any;
 
     constructor(body?: any, init?: any) {
+      if (
+        typeof init?.status === "number" &&
+        (init.status < 200 || init.status > 599)
+      ) {
+        throw new RangeError(
+          `Failed to construct 'Response': The status provided (${init.status}) is outside the range [200, 599].`,
+        );
+      }
       this.status = init?.status ?? 200;
+      this.statusText = init?.statusText ?? "OK";
+      this.type = init?.type ?? "basic";
       this.headers =
         init?.headers instanceof TestHeaders
           ? init.headers
@@ -293,7 +305,7 @@ describe("service-worker fetch proxy", () => {
     }
   });
 
-  it("intercepts non-app-route same-origin navigation requests to inject Origin-Agent-Cluster", async () => {
+  it("intercepts non-app-route same-origin navigation requests to follow redirects and inject Origin-Agent-Cluster", async () => {
     const navigationRequest = {
       url: `${globalThis.location.origin}/standalone-document.html`,
       method: "GET",
@@ -304,8 +316,78 @@ describe("service-worker fetch proxy", () => {
 
     const response = await dispatchFetch(navigationRequest);
 
-    expect(networkFetch).toHaveBeenCalledWith(navigationRequest);
+    expect(networkFetch).toHaveBeenCalledWith(
+      `${globalThis.location.origin}/standalone-document.html`,
+      expect.objectContaining({ redirect: "follow" }),
+    );
     expect(response.headers.get("Origin-Agent-Cluster")).toBe("?1");
+  });
+
+  it("gracefully handles opaqueredirect (status 0) without throwing RangeError", async () => {
+    const opaqueRedirectResponse = Object.create(TestResponse.prototype);
+    Object.assign(opaqueRedirectResponse, {
+      status: 0,
+      statusText: "",
+      type: "opaqueredirect",
+      headers: new TestHeaders(),
+      _bodySource: null,
+    });
+
+    networkFetch.mockResolvedValueOnce(
+      opaqueRedirectResponse as unknown as Response,
+    );
+
+    const navigationRequest = {
+      url: `${globalThis.location.origin}/redirect-path`,
+      method: "GET",
+      mode: "navigate",
+      destination: "document",
+      headers: new TestHeaders(),
+    };
+
+    const response = await dispatchFetch(navigationRequest);
+    expect(response.status).toBe(0);
+    expect(response.type).toBe("opaqueredirect");
+  });
+
+  it("serves pre-cached pretty path .html or index.html from caches before network fallback", async () => {
+    const cachedPrettyPage = new TestResponse("cached-pretty-page", {
+      status: 200,
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    });
+    const matchMock = jest.fn(async (key: string) => {
+      if (
+        key === `${globalThis.location.origin}/docs/skill-creator.html` ||
+        key === "/docs/skill-creator.html" ||
+        key === "/docs/skill-creator/index.html"
+      ) {
+        return cachedPrettyPage;
+      }
+      return null;
+    });
+    Object.defineProperty(globalThis, "caches", {
+      configurable: true,
+      writable: true,
+      value: { match: matchMock },
+    });
+
+    try {
+      const navigationRequest = {
+        url: `${globalThis.location.origin}/docs/skill-creator`,
+        method: "GET",
+        mode: "navigate",
+        destination: "document",
+        headers: new TestHeaders(),
+      };
+
+      const response = await dispatchFetch(navigationRequest);
+
+      expect(networkFetch).not.toHaveBeenCalled();
+      expect(await response.text()).toBe("cached-pretty-page");
+      expect(response.headers.get("Origin-Agent-Cluster")).toBe("?1");
+    } finally {
+      delete (globalThis as any).caches;
+    }
   });
 
   it("does not override an Origin-Agent-Cluster header already set by the network response", async () => {

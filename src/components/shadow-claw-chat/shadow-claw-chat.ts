@@ -65,8 +65,7 @@ import {
 } from "../../utils/utils.js";
 import { isTruthyConfigValue } from "../../utils/parseBooleanConfig.js";
 import {
-  isNativePromptApiSupported,
-  isPromptApiPotentiallySupported,
+  isNativePromptApiAvailable,
   renderPromptApiStatusHtml,
 } from "../common/help/prompt-api.js";
 
@@ -2051,19 +2050,18 @@ export class ShadowClawChat extends ShadowClawElement {
 
       this.ensureShadowDialogs();
 
-      const isNativeSupported = isNativePromptApiSupported();
-      const isPotentiallySupported = isPromptApiPotentiallySupported();
-      const isAvailable = isNativeSupported || isPotentiallySupported;
+      const isNativeSupported = await isNativePromptApiAvailable();
+      const isAvailable = isNativeSupported;
 
       const statusCard = root.querySelector(".chat__prompt-api-status-card");
-      if (statusCard instanceof HTMLElement) {
-        statusCard.hidden = !isAvailable;
+      if (statusCard) {
+        (statusCard as HTMLElement).hidden = !isAvailable;
       }
 
       const statusEl = root.querySelector('[data-info="prompt-api-status"]');
-      if (statusEl instanceof HTMLElement) {
+      if (statusEl) {
         setSanitizedHtml(
-          statusEl,
+          statusEl as HTMLElement,
           renderPromptApiStatusHtml(isNativeSupported),
         );
       }
@@ -2071,8 +2069,8 @@ export class ShadowClawChat extends ShadowClawElement {
       const fallbackCard = root.querySelector(
         ".chat__prompt-api-fallback-card",
       );
-      if (fallbackCard instanceof HTMLElement) {
-        fallbackCard.hidden = isAvailable;
+      if (fallbackCard) {
+        (fallbackCard as HTMLElement).hidden = isAvailable;
       }
 
       const modelSelect = root.querySelector(

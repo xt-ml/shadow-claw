@@ -201,11 +201,11 @@ Last-active conversation persists across reloads. On first launch, a default "Ma
 
 ShadowClaw supports multiple LLM providers with a unified adapter pattern and configurable defaults:
 
-| Category    | Examples                                                             | Notes                                                                        |
-| :---------- | :------------------------------------------------------------------- | :--------------------------------------------------------------------------- |
-| **Cloud**   | OpenRouter, OpenAI, Anthropic, Google Gemini, AWS Bedrock, Vertex AI | Defaults out-of-the-box to OpenRouter (`openrouter/free`); API key required  |
-| **Local**   | Ollama, Llamafile, Mesh LLM, Transformers.js                         | Runs on local server or in-browser; automatic Hugging Face model downloading |
-| **Browser** | Prompt API (`window.LanguageModel`), LiteRT                          | WebGPU in-browser inference with transparent CPU/WASM polyfills              |
+| Category    | Examples                                                             | Notes                                                                                                      |
+| :---------- | :------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------- |
+| **Cloud**   | OpenRouter, OpenAI, Anthropic, Google Gemini, AWS Bedrock, Vertex AI | Defaults out-of-the-box to OpenRouter (`openrouter/free`); API key required                                |
+| **Local**   | Ollama, Llamafile, Agentfile, Mesh LLM, Transformers.js              | Runs on local server or in-process; automatic Hugging Face model downloading & LocalBinaryDriver execution |
+| **Browser** | Prompt API (`window.LanguageModel`), LiteRT                          | WebGPU in-browser inference with transparent CPU/WASM polyfills                                            |
 
 **Provider & Model Hierarchy:**
 
@@ -221,8 +221,8 @@ ShadowClaw resolves default LLM providers and models via a strict precedence cas
 
 - **In-Browser Inference Default:** Defaults to Prompt API (`prompt_api`) with guided onboarding and task API polyfills, enabling local, private, and zero-configuration browser execution.
 - **OpenRouter Default for Headless CLI:** Headless execution via `shadow-claw agent` defaults out-of-the-box to `openrouter` with `openrouter/free`.
-- **Local Models & Hugging Face Hub:** Automatic on-demand downloading from Hugging Face Hub, disk caching under `assets/cache/transformers.js`, and pre-warming endpoints (`POST /transformers-js-proxy/prewarm`). Unified local model tool calling (`parseLocalModelToolCalls`) supports multi-tool calling, Gemma 4 syntax, streaming tool-call suppression, and defensive schema sanitization across in-process Node executors and server proxy routes using OpenAI function schemas formatted directly for tokenizer chat templates. See [Local Models Guide](docs/subsystems/local-models.md).
-- **Prompt API & Polyfill Fallbacks:** In the browser client, uses native `window.LanguageModel` when available, with built-in polyfills (`prompt-api-polyfill` and `built-in-ai-task-apis-polyfills` backed by Transformers.js / ONNX) for cross-browser execution.
+- **Local Models & Hugging Face Hub:** Automatic on-demand downloading from Hugging Face Hub, disk caching under `assets/cache/transformers.js` (and `assets/cache/llamafile` for Llamafile/Agentfile binaries), interactive paginated and searchable model browsing during `agent init`, and pre-warming endpoints (`POST /transformers-js-proxy/prewarm`). Unified local model tool calling (`parseLocalModelToolCalls`) supports multi-tool calling, Gemma 4 syntax, streaming tool-call suppression, and defensive schema sanitization across in-process Node executors and server proxy routes using OpenAI function schemas formatted directly for tokenizer chat templates. The `LocalBinaryDriver` architecture supports `.llamafile` and `.agentfile` execution with built-in tool schema catalogs and proxy forwarding. See [Local Models Guide](docs/subsystems/local-models.md).
+- **Prompt API & Polyfill Fallbacks:** In the browser client, uses native `window.LanguageModel` when available, with automatic degradation to local Transformers.js via `prompt-api-polyfill` and `built-in-ai-task-apis-polyfills` when the native Prompt API is unavailable.
 - **Hardware Feature Probing & Fallbacks:** Probes WebGPU adapter capabilities (`shader-f16`), retries during downloads, and dynamically falls back to WebAssembly CPU (`device: "wasm"`, `dtype: "q4"`) if WebGPU initialization fails or software emulation is detected.
 - **Streaming & Resilience:** Streaming responses across OpenAI and Anthropic formats; adaptive rate limiting with `retry-after` handling and 30-second auto-closing, ARIA-accessible countdown dialogs for fatal errors and throttling.
 
@@ -334,7 +334,7 @@ The `shadow-claw` CLI provides runtime driving, server services, and the headles
 
 ```bash
 # Headless Server-Side Agent Participant
-npx shadow-claw agent init [dir]                     # Initialize workspace with interactive model selection
+npx shadow-claw agent init [dir]                     # Initialize workspace with interactive model selection (supports HF browsing, paging, search)
 npx shadow-claw agent model list                     # List local cached ONNX and GGUF models
 npx shadow-claw agent model download [modelId]       # Download model from Hugging Face with progress bar
 npx shadow-claw agent model set [modelId]            # Configure default headless agent model

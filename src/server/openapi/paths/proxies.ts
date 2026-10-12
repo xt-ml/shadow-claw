@@ -185,6 +185,114 @@ export const proxyPaths: Record<string, OpenApiPathItem> = {
       },
     },
   },
+  "/llamafile-proxy/tools": {
+    get: {
+      tags: ["Model Proxies"],
+      summary: "List Llamafile Tools",
+      description:
+        "Lists built-in and server-enabled tools available for Llamafile agent execution.",
+      responses: {
+        "200": {
+          description: "Tool definitions list",
+          content: { "application/json": { schema: { type: "object" } } },
+        },
+      },
+    },
+    post: {
+      tags: ["Model Proxies"],
+      summary: "Execute Llamafile Tool",
+      description:
+        "Executes a built-in or server-side tool against the active Llamafile runtime.",
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: { type: "object" } } },
+      },
+      responses: {
+        "200": {
+          description: "Tool execution result",
+          content: { "application/json": { schema: { type: "object" } } },
+        },
+      },
+    },
+  },
+  "/agentfile-proxy/models": {
+    get: {
+      tags: ["Model Proxies"],
+      summary: "List Agentfile Models",
+      description: "Lists discovered local .agentfile executable binaries.",
+      responses: {
+        "200": {
+          description: "List of local Agentfile models",
+          content: { "application/json": { schema: { type: "object" } } },
+        },
+      },
+    },
+  },
+  "/agentfile-proxy/chat/completions": {
+    post: {
+      tags: ["Model Proxies"],
+      summary: "Agentfile Chat Completions",
+      description:
+        "Executes a local autonomous Agentfile binary with internal tool loop execution.",
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: { type: "object" } } },
+      },
+      responses: {
+        "200": {
+          description: "Chat completion response stream or JSON",
+          content: {
+            "application/json": { schema: { type: "object" } },
+            "text/event-stream": { schema: { type: "string" } },
+          },
+        },
+      },
+    },
+  },
+  "/agentfile-proxy/tools": {
+    get: {
+      tags: ["Model Proxies"],
+      summary: "List Agentfile Tools",
+      description:
+        "Lists the 10 built-in tools supported by Agentfile executables.",
+      responses: {
+        "200": {
+          description: "Tool definitions list",
+          content: { "application/json": { schema: { type: "object" } } },
+        },
+      },
+    },
+    post: {
+      tags: ["Model Proxies"],
+      summary: "Execute Agentfile Tool",
+      description:
+        "Executes a built-in or delegated tool against the active Agentfile runtime.",
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: { type: "object" } } },
+      },
+      responses: {
+        "200": {
+          description: "Tool execution result",
+          content: { "application/json": { schema: { type: "object" } } },
+        },
+      },
+    },
+  },
+  "/agentfile-proxy/cancel": {
+    post: {
+      tags: ["Model Proxies"],
+      summary: "Cancel Agentfile Request",
+      description: "Aborts an ongoing Agentfile execution process.",
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: { type: "object" } } },
+      },
+      responses: {
+        "200": { description: "Request cancelled" },
+      },
+    },
+  },
   "/transformers-js-proxy/status": {
     get: {
       tags: ["Model Proxies"],

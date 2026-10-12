@@ -23,7 +23,7 @@ import {
 
 import {
   isNativePromptApiSupported,
-  isPromptApiPotentiallySupported,
+  isNativePromptApiAvailable,
 } from "../../common/help/prompt-api.js";
 
 import {
@@ -621,10 +621,14 @@ export class ShadowClawLlm extends ShadowClawElement {
       '[data-setting="prompt-api-fallback-group"]',
     ) as HTMLElement | null;
     if (promptApiFallbackGroup) {
-      const isAvailable =
-        isNativePromptApiSupported() || isPromptApiPotentiallySupported();
+      const isAvailable = isNativePromptApiSupported();
       promptApiFallbackGroup.style.display =
         currentProvider === "prompt_api" && !isAvailable ? "block" : "none";
+      void isNativePromptApiAvailable().then((available) => {
+        if (this.orchestrator?.provider === "prompt_api") {
+          promptApiFallbackGroup.style.display = !available ? "block" : "none";
+        }
+      });
     }
 
     const modelSelect = root.querySelector(

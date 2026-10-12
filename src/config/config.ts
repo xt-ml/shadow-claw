@@ -303,6 +303,22 @@ export const LLAMAFILE_PROXY_URL =
 export const LLAMAFILE_PROXY_MODELS_URL =
   "http://localhost:8888/llamafile-proxy/models";
 
+/** Llamafile proxy tools endpoint */
+export const LLAMAFILE_PROXY_TOOLS_URL =
+  "http://localhost:8888/llamafile-proxy/tools";
+
+/** Agentfile proxy endpoint (local autonomous binary execution) */
+export const AGENTFILE_PROXY_URL =
+  "http://localhost:8888/agentfile-proxy/chat/completions";
+
+/** Agentfile proxy models endpoint */
+export const AGENTFILE_PROXY_MODELS_URL =
+  "http://localhost:8888/agentfile-proxy/models";
+
+/** Agentfile proxy tools endpoint */
+export const AGENTFILE_PROXY_TOOLS_URL =
+  "http://localhost:8888/agentfile-proxy/tools";
+
 /** Ollama proxy endpoint (local LLM server) */
 export const OLLAMA_PROXY_URL =
   "http://localhost:8888/ollama-proxy/chat/completions";
@@ -855,6 +871,18 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
     headers: {},
     defaultModel: "Qwen3.5-9B-Q5_K_S",
     modelsUrl: LLAMAFILE_PROXY_MODELS_URL,
+    requiresApiKey: false,
+    supportsStreaming: true,
+  },
+  agentfile: {
+    id: "agentfile",
+    name: "Agentfile (Local Binary)",
+    baseUrl: AGENTFILE_PROXY_URL,
+    format: "openai",
+    apiKeyHeader: "Authorization",
+    headers: {},
+    defaultModel: "default.agentfile",
+    modelsUrl: AGENTFILE_PROXY_MODELS_URL,
     requiresApiKey: false,
     supportsStreaming: true,
   },

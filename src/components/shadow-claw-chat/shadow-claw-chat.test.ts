@@ -406,6 +406,15 @@ describe("shadow-claw-chat UX enhancements (issue #10)", () => {
       expect(templateHtml).toContain("chat__attachment-input");
       expect(templateHtml).toContain('type="file" multiple');
     });
+
+    it("should include onnx-community/gemma-4-E2B-it-ONNX and onnx-community/gemma-4-E4B-it-ONNX in prompt-api-fallback-model-select", () => {
+      expect(templateHtml).toContain(
+        'value="onnx-community/gemma-4-E2B-it-ONNX"',
+      );
+      expect(templateHtml).toContain(
+        'value="onnx-community/gemma-4-E4B-it-ONNX"',
+      );
+    });
   });
 
   describe("AUTO_SCROLL_THRESHOLD constant", () => {
@@ -1279,12 +1288,17 @@ describe("shadow-claw-chat prompt api onboarding", () => {
     };
     const mockStatusEl: any = { innerHTML: "" };
     const mockSelectEl: any = { value: "" };
+    const mockStatusCard: any = { hidden: false };
+    const mockFallbackCard: any = { hidden: true };
 
     const instance = Object.create(ShadowClawChat.prototype);
     instance.db = mockDb;
     const mockShadowRoot: any = {
       querySelector: jest.fn().mockImplementation((...args: any[]) => {
         const selector = args[0];
+        if (selector === ".chat__prompt-api-status-card") return mockStatusCard;
+        if (selector === ".chat__prompt-api-fallback-card")
+          return mockFallbackCard;
         if (selector === '[data-info="prompt-api-status"]') return mockStatusEl;
         if (
           selector === '[data-setting="prompt-api-onboarding-fallback-model"]'
@@ -1305,6 +1319,8 @@ describe("shadow-claw-chat prompt api onboarding", () => {
     await instance.checkPromptApiOnboarding.call(instance);
 
     expect(mockSelectEl.value).toBe("onnx-community/gemma-3-1b-it-ONNX-GQA");
+    expect(mockStatusCard.hidden).toBe(true);
+    expect(mockFallbackCard.hidden).toBe(false);
     expect(mockDialog.showModal).toHaveBeenCalledTimes(1);
   });
 
@@ -1338,6 +1354,41 @@ describe("shadow-claw-chat prompt api onboarding", () => {
 
     expect(storedConfig["prompt_api_fallback_model"]).toBe(
       "onnx-community/Qwen3-0.6B-ONNX",
+    );
+    expect(storedConfig["prompt_api_onboarding_seen"]).toBe("true");
+    expect(mockDialog.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("should confirm onboarding and persist gemma-4-E2B-it-ONNX model selection", async () => {
+    const mockDialog: any = {
+      close: jest.fn(),
+    };
+    const mockSelectEl: any = { value: "onnx-community/gemma-4-E2B-it-ONNX" };
+
+    const instance = Object.create(ShadowClawChat.prototype);
+    instance.db = mockDb;
+    const mockShadowRoot: any = {
+      querySelector: jest.fn().mockImplementation((...args: any[]) => {
+        const selector = args[0];
+        if (
+          selector === '[data-setting="prompt-api-onboarding-fallback-model"]'
+        )
+          return mockSelectEl;
+        if (
+          selector ===
+          'shadow-claw-dialog[dialog-class="chat__prompt-api-dialog"]'
+        )
+          return mockDialog;
+        return null;
+      }),
+      querySelectorAll: jest.fn().mockReturnValue([]),
+    };
+    Object.defineProperty(instance, "shadowRoot", { value: mockShadowRoot });
+
+    await instance.confirmPromptApiOnboarding.call(instance);
+
+    expect(storedConfig["prompt_api_fallback_model"]).toBe(
+      "onnx-community/gemma-4-E2B-it-ONNX",
     );
     expect(storedConfig["prompt_api_onboarding_seen"]).toBe("true");
     expect(mockDialog.close).toHaveBeenCalledTimes(1);

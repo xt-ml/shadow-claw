@@ -874,6 +874,39 @@ Instructions for make-file
       }
     });
 
+    it("resolves providerId to agentfile when model ends in .agentfile", async () => {
+      const { runAgentRun } = await import("./agent.js");
+      const { getAgentCore } = await import("../utils/agent-core.js");
+      const core = await getAgentCore();
+
+      const binaryPath = path.join(tmpDir, "local-bot.agentfile");
+      await writeFile(binaryPath, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+
+      let capturedPayload: any = null;
+      const mockInvokeHandler = async (_db: any, payload: any) => {
+        capturedPayload = payload;
+        core.post({
+          type: "response",
+          payload: {
+            groupId: payload.groupId,
+            text: "Agentfile response.",
+          },
+        });
+      };
+
+      const result = await runAgentRun("hello", {
+        workspace: tmpDir,
+        model: binaryPath,
+        invokeHandler: mockInvokeHandler,
+        quiet: true,
+      });
+
+      expect(result.success).toBe(true);
+      expect(capturedPayload).not.toBeNull();
+      expect(capturedPayload.provider).toBe("agentfile");
+      expect(capturedPayload.model).toBe(binaryPath);
+    });
+
     it("passes enabledTools in invokePayload omitting all browser-only and room tools", async () => {
       const { runAgentRun } = await import("./agent.js");
       const { getAgentCore } = await import("../utils/agent-core.js");

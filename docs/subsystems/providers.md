@@ -40,13 +40,14 @@ All providers are declared in `src/config/config.ts` under `PROVIDERS`:
 | `bedrock_proxy`           | `anthropic`       | ✅        | ❌               |
 | `ollama`                  | `openai`          | ✅        | ❌               |
 | `llamafile`               | `openai`          | ✅        | ❌               |
+| `agentfile`               | `openai`          | ✅        | ❌               |
 | `mesh-llm`                | `mesh-llm`        | ✅        | ❌               |
 
 > **Default Provider Strategy:** In the browser client, ShadowClaw defaults out-of-the-box to **Prompt API** (`prompt_api`) with guided onboarding and built-in task API polyfills. For headless CLI agent execution (`shadow-claw agent`), it defaults out-of-the-box to **OpenRouter** (`openrouter` with default model `openrouter/free`). Projects can also declaratively configure a default provider and model in `shadow-claw.config.json` under `settings.defaultProvider` and `settings.defaultModel`.
 >
-> **Local Models & Hugging Face:** For offline or local model execution, configure `defaultProvider: "transformers_js_local"` or `defaultProvider: "huggingface"`. See [`local-models.md`](./local-models.md) for architecture details on downloading model weights and dependencies from Hugging Face.
+> **Local Models & Hugging Face:** For offline or local model execution, configure `defaultProvider: "transformers_js_local"`, `defaultProvider: "llamafile"`, or `defaultProvider: "agentfile"`. See [`local-models.md`](./local-models.md) for architecture details on downloading model weights and dependencies from Hugging Face.
 >
-> **Llamafile Note:** The local proxy context size for Llamafile defaults to 8192 tokens but can be configured via the `LLAMAFILE_CTX_SIZE` environment variable (e.g., `LLAMAFILE_CTX_SIZE=32768`).
+> **Llamafile & Agentfile Note:** The local proxy context size for Llamafile defaults to 8192 tokens (configurable via `LLAMAFILE_CTX_SIZE`). Llamafile supports tool calling across server mode (`/v1/chat/completions`), CLI mode (prompt tool injection and multi-tool parsing), and `/llamafile-proxy/tools`. Agentfile (`agentfile`) executes autonomous agent binaries with internal tool loops, streaming final answers over `/agentfile-proxy/chat/completions`. See [`local-models.md`](./local-models.md) for details on the `LocalBinaryDriver` architecture.
 
 ### Provider shape
 
@@ -127,7 +128,7 @@ Backed by the `builtin-ai-tasks` subsystem with dynamic polyfill loading and a M
 - **Dynamic Fallback Architecture**:
   - Automatically probes hardware acceleration via **WebNN** (`navigator.ml`) and asynchronous WebGPU feature probing (`isWebGpuAdapterAvailable()`). Software-emulated WebGPU adapters and those lacking `shader-f16` support are rejected to ensure optimal performance.
   - When accelerated backends encounter unsupported kernels, memory-allocation failures, or software-only adapters (`ORT_NOT_IMPLEMENTED`, `ERROR_CODE: 9`, `bad_alloc`, `out of memory`, `ERROR_CODE: 6`), `createTaskInstanceWithFallback()` transparently switches execution to WebAssembly CPU (`device: "wasm"`, `dtype: "q4"`) without interrupting the user with modal prompts.
-  - Default polyfill model is `onnx-community/Qwen3-0.6B-ONNX`. Users can configure their preferred Prompt API fallback model in Settings (`CONFIG_KEYS.PROMPT_API_FALLBACK_MODEL`, including `onnx-community/gemma-3-1b-it-ONNX-GQA`, `onnx-community/Llama-3.2-1B-Instruct-ONNX`, and `onnx-community/SmolLM2-360M-Instruct-ONNX`).
+  - Default polyfill model is `onnx-community/Qwen3-0.6B-ONNX`. Users can configure their preferred Prompt API fallback model in Settings (`CONFIG_KEYS.PROMPT_API_FALLBACK_MODEL`, including `onnx-community/gemma-4-E2B-it-ONNX`, `onnx-community/gemma-4-E4B-it-ONNX`, `onnx-community/gemma-3-1b-it-ONNX-GQA`, `onnx-community/Llama-3.2-1B-Instruct-ONNX`, and `onnx-community/SmolLM2-360M-Instruct-ONNX`).
   - **Hardware Preferences**: Transformers.js inference defaults to `q4f16` quantization across browser-native paths. Users can explicitly configure preferred device and dtype overrides in Settings.
 - **Dynamic Chat Templates & XML Tool Calling**:
   - Dynamically fetches and parses `tokenizer_config.json` for ONNX models to detect model-native tool calling syntax (such as Qwen/Llama XML `<tool_call>` tags).

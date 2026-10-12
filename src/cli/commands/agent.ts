@@ -528,8 +528,11 @@ export async function resolveAgentProvider(
   }
 
   if (!providerId && options.model) {
-    const { isLlamafile } = await import("../utils/local-models.js");
-    if (isLlamafile(options.model)) {
+    const { isLlamafile, isAgentfile } =
+      await import("../utils/local-models.js");
+    if (isAgentfile(options.model)) {
+      providerId = "agentfile";
+    } else if (isLlamafile(options.model)) {
       providerId = "llamafile";
     } else if (/onnx/i.test(options.model)) {
       providerId = "transformers_js_local";
@@ -643,8 +646,12 @@ export async function resolveAgentProvider(
       ? (await import("../utils/local-models.js")).DEFAULT_LOCAL_MODEL
       : "default");
 
-  // 4. Ensure model is downloaded if transformers_js_local or llamafile
-  if (providerId === "transformers_js_local" || providerId === "llamafile") {
+  // 4. Ensure model is downloaded if transformers_js_local, llamafile, or agentfile
+  if (
+    providerId === "transformers_js_local" ||
+    providerId === "llamafile" ||
+    providerId === "agentfile"
+  ) {
     const { isModelLocallyCached, downloadLocalModel } =
       await import("../utils/local-models.js");
     const cacheDir =

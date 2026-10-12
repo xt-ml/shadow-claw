@@ -246,4 +246,177 @@ describe("llamafile-routes", () => {
       errSpy.mockRestore();
     });
   });
+
+  describe("GET /llamafile-proxy/tools", () => {
+    it("returns list of tools from service.listTools", async () => {
+      const handler = routes.get("GET /llamafile-proxy/tools");
+      expect(handler).toBeDefined();
+
+      service.getLlamafileRuntimeOptions.mockReturnValue({
+        mode: "cli",
+        host: "127.0.0.1",
+        port: 8080,
+      });
+      service.listTools = jest.fn().mockResolvedValue([
+        { name: "read_file", description: "Read file content" },
+        { name: "get_datetime", description: "Get server time" },
+      ]);
+
+      const res = createResponse();
+      await handler({}, res);
+
+      expect(res.json).toHaveBeenCalledWith({
+        tools: [
+          expect.objectContaining({ name: "read_file" }),
+          expect.objectContaining({ name: "get_datetime" }),
+        ],
+      });
+    });
+
+    it("handles error listing tools with 502 status", async () => {
+      const handler = routes.get("GET /llamafile-proxy/tools");
+      service.getLlamafileRuntimeOptions.mockReturnValue({
+        mode: "server",
+        host: "127.0.0.1",
+        port: 8080,
+      });
+      service.listTools = jest
+        .fn()
+        .mockRejectedValue(new Error("Connection refused"));
+
+      const errSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+      const res = createResponse();
+      await handler({}, res);
+
+      expect(res.status).toHaveBeenCalledWith(502);
+      expect(res.body.error).toContain(
+        "Failed to list llamafile tools: Connection refused",
+      );
+      errSpy.mockRestore();
+    });
+  });
+
+  describe("POST /llamafile-proxy/tools", () => {
+    it("returns 400 when tool name is missing", async () => {
+      const handler = routes.get("POST /llamafile-proxy/tools");
+      expect(handler).toBeDefined();
+
+      const res = createResponse();
+      await handler({ body: {} }, res);
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.body.error).toContain("Missing required 'name' parameter");
+    });
+
+    it("executes tool via service.executeTool", async () => {
+      const handler = routes.get("POST /llamafile-proxy/tools");
+      service.getLlamafileRuntimeOptions.mockReturnValue({
+        mode: "server",
+        host: "127.0.0.1",
+        port: 8080,
+      });
+      service.executeTool = jest.fn().mockResolvedValue({
+        datetime: "2026-10-12T00:00:00Z",
+      });
+
+      const res = createResponse();
+      await handler(
+        { body: { name: "get_datetime", arguments: {} }, headers: {} },
+        res,
+      );
+
+      expect(service.executeTool).toHaveBeenCalledWith(
+        "get_datetime",
+        {},
+        expect.objectContaining({ mode: "server" }),
+      );
+      expect(res.json).toHaveBeenCalledWith({
+        datetime: "2026-10-12T00:00:00Z",
+      });
+    });
+  });
+
+  describe("Agentfile Proxy Routes (/agentfile-proxy/*)", () => {
+    it("registers GET /agentfile-proxy/models and lists agentfile models", async () => {
+      const handler = routes.get("GET /agentfile-proxy/models");
+      expect(handler).toBeDefined();
+
+      service.listBinaries.mockResolvedValue([
+        {
+          id: "weather-agent",
+          fileName: "weather-agent.agentfile",
+          kind: "agentfile",
+        },
+      ]);
+
+      const res = createResponse();
+      await handler({}, res);
+
+      expect(res.json).toHaveBeenCalledWith({
+        data: [
+          expect.objectContaining({
+            id: "weather-agent",
+            file_name: "weather-agent.agentfile",
+            supports_tools: true,
+          }),
+        ],
+      });
+    });
+
+    it("registers GET /agentfile-proxy/tools and returns agentfile built-in tools", async () => {
+      const handler = routes.get("GET /agentfile-proxy/tools");
+      expect(handler).toBeDefined();
+
+      service.getLlamafileRuntimeOptions.mockReturnValue({
+        mode: "cli",
+        host: "127.0.0.1",
+        port: 8080,
+      });
+      service.listTools = jest
+        .fn()
+        .mockResolvedValue([{ name: "read_file" }, { name: "web_search" }]);
+
+      const res = createResponse();
+      await handler({}, res);
+
+      expect(res.json).toHaveBeenCalledWith({
+        tools: expect.arrayContaining([
+          { name: "read_file" },
+          { name: "web_search" },
+        ]),
+      });
+    });
+
+    it("registers POST /agentfile-proxy/chat/completions and executes binary via invokeCli", async () => {
+      const handler = routes.get("POST /agentfile-proxy/chat/completions");
+      expect(handler).toBeDefined();
+
+      service.getLlamafileRuntimeOptions.mockReturnValue({
+        mode: "cli",
+        host: "127.0.0.1",
+        port: 8080,
+        offline: false,
+      });
+
+      const res = createResponse();
+      await handler(
+        {
+          body: {
+            model: "weather-agent.agentfile",
+            messages: [{ role: "user", content: "Forecast" }],
+          },
+          headers: {},
+        },
+        res,
+      );
+
+      expect(service.invokeCli).toHaveBeenCalledWith(
+        expect.anything(),
+        res,
+        expect.objectContaining({ model: "weather-agent.agentfile" }),
+        expect.objectContaining({ model: "weather-agent.agentfile" }),
+        true,
+      );
+    });
+  });
 });

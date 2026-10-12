@@ -17,8 +17,11 @@ import {
   CURATED_LLAMAFILE_MODELS,
   getLocalModelCacheDir,
   getLlamafileCacheDir,
+  getAgentfileCacheDir,
   isModelLocallyCached,
   isLlamafileLocallyCached,
+  isAgentfileLocallyCached,
+  isAgentfile,
   listLocalModels,
   listLlamafileModels,
   downloadLocalModel,
@@ -37,14 +40,14 @@ describe("local-models", () => {
       expect(getCuratedModelToolSupport("onnx-community/Qwen3-0.6B-ONNX")).toBe(
         true,
       );
+      expect(
+        getCuratedModelToolSupport("gemma-4-E2B-it-Q5_K_M.llamafile"),
+      ).toBe(true);
     });
 
     it("returns false for models that do not support tools", () => {
       expect(
         getCuratedModelToolSupport("onnx-community/gemma-3-1b-it-ONNX-GQA"),
-      ).toBe(false);
-      expect(
-        getCuratedModelToolSupport("gemma-4-E2B-it-Q5_K_M.llamafile"),
       ).toBe(false);
     });
 
@@ -94,6 +97,8 @@ describe("local-models", () => {
       expect(m.url).toMatch(
         /^https:\/\/huggingface\.co\/mozilla-ai\/llamafile_0\.10\/resolve\/main\//,
       );
+      expect(m.supportsTools).toBe(true);
+      expect(getCuratedModelToolSupport(m.id)).toBe(true);
     }
   });
 
@@ -261,6 +266,50 @@ describe("local-models", () => {
         await rm(testDir, { recursive: true, force: true });
       }
     });
+
+    it("identifies agentfile models and checks cache properly", async () => {
+      expect(isAgentfile("qwen-agent.agentfile")).toBe(true);
+      expect(isAgentfile("mozilla/agentfile-runner")).toBe(true);
+      expect(isAgentfile("gemma-4.llamafile")).toBe(false);
+      expect(isAgentfile("onnx-model")).toBe(false);
+
+      const cacheDir = getAgentfileCacheDir();
+      expect(cacheDir).toContain("assets/cache/agentfile");
+
+      const testDir = await mkdtemp(
+        path.join(tmpdir(), "sc-agentfile-cache-test-"),
+      );
+      try {
+        const agentDir = path.join(testDir, "agentfile");
+        fs.mkdirSync(agentDir, { recursive: true });
+
+        const target = path.join(agentDir, "demo-agent.agentfile");
+        const part = path.join(agentDir, "demo-agent.agentfile.part");
+
+        // Missing file
+        expect(isAgentfileLocallyCached("demo-agent.agentfile", testDir)).toBe(
+          false,
+        );
+
+        // In-progress .part file
+        fs.writeFileSync(target, "partial");
+        fs.writeFileSync(part, "downloading");
+        expect(isAgentfileLocallyCached("demo-agent.agentfile", testDir)).toBe(
+          false,
+        );
+
+        // Fully downloaded
+        fs.unlinkSync(part);
+        expect(isAgentfileLocallyCached("demo-agent.agentfile", testDir)).toBe(
+          true,
+        );
+        expect(isModelLocallyCached("demo-agent.agentfile", testDir)).toBe(
+          true,
+        );
+      } finally {
+        await rm(testDir, { recursive: true, force: true });
+      }
+    });
   });
 
   describe("listLocalModels and listLlamafileModels", () => {
@@ -315,6 +364,57 @@ describe("local-models", () => {
         const models = await fetchRemoteModels({ query: "qwen" });
         expect(models.length).toBe(1);
         expect(models[0].id).toBe("onnx-community/Qwen3-0.6B-ONNX");
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it("supports pagination parameters (page and pageSize)", async () => {
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = (jest.fn() as any).mockResolvedValue({
+        ok: true,
+        json: async () => [
+          { id: "onnx-community/model-1-onnx" },
+          { id: "onnx-community/model-2-onnx" },
+          { id: "onnx-community/model-3-onnx" },
+          { id: "onnx-community/model-4-onnx" },
+          { id: "onnx-community/model-5-onnx" },
+        ],
+      });
+
+      try {
+        const page1 = await fetchRemoteModels({ page: 1, pageSize: 2 });
+        expect(page1.length).toBe(2);
+        expect(page1[0].id).toBe("onnx-community/model-1-onnx");
+        expect(page1[1].id).toBe("onnx-community/model-2-onnx");
+
+        const page2 = await fetchRemoteModels({ page: 2, pageSize: 2 });
+        expect(page2.length).toBe(2);
+        expect(page2[0].id).toBe("onnx-community/model-3-onnx");
+        expect(page2[1].id).toBe("onnx-community/model-4-onnx");
+
+        const page3 = await fetchRemoteModels({ page: 3, pageSize: 2 });
+        expect(page3.length).toBe(1);
+        expect(page3[0].id).toBe("onnx-community/model-5-onnx");
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it("supports configuring custom limit on remote endpoint", async () => {
+      const originalFetch = globalThis.fetch;
+      let requestedUrl = "";
+      globalThis.fetch = jest.fn(async (url: any) => {
+        requestedUrl = String(url);
+        return {
+          ok: true,
+          json: async () => [],
+        };
+      }) as any;
+
+      try {
+        await fetchRemoteModels({ limit: 250 });
+        expect(requestedUrl).toContain("limit=250");
       } finally {
         globalThis.fetch = originalFetch;
       }
@@ -858,6 +958,289 @@ describe("local-models", () => {
 
       expect(exitCode).toBe(130);
       expect(capturedOutput).toContain("Operation cancelled.");
+    });
+    it("allows selecting a custom Agentfile and saves agentfile provider and model to shadow-claw.config.json", async () => {
+      const mockStdin = new PassThrough();
+      let capturedOutput = "";
+      const mockStdout = new Writable({
+        write(chunk, _encoding, callback) {
+          const str = chunk.toString();
+          capturedOutput += str;
+          if (str.includes("Enter choice [1-12]")) {
+            setImmediate(() => mockStdin.write("12\n"));
+          } else if (str.includes("Enter custom model ID")) {
+            setImmediate(() => mockStdin.write("coder-v1.agentfile\n"));
+          } else if (str.includes("Download model weights now?")) {
+            setImmediate(() => mockStdin.write("n\n"));
+          }
+          callback();
+        },
+      });
+
+      const result = await promptForAgentModel({
+        workspaceDir: tmpDir,
+        contentRoot: tmpDir,
+        stdin: mockStdin,
+        stdout: mockStdout,
+        isTTY: true,
+      });
+
+      expect(result.providerId).toBe("agentfile");
+      expect(result.model).toBe("coder-v1.agentfile");
+
+      const configPath = path.join(tmpDir, "shadow-claw.config.json");
+      const savedConfig = JSON.parse(await readFile(configPath, "utf8"));
+      expect(savedConfig.agent.defaultProvider).toBe("agentfile");
+      expect(savedConfig.agent.defaultModel).toBe("coder-v1.agentfile");
+    });
+
+    it("navigates Hugging Face models with pagination ('n' and 'p') and caches results in-session", async () => {
+      const originalFetch = globalThis.fetch;
+      const fakeModels = Array.from({ length: 60 }, (_, i) => ({
+        id: `onnx-community/test-model-${String(i + 1).padStart(2, "0")}-onnx`,
+      }));
+      let fetchCallCount = 0;
+      globalThis.fetch = jest.fn(async () => {
+        fetchCallCount++;
+        return {
+          ok: true,
+          json: async () => fakeModels,
+        };
+      }) as any;
+
+      const mockStdin = new PassThrough();
+      let capturedOutput = "";
+      let step = 0;
+      const mockStdout = new Writable({
+        write(chunk, _encoding, callback) {
+          const str = chunk.toString();
+          capturedOutput += str;
+          if (str.includes("Enter choice [1-12]")) {
+            setImmediate(() => mockStdin.write("12\n"));
+          } else if (str.includes("Enter custom model ID")) {
+            setImmediate(() => mockStdin.write("r\n"));
+          } else if (str.includes("Select [1-25]") && step === 0) {
+            step++;
+            setImmediate(() => mockStdin.write("n\n"));
+          } else if (str.includes("Select [26-50]") && step === 1) {
+            step++;
+            setImmediate(() => mockStdin.write("p\n"));
+          } else if (str.includes("Select [1-25]") && step === 2) {
+            step++;
+            setImmediate(() => mockStdin.write("2\n"));
+          } else if (str.includes("Download model weights now?")) {
+            setImmediate(() => mockStdin.write("n\n"));
+          }
+          callback();
+        },
+      });
+
+      try {
+        const result = await promptForAgentModel({
+          workspaceDir: tmpDir,
+          contentRoot: tmpDir,
+          stdin: mockStdin,
+          stdout: mockStdout,
+          isTTY: true,
+        });
+
+        expect(result.providerId).toBe("transformers_js_local");
+        expect(result.model).toBe("onnx-community/test-model-02-onnx");
+        expect(capturedOutput).toContain("Page 1 of 3, showing 1-25 of 60");
+        expect(capturedOutput).toContain("Page 2 of 3, showing 26-50 of 60");
+        expect(capturedOutput).toContain(
+          "... and 35 more (type 'n' for next page)",
+        );
+        expect(capturedOutput).toContain(
+          "... and 10 more (type 'n' for next page, 'p' for previous page)",
+        );
+        expect(fetchCallCount).toBe(1);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it("supports search re-filtering mid-browse ('s <query>') and selects filtered model", async () => {
+      const originalFetch = globalThis.fetch;
+      const fakeModels = [
+        { id: "onnx-community/alpha-1-onnx" },
+        { id: "onnx-community/beta-2-onnx" },
+        { id: "onnx-community/special-qwen-onnx" },
+      ];
+      globalThis.fetch = jest.fn(async () => ({
+        ok: true,
+        json: async () => fakeModels,
+      })) as any;
+
+      const mockStdin = new PassThrough();
+      let capturedOutput = "";
+      let searched = false;
+      const mockStdout = new Writable({
+        write(chunk, _encoding, callback) {
+          const str = chunk.toString();
+          capturedOutput += str;
+          if (str.includes("Enter choice [1-12]")) {
+            setImmediate(() => mockStdin.write("r\n"));
+          } else if (str.includes("Select [1-3]") && !searched) {
+            searched = true;
+            setImmediate(() => mockStdin.write("s special\n"));
+          } else if (str.includes("Select [1-1]") && searched) {
+            setImmediate(() => mockStdin.write("1\n"));
+          } else if (str.includes("Download model weights now?")) {
+            setImmediate(() => mockStdin.write("n\n"));
+          }
+          callback();
+        },
+      });
+
+      try {
+        const result = await promptForAgentModel({
+          workspaceDir: tmpDir,
+          contentRoot: tmpDir,
+          stdin: mockStdin,
+          stdout: mockStdout,
+          isTTY: true,
+        });
+
+        expect(result.providerId).toBe("transformers_js_local");
+        expect(result.model).toBe("onnx-community/special-qwen-onnx");
+        expect(capturedOutput).toContain("special-qwen-onnx");
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it("supports back command ('b') to return to the main model selection menu", async () => {
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = jest.fn(async () => ({
+        ok: true,
+        json: async () => [{ id: "onnx-community/some-model-onnx" }],
+      })) as any;
+
+      const mockStdin = new PassThrough();
+      let capturedOutput = "";
+      let backed = false;
+      const mockStdout = new Writable({
+        write(chunk, _encoding, callback) {
+          const str = chunk.toString();
+          capturedOutput += str;
+          if (str.includes("Enter choice [1-12]") && !backed) {
+            setImmediate(() => mockStdin.write("r\n"));
+          } else if (str.includes("Select [1-1]") && !backed) {
+            backed = true;
+            setImmediate(() => mockStdin.write("b\n"));
+          } else if (str.includes("Enter choice [1-12]") && backed) {
+            setImmediate(() => mockStdin.write("1\n"));
+          } else if (str.includes("Download model weights now?")) {
+            setImmediate(() => mockStdin.write("n\n"));
+          }
+          callback();
+        },
+      });
+
+      try {
+        const result = await promptForAgentModel({
+          workspaceDir: tmpDir,
+          contentRoot: tmpDir,
+          stdin: mockStdin,
+          stdout: mockStdout,
+          isTTY: true,
+        });
+
+        expect(result.providerId).toBe("transformers_js_local");
+        expect(result.model).toBe(DEFAULT_LOCAL_MODEL);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it("handles pagination boundary conditions ('p' on first page, 'n' on last page)", async () => {
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = jest.fn(async () => ({
+        ok: true,
+        json: async () => [{ id: "onnx-community/single-model-onnx" }],
+      })) as any;
+
+      const mockStdin = new PassThrough();
+      let step = 0;
+      let capturedOutput = "";
+      const mockStdout = new Writable({
+        write(chunk, _encoding, callback) {
+          const str = chunk.toString();
+          capturedOutput += str;
+          if (str.includes("Enter choice [1-12]")) {
+            setImmediate(() => mockStdin.write("r\n"));
+          } else if (str.includes("Select [1-1]") && step === 0) {
+            step++;
+            setImmediate(() => mockStdin.write("p\n"));
+          } else if (str.includes("Already on the first page.") && step === 1) {
+            step++;
+            setImmediate(() => mockStdin.write("n\n"));
+          } else if (str.includes("Already on the last page.") && step === 2) {
+            step++;
+            setImmediate(() => mockStdin.write("1\n"));
+          } else if (str.includes("Download model weights now?")) {
+            setImmediate(() => mockStdin.write("n\n"));
+          }
+          callback();
+        },
+      });
+
+      try {
+        const result = await promptForAgentModel({
+          workspaceDir: tmpDir,
+          contentRoot: tmpDir,
+          stdin: mockStdin,
+          stdout: mockStdout,
+          isTTY: true,
+        });
+
+        expect(result.model).toBe("onnx-community/single-model-onnx");
+        expect(capturedOutput).toContain("Already on the first page.");
+        expect(capturedOutput).toContain("Already on the last page.");
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it("allows entering a custom model ID directly from the browse prompt", async () => {
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = jest.fn(async () => ({
+        ok: true,
+        json: async () => [{ id: "onnx-community/some-model-onnx" }],
+      })) as any;
+
+      const mockStdin = new PassThrough();
+      let capturedOutput = "";
+      const mockStdout = new Writable({
+        write(chunk, _encoding, callback) {
+          const str = chunk.toString();
+          capturedOutput += str;
+          if (str.includes("Enter choice [1-12]")) {
+            setImmediate(() => mockStdin.write("r\n"));
+          } else if (str.includes("Select [1-1]")) {
+            setImmediate(() => mockStdin.write("my-custom-model-onnx\n"));
+          } else if (str.includes("Download model weights now?")) {
+            setImmediate(() => mockStdin.write("n\n"));
+          }
+          callback();
+        },
+      });
+
+      try {
+        const result = await promptForAgentModel({
+          workspaceDir: tmpDir,
+          contentRoot: tmpDir,
+          stdin: mockStdin,
+          stdout: mockStdout,
+          isTTY: true,
+        });
+
+        expect(result.providerId).toBe("transformers_js_local");
+        expect(result.model).toBe("onnx-community/my-custom-model-onnx");
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
     });
   });
 });

@@ -15,22 +15,23 @@ import { isIP } from "node:net";
 
 import type { Request, Response as ExpressResponse } from "express";
 
-import {
-  getFirstHeaderValue,
-  parseLooseToolCallInput,
-  parseLooseFunctionCallArgs,
-} from "../utils/proxy-helpers.js";
+import { getFirstHeaderValue } from "../utils/proxy-helpers.js";
 
 import {
   writeOpenAiDeltaChunk,
   writeOpenAiToolCallChunk,
   writeOpenAiDoneChunk,
 } from "../utils/openai-sse.js";
+import {
+  parseLocalModelToolCalls,
+  createToolCallStreamFilter,
+  convertToolSchemasToOpenAI,
+} from "../../subsystems/providers/utils/parseLocalModelToolCall.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const require = createRequire(import.meta.url);
-const LLAMAFILE_EXTENSION = ".llamafile";
+export const LLAMAFILE_EXTENSION = ".llamafile";
 
 export const DEFAULT_LLAMAFILE_HOST = "127.0.0.1";
 export const DEFAULT_LLAMAFILE_PORT = 8080;
@@ -48,6 +49,381 @@ const LLAMAFILE_ALLOWED_LOOPBACK_HOSTS = new Set([
 ]);
 
 export type LlamafileMode = "server" | "cli";
+
+export type LocalBinaryKind = "llamafile" | "agentfile";
+
+export interface LocalBinaryDriver {
+  kind: LocalBinaryKind;
+  extension: string;
+  defaultSubdir: string;
+  builtInTools: any[];
+  buildArgs?: (options: {
+    prompt: string;
+    nPredict?: number;
+    ctxSize?: number;
+    tools?: any[];
+    offline?: boolean;
+    modelPath?: string;
+    runtimeOptions?: Record<string, any>;
+  }) => string[];
+  buildCliArgs?: (options: {
+    modelPath?: string;
+    prompt: string;
+    nPredict?: number;
+    ctxSize?: number;
+    offline?: boolean;
+    tools?: any[];
+    runtimeOptions?: Record<string, any>;
+  }) => string[];
+  supportsOfflineFlag?: (
+    absolutePath: string,
+    verbose?: boolean,
+  ) => Promise<boolean>;
+}
+
+export const LLAMAFILE_BUILTIN_TOOLS = [
+  {
+    type: "function",
+    name: "read_file",
+    description: "Read all or part of a file.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "The path to the file to read." },
+        offset: {
+          type: "integer",
+          description: "Byte offset to start reading from.",
+        },
+        length: { type: "integer", description: "Number of bytes to read." },
+      },
+      required: ["path"],
+    },
+  },
+  {
+    type: "function",
+    name: "file_glob_search",
+    description: "Find files whose paths match a glob.",
+    parameters: {
+      type: "object",
+      properties: {
+        pattern: {
+          type: "string",
+          description: "Glob pattern to search for.",
+        },
+        directory: {
+          type: "string",
+          description: "Directory to search within.",
+        },
+      },
+      required: ["pattern"],
+    },
+  },
+  {
+    type: "function",
+    name: "grep_search",
+    description: "Search files for matching text.",
+    parameters: {
+      type: "object",
+      properties: {
+        pattern: {
+          type: "string",
+          description: "Regular expression or text pattern.",
+        },
+        directory: {
+          type: "string",
+          description: "Directory to search within.",
+        },
+      },
+      required: ["pattern"],
+    },
+  },
+  {
+    type: "function",
+    name: "exec_shell_command",
+    description: "Run a host shell command.",
+    parameters: {
+      type: "object",
+      properties: {
+        command: {
+          type: "string",
+          description: "Shell command line to execute.",
+        },
+      },
+      required: ["command"],
+    },
+  },
+  {
+    type: "function",
+    name: "write_file",
+    description: "Create or replace a file.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: {
+          type: "string",
+          description: "The path to the file to write.",
+        },
+        content: {
+          type: "string",
+          description: "The content to write to the file.",
+        },
+      },
+      required: ["path", "content"],
+    },
+  },
+  {
+    type: "function",
+    name: "edit_file",
+    description: "Replace selected text in an existing file.",
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "The path to the file to edit." },
+        target: { type: "string", description: "Existing text to replace." },
+        replacement: { type: "string", description: "Replacement text." },
+      },
+      required: ["path", "target", "replacement"],
+    },
+  },
+  {
+    type: "function",
+    name: "get_datetime",
+    description: "Get the server's current date and time.",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    type: "function",
+    name: "get_info",
+    description: "Get the runtime operating system and working directory.",
+    parameters: {
+      type: "object",
+      properties: {},
+    },
+  },
+];
+
+export const AGENTFILE_BUILTIN_TOOLS = [
+  ...LLAMAFILE_BUILTIN_TOOLS,
+  {
+    type: "function",
+    name: "http_fetch",
+    description: "GET a URL (http/https).",
+    parameters: {
+      type: "object",
+      properties: {
+        url: { type: "string", description: "URL to fetch." },
+      },
+      required: ["url"],
+    },
+  },
+  {
+    type: "function",
+    name: "web_search",
+    description: "Search the web via SearXNG.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Search query." },
+      },
+      required: ["query"],
+    },
+  },
+];
+
+const binaryDrivers = new Map<string, LocalBinaryDriver>();
+
+export function registerBinaryDriver(driver: LocalBinaryDriver): void {
+  binaryDrivers.set(driver.kind, driver);
+  binaryDrivers.set(driver.extension.toLowerCase(), driver);
+}
+
+export function getBinaryDriver(
+  kindOrExtension: string,
+): LocalBinaryDriver | undefined {
+  const normalized = kindOrExtension.trim().toLowerCase();
+  return binaryDrivers.get(normalized);
+}
+
+export function resolveBinaryDriver(
+  modelOrPath: string,
+): LocalBinaryDriver | undefined {
+  const normalized = modelOrPath.trim().toLowerCase();
+  for (const driver of binaryDrivers.values()) {
+    if (
+      normalized.endsWith(driver.extension.toLowerCase()) ||
+      normalized.includes(driver.kind)
+    ) {
+      return driver;
+    }
+  }
+  return binaryDrivers.get("llamafile");
+}
+
+export function getBuiltinTools(kind: LocalBinaryKind = "llamafile"): any[] {
+  const driver = getBinaryDriver(kind);
+  return driver ? driver.builtInTools : LLAMAFILE_BUILTIN_TOOLS;
+}
+
+export function buildLlamafileArgs(options: {
+  prompt: string;
+  nPredict?: number;
+  ctxSize?: number;
+  offline?: boolean;
+}): string[] {
+  const nPredict = options.nPredict ?? 512;
+  const ctxSize = options.ctxSize ?? DEFAULT_LLAMAFILE_CTX_SIZE;
+  const args = [
+    "--n-predict",
+    String(nPredict),
+    "--ctx-size",
+    String(ctxSize),
+    "--cli",
+    "-p",
+    options.prompt,
+  ];
+  if (options.offline) {
+    args.unshift("--offline");
+  }
+  return args;
+}
+
+export function buildAgentfileArgs(options: {
+  prompt: string;
+  nPredict?: number;
+  ctxSize?: number;
+  tools?: any[];
+  offline?: boolean;
+  modelPath?: string;
+  runtimeOptions?: Record<string, any>;
+}): string[] {
+  const {
+    prompt,
+    ctxSize = 65536,
+    tools,
+    modelPath,
+    runtimeOptions = {},
+  } = options;
+
+  const args: string[] = [];
+
+  if (modelPath) {
+    args.push("-m", modelPath);
+  }
+
+  const systemPrompt =
+    runtimeOptions.systemPrompt ||
+    runtimeOptions.system_prompt ||
+    runtimeOptions.systemPromptFile;
+  if (systemPrompt) {
+    args.push("-s", systemPrompt);
+  }
+
+  args.push("-p", prompt);
+  args.push("-c", String(ctxSize));
+
+  if (tools !== undefined) {
+    if (Array.isArray(tools)) {
+      if (tools.length === 0) {
+        args.push("--tools", "none");
+      } else {
+        const toolNames = tools
+          .map((t) => (typeof t === "string" ? t : t.name || t.function?.name))
+          .filter(Boolean)
+          .join(",");
+        args.push("--tools", toolNames || "all");
+      }
+    } else if (typeof tools === "string") {
+      args.push("--tools", tools);
+    }
+  } else if (runtimeOptions.tools) {
+    args.push("--tools", String(runtimeOptions.tools));
+  } else {
+    args.push("--tools", "all");
+  }
+
+  const confirm =
+    runtimeOptions.confirm === true || runtimeOptions.yes === false;
+  if (confirm) {
+    args.push("--confirm");
+  } else {
+    args.push("--yes");
+  }
+
+  const toolsRuntime =
+    runtimeOptions.toolsRuntime || runtimeOptions.tools_runtime;
+  if (toolsRuntime) {
+    args.push("--tools-runtime", String(toolsRuntime));
+  }
+
+  const searxngUrl =
+    runtimeOptions.searxngUrl ||
+    runtimeOptions.searxng_url ||
+    process.env.SEARXNG_URL;
+  if (searxngUrl) {
+    args.push("--searxng-url", String(searxngUrl));
+  }
+
+  const sessionFile =
+    runtimeOptions.sessionFile ||
+    runtimeOptions.session_file ||
+    runtimeOptions.session;
+  if (sessionFile) {
+    args.push("--session", String(sessionFile));
+  }
+
+  const traceFile =
+    runtimeOptions.traceFile ||
+    runtimeOptions.trace_file ||
+    runtimeOptions.trace;
+  if (traceFile) {
+    args.push("--trace", String(traceFile));
+  }
+
+  const maxIterations =
+    runtimeOptions.maxIterations ?? runtimeOptions.max_iterations;
+  if (maxIterations !== undefined && maxIterations !== null) {
+    args.push("--max-iterations", String(maxIterations));
+  }
+
+  if (runtimeOptions.think === true) {
+    args.push("--think");
+  }
+
+  return args;
+}
+
+registerBinaryDriver({
+  kind: "llamafile",
+  extension: ".llamafile",
+  defaultSubdir: "llamafile",
+  builtInTools: LLAMAFILE_BUILTIN_TOOLS,
+  buildArgs: (options) =>
+    buildLlamafileArgs({
+      prompt: options.prompt,
+      nPredict: options.nPredict,
+      ctxSize: options.ctxSize,
+      offline: options.offline,
+    }),
+  buildCliArgs: (options) =>
+    buildLlamafileArgs({
+      prompt: options.prompt,
+      nPredict: options.nPredict,
+      ctxSize: options.ctxSize,
+      offline: options.offline,
+    }),
+});
+
+registerBinaryDriver({
+  kind: "agentfile",
+  extension: ".agentfile",
+  defaultSubdir: "agentfile",
+  builtInTools: AGENTFILE_BUILTIN_TOOLS,
+  buildArgs: (options) => buildAgentfileArgs(options),
+  buildCliArgs: (options) => buildAgentfileArgs(options),
+});
 
 export interface TrackedLlamafileProcess {
   child: ReturnType<typeof spawn>;
@@ -131,12 +507,31 @@ export function ensureLlamafileProcessExitHandlers(): void {
 ensureLlamafileProcessExitHandlers();
 
 export interface LlamafileManagerService {
-  listBinaries(): Promise<
-    Array<{ fileName: string; id: string; absolutePath: string }>
+  listBinaries(
+    filterKind?: LocalBinaryKind,
+  ): Promise<
+    Array<{ fileName: string; id: string; absolutePath: string; kind?: string }>
   >;
-  resolveBinary(
-    model: string,
-  ): Promise<{ fileName: string; id: string; absolutePath: string }>;
+  resolveBinary(model: string): Promise<{
+    fileName: string;
+    id: string;
+    absolutePath: string;
+    kind?: string;
+  }>;
+  listTools(options?: {
+    mode?: LlamafileMode;
+    host?: string;
+    port?: number;
+  }): Promise<any[]>;
+  executeTool(
+    name: string,
+    args: Record<string, any>,
+    options?: {
+      mode?: LlamafileMode;
+      host?: string;
+      port?: number;
+    },
+  ): Promise<any>;
   cancelRequest(requestId: string): boolean;
   getLlamafileRequestId(req: Request, body?: Record<string, any>): string;
   getLlamafileRuntimeOptions(req: Request): {
@@ -284,13 +679,45 @@ function flattenMessageContent(content: unknown): string {
   return parts.join("\n");
 }
 
-function buildCliPrompt(body: Record<string, any>): string {
+export function buildCliPrompt(body: Record<string, any>): string {
   const messages = Array.isArray(body.messages) ? body.messages : [];
   if (messages.length === 0) {
     return "";
   }
 
   const lines: string[] = [];
+
+  const rawTools = Array.isArray(body.tools) ? body.tools : [];
+  if (rawTools.length > 0) {
+    const openAITools = convertToolSchemasToOpenAI(rawTools);
+    const toolDescriptions = openAITools
+      .map((t) => {
+        const fn = t.function || t;
+        const name = fn.name || t.name;
+        const desc = fn.description || t.description || "";
+        const paramsStr = fn.parameters ? JSON.stringify(fn.parameters) : "{}";
+        return `- ${name}: ${desc}\n  Parameters: ${paramsStr}`;
+      })
+      .join("\n\n");
+
+    const toolsPrompt = [
+      "# Tools",
+      "",
+      "You have access to the following tools:",
+      "",
+      toolDescriptions,
+      "",
+      "To use a tool, respond with:",
+      "call:<tool_name>{<param>:<value>}",
+      "or",
+      "<tool_call>",
+      '{"name": "<tool_name>", "arguments": { ... }}',
+      "</tool_call>",
+    ].join("\n");
+
+    lines.push(`SYSTEM: ${toolsPrompt}`);
+  }
+
   for (const rawMessage of messages) {
     if (!rawMessage || typeof rawMessage !== "object") {
       continue;
@@ -391,38 +818,6 @@ export function stripLlamafilePromptEcho(text: string, prompt: string): string {
   return cleaned.trim();
 }
 
-function parseTransformersToolCallText(
-  text: string,
-): { name: string; input: Record<string, any> } | null {
-  const trimmed = text
-    .replace(/<\s*turn\|>\s*|<\|end_of_turn\|>|<\|eot_id\|>/gi, "")
-    .trim();
-  const legacyMatch = trimmed.match(
-    /^call\s*:\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\{([\s\S]*)\}\s*$/,
-  );
-
-  if (legacyMatch?.[1]) {
-    const name = legacyMatch[1];
-    const rawArgs = legacyMatch[2]?.trim() || "";
-    const input = parseLooseToolCallInput(rawArgs);
-
-    return { name, input };
-  }
-
-  const executeToolMatch = trimmed.match(
-    /^<\s*execute_tool\s*>\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*<\s*\/\s*execute_tool\s*>\s*$/i,
-  );
-  if (executeToolMatch?.[1]) {
-    const name = executeToolMatch[1];
-    const rawArgs = executeToolMatch[2]?.trim() || "";
-    const input = parseLooseFunctionCallArgs(rawArgs);
-
-    return { name, input };
-  }
-
-  return null;
-}
-
 export function createLlamafileManagerService(): LlamafileManagerService {
   const activeRequests = new Map<string, () => void>();
   const offlineSupportCache = new Map<string, boolean>();
@@ -447,8 +842,10 @@ export function createLlamafileManagerService(): LlamafileManagerService {
     return unregister;
   }
 
-  async function listBinaries(): Promise<
-    Array<{ fileName: string; id: string; absolutePath: string }>
+  async function listBinaries(
+    filterKind?: LocalBinaryKind,
+  ): Promise<
+    Array<{ fileName: string; id: string; absolutePath: string; kind?: string }>
   > {
     const candidateDirs = [
       path.resolve(__dirname, "../../../assets/cache/llamafile"),
@@ -477,25 +874,43 @@ export function createLlamafileManagerService(): LlamafileManagerService {
     const entries = await readdir(resolvedDir, { withFileTypes: true });
 
     return entries
-      .filter(
-        (entry) => entry.isFile() && entry.name.endsWith(LLAMAFILE_EXTENSION),
-      )
+      .filter((entry) => {
+        if (!entry.isFile()) return false;
+        return (
+          entry.name.endsWith(LLAMAFILE_EXTENSION) ||
+          entry.name.endsWith(".agentfile")
+        );
+      })
       .map((entry) => {
         const fileName = entry.name;
-        const id = fileName.slice(0, -LLAMAFILE_EXTENSION.length);
+        const driver = resolveBinaryDriver(fileName);
+        const ext = driver?.extension ?? LLAMAFILE_EXTENSION;
+        const id = fileName.endsWith(ext)
+          ? fileName.slice(0, -ext.length)
+          : fileName;
 
         return {
           fileName,
           id,
+          kind: driver?.kind ?? "llamafile",
           absolutePath: path.resolve(resolvedDir, fileName),
         };
+      })
+      .filter((entry) => {
+        if (filterKind && entry.kind !== filterKind) {
+          return false;
+        }
+        return true;
       })
       .sort((a, b) => a.fileName.localeCompare(b.fileName));
   }
 
-  async function resolveBinary(
-    model: string,
-  ): Promise<{ fileName: string; id: string; absolutePath: string }> {
+  async function resolveBinary(model: string): Promise<{
+    fileName: string;
+    id: string;
+    absolutePath: string;
+    kind?: string;
+  }> {
     const binaries = await listBinaries();
     const normalizedModel = model.trim();
 
@@ -511,8 +926,10 @@ export function createLlamafileManagerService(): LlamafileManagerService {
     }
 
     const baseName = path.basename(normalizedModel);
-    const idWithoutExt = baseName.endsWith(LLAMAFILE_EXTENSION)
-      ? baseName.slice(0, -LLAMAFILE_EXTENSION.length)
+    const driver = resolveBinaryDriver(baseName);
+    const ext = driver?.extension ?? LLAMAFILE_EXTENSION;
+    const idWithoutExt = baseName.endsWith(ext)
+      ? baseName.slice(0, -ext.length)
       : baseName;
 
     const match = binaries.find(
@@ -521,7 +938,7 @@ export function createLlamafileManagerService(): LlamafileManagerService {
         item.fileName === normalizedModel ||
         item.fileName === baseName ||
         item.id === idWithoutExt ||
-        item.fileName === `${idWithoutExt}${LLAMAFILE_EXTENSION}`,
+        item.fileName === `${idWithoutExt}${ext}`,
     );
     if (!match) {
       throw new Error(
@@ -638,20 +1055,19 @@ export function createLlamafileManagerService(): LlamafileManagerService {
       if (useShellFallback) {
         if (verbose) {
           console.log(
-            `[Proxy] Shell fallback: /bin/sh -c 'exec "\$0" "\$@"' ${absolutePath} [${args.length} args]`,
+            `[Proxy] Shell script mode: /bin/sh ${absolutePath} [${args.length} args]`,
           );
         }
 
-        return spawn(
-          "/bin/sh",
-          ["-c", 'exec "$0" "$@"', absolutePath, ...args],
-          {
-            cwd: opts.cwd,
-            env: opts.env,
-            stdio: ["ignore", "pipe", "pipe"],
-            detached: opts.detached,
-          },
-        );
+        // Run the APE llamafile as a shell script. A plain exec (even via
+        // `sh -c exec`) can be intercepted by binfmt_misc/run-detectors,
+        // which fails with "unable to find an interpreter".
+        return spawn("/bin/sh", [absolutePath, ...args], {
+          cwd: opts.cwd,
+          env: opts.env,
+          stdio: ["ignore", "pipe", "pipe"],
+          detached: opts.detached,
+        });
       }
 
       return spawn(absolutePath, args, {
@@ -680,6 +1096,15 @@ export function createLlamafileManagerService(): LlamafileManagerService {
     };
 
     let child: ReturnType<typeof spawn>;
+
+    // On POSIX, always launch via sh script mode (see above).
+    if (process.platform !== "win32") {
+      child = spawnForLlamafile(true);
+      await waitForSpawnOrError(child);
+
+      return child;
+    }
+
     try {
       child = spawnForLlamafile(false);
       await waitForSpawnOrError(child);
@@ -786,7 +1211,11 @@ export function createLlamafileManagerService(): LlamafileManagerService {
         throw new Error("Request already closed or aborted");
       }
 
-      const { absolutePath } = await resolveBinary(opts.model);
+      const binary = await resolveBinary(opts.model);
+      const absolutePath = binary.absolutePath;
+      const driver = resolveBinaryDriver(binary.fileName);
+      const isAgentfile =
+        binary.kind === "agentfile" || driver?.kind === "agentfile";
       const requestId = getLlamafileRequestId(req, body);
 
       try {
@@ -815,29 +1244,51 @@ export function createLlamafileManagerService(): LlamafileManagerService {
         );
       }
 
-      const maxTokensRaw =
-        typeof body.max_tokens === "number" && Number.isFinite(body.max_tokens)
-          ? Math.floor(body.max_tokens)
-          : 512;
-      const nPredict = Math.max(1, maxTokensRaw);
+      let args: string[];
+      if (isAgentfile) {
+        const ctxSizeRaw =
+          typeof body.ctx_size === "number" && Number.isFinite(body.ctx_size)
+            ? Math.floor(body.ctx_size)
+            : typeof body.max_tokens === "number" &&
+                Number.isFinite(body.max_tokens)
+              ? Math.floor(body.max_tokens)
+              : 65536;
+        args = buildAgentfileArgs({
+          prompt,
+          ctxSize: ctxSizeRaw,
+          tools: body.tools,
+          modelPath: body.model_path || body.modelPath,
+          runtimeOptions: {
+            ...body,
+            ...opts,
+          },
+        });
+      } else {
+        const maxTokensRaw =
+          typeof body.max_tokens === "number" &&
+          Number.isFinite(body.max_tokens)
+            ? Math.floor(body.max_tokens)
+            : 512;
+        const nPredict = Math.max(1, maxTokensRaw);
 
-      const args = [
-        "--n-predict",
-        String(nPredict),
-        "--ctx-size",
-        String(DEFAULT_LLAMAFILE_CTX_SIZE),
-        "--cli",
-        "-p",
-        prompt,
-      ];
-      const useOfflineFlag =
-        opts.offline && (await supportsOfflineFlag(absolutePath, verbose));
-      if (useOfflineFlag) {
-        args.unshift("--offline");
-      } else if (opts.offline && verbose) {
-        console.log(
-          `[Proxy] Skipping unsupported --offline flag for ${path.basename(absolutePath)}.`,
-        );
+        args = [
+          "--n-predict",
+          String(nPredict),
+          "--ctx-size",
+          String(DEFAULT_LLAMAFILE_CTX_SIZE),
+          "--cli",
+          "-p",
+          prompt,
+        ];
+        const useOfflineFlag =
+          opts.offline && (await supportsOfflineFlag(absolutePath, verbose));
+        if (useOfflineFlag) {
+          args.unshift("--offline");
+        } else if (opts.offline && verbose) {
+          console.log(
+            `[Proxy] Skipping unsupported --offline flag for ${path.basename(absolutePath)}.`,
+          );
+        }
       }
 
       let child: ReturnType<typeof spawn>;
@@ -1019,6 +1470,12 @@ export function createLlamafileManagerService(): LlamafileManagerService {
           res.setHeader("Access-Control-Allow-Origin", "*");
           res.flushHeaders();
 
+          const streamFilter = createToolCallStreamFilter((filteredChunk) => {
+            if (!requestClosed && !res.writableEnded) {
+              writeOpenAiDeltaChunk(res, opts.model, filteredChunk);
+            }
+          });
+
           child.stdout!.on("data", (chunk: Buffer) => {
             if (requestClosed || res.writableEnded) {
               return;
@@ -1026,12 +1483,16 @@ export function createLlamafileManagerService(): LlamafileManagerService {
 
             const text = chunk.toString("utf8");
             fullStdout += text;
-            const filteredText = promptEchoFilter.push(text);
-            if (filteredText && !requestClosed && !res.writableEnded) {
-              writeOpenAiDeltaChunk(res, opts.model, filteredText);
-            }
+            if (isAgentfile) {
+              writeOpenAiDeltaChunk(res, opts.model, text);
+            } else {
+              const filteredText = promptEchoFilter.push(text);
+              if (filteredText) {
+                streamFilter.onToken(filteredText);
+              }
 
-            filteredStdout += filteredText;
+              filteredStdout += filteredText;
+            }
           });
 
           child.stderr!.on("data", (chunk: Buffer) => {
@@ -1049,9 +1510,10 @@ export function createLlamafileManagerService(): LlamafileManagerService {
               return;
             }
 
-            if (code !== 0) {
+            if (code !== 0 && (!isAgentfile || code !== 4)) {
               const message =
-                stderr.trim() || `llamafile exited with status ${code}`;
+                stderr.trim() ||
+                `${isAgentfile ? "agentfile" : "llamafile"} exited with status ${code}`;
               res.write(
                 `data: ${JSON.stringify({ error: { type: "server_error", message } })}\n\n`,
               );
@@ -1062,22 +1524,36 @@ export function createLlamafileManagerService(): LlamafileManagerService {
               return;
             }
 
-            const trailingText = promptEchoFilter.flush();
-            filteredStdout += trailingText;
-            const toolCall = parseTransformersToolCallText(
-              filteredStdout.trim(),
-            );
-            if (toolCall) {
-              writeOpenAiToolCallChunk(res, opts.model, toolCall);
-              writeOpenAiDoneChunk(res, opts.model, "tool_calls");
+            if (isAgentfile) {
+              writeOpenAiDoneChunk(
+                res,
+                opts.model,
+                code === 4 ? "length" : "stop",
+              );
               res.end();
               resolve();
 
               return;
             }
 
-            if (trailingText && !requestClosed && !res.writableEnded) {
-              writeOpenAiDeltaChunk(res, opts.model, trailingText);
+            const trailingText = promptEchoFilter.flush();
+            filteredStdout += trailingText;
+            if (trailingText) {
+              streamFilter.onToken(trailingText);
+            }
+
+            const toolCalls = parseLocalModelToolCalls(filteredStdout.trim());
+            streamFilter.finalize(toolCalls.length > 0);
+
+            if (toolCalls.length > 0) {
+              toolCalls.forEach((toolCall, idx) => {
+                writeOpenAiToolCallChunk(res, opts.model, toolCall, idx);
+              });
+              writeOpenAiDoneChunk(res, opts.model, "tool_calls");
+              res.end();
+              resolve();
+
+              return;
             }
 
             writeOpenAiDoneChunk(res, opts.model);
@@ -1098,9 +1574,9 @@ export function createLlamafileManagerService(): LlamafileManagerService {
 
             const fullMessage = `Child process error: ${error instanceof Error ? error.message : String(error)}`;
             if (!res.headersSent) {
-              res
-                .status(500)
-                .json({ error: `Failed to execute llamafile: ${fullMessage}` });
+              res.status(500).json({
+                error: `Failed to execute ${isAgentfile ? "agentfile" : "llamafile"}: ${fullMessage}`,
+              });
               resolve();
 
               return;
@@ -1137,10 +1613,33 @@ export function createLlamafileManagerService(): LlamafileManagerService {
             return;
           }
 
-          if (code !== 0) {
+          if (code !== 0 && (!isAgentfile || code !== 4)) {
             const message =
-              stderr.trim() || `llamafile exited with status ${code}`;
+              stderr.trim() ||
+              `${isAgentfile ? "agentfile" : "llamafile"} exited with status ${code}`;
             res.status(500).json({ error: message });
+            resolve();
+
+            return;
+          }
+
+          if (isAgentfile) {
+            res.json({
+              id: `chatcmpl-agentfile-${Date.now()}`,
+              object: "chat.completion",
+              created: Math.floor(Date.now() / 1000),
+              model: opts.model,
+              choices: [
+                {
+                  index: 0,
+                  message: {
+                    role: "assistant",
+                    content: fullStdout.trim() || "(no response)",
+                  },
+                  finish_reason: code === 4 ? "length" : "stop",
+                },
+              ],
+            });
             resolve();
 
             return;
@@ -1148,7 +1647,7 @@ export function createLlamafileManagerService(): LlamafileManagerService {
 
           filteredStdout += promptEchoFilter.flush();
           const text = filteredStdout.trim();
-          const toolCall = parseTransformersToolCallText(text);
+          const toolCalls = parseLocalModelToolCalls(text);
 
           res.json({
             id: `chatcmpl-llamafile-${Date.now()}`,
@@ -1158,23 +1657,22 @@ export function createLlamafileManagerService(): LlamafileManagerService {
             choices: [
               {
                 index: 0,
-                message: toolCall
-                  ? {
-                      role: "assistant",
-                      content: null,
-                      tool_calls: [
-                        {
-                          id: `call_${Date.now()}_${Math.random()}`,
+                message:
+                  toolCalls.length > 0
+                    ? {
+                        role: "assistant",
+                        content: null,
+                        tool_calls: toolCalls.map((toolCall, idx) => ({
+                          id: `call_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 8)}`,
                           type: "function",
                           function: {
                             name: toolCall.name,
                             arguments: JSON.stringify(toolCall.input || {}),
                           },
-                        },
-                      ],
-                    }
-                  : { role: "assistant", content: text || "(no response)" },
-                finish_reason: toolCall ? "tool_calls" : "stop",
+                        })),
+                      }
+                    : { role: "assistant", content: text || "(no response)" },
+                finish_reason: toolCalls.length > 0 ? "tool_calls" : "stop",
               },
             ],
           });
@@ -1198,6 +1696,86 @@ export function createLlamafileManagerService(): LlamafileManagerService {
           resolve();
         });
       });
+    },
+
+    async listTools(options?: {
+      mode?: LlamafileMode;
+      host?: string;
+      port?: number;
+    }): Promise<any[]> {
+      const mode = options?.mode || "cli";
+      const host = options?.host || DEFAULT_LLAMAFILE_HOST;
+      const port = options?.port || DEFAULT_LLAMAFILE_PORT;
+
+      if (mode === "server") {
+        try {
+          const upstreamUrl = `http://${host}:${port}/tools`;
+          const res = await fetch(upstreamUrl, {
+            method: "GET",
+            headers: {
+              Accept: "application/json",
+              "User-Agent":
+                process.env.SHADOWCLAW_USER_AGENT || "ShadowClaw/1.0",
+            },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data)) return data;
+            if (data && Array.isArray((data as any).tools))
+              return (data as any).tools;
+            if (data && Array.isArray((data as any).data))
+              return (data as any).data;
+          }
+        } catch {
+          // Fall back to built-in tools
+        }
+      }
+
+      return LLAMAFILE_BUILTIN_TOOLS;
+    },
+
+    async executeTool(
+      name: string,
+      args: Record<string, any>,
+      options?: {
+        mode?: LlamafileMode;
+        host?: string;
+        port?: number;
+      },
+    ): Promise<any> {
+      const mode = options?.mode || "cli";
+      const host = options?.host || DEFAULT_LLAMAFILE_HOST;
+      const port = options?.port || DEFAULT_LLAMAFILE_PORT;
+
+      if (mode === "server") {
+        const upstreamUrl = `http://${host}:${port}/tools`;
+        const upstreamBody = { name, arguments: args };
+        const res = await fetch(upstreamUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "User-Agent": process.env.SHADOWCLAW_USER_AGENT || "ShadowClaw/1.0",
+          },
+          body: JSON.stringify(upstreamBody),
+        });
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(
+            `Upstream /tools returned HTTP ${res.status}: ${errText}`,
+          );
+        }
+        return res.json();
+      }
+
+      if (name === "get_datetime") {
+        return { datetime: new Date().toISOString() };
+      }
+      if (name === "get_info") {
+        return { platform: process.platform, cwd: process.cwd() };
+      }
+      throw new Error(
+        `Tool execution for '${name}' requires server mode or is not supported locally.`,
+      );
     },
 
     terminateAll() {

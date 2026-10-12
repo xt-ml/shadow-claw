@@ -1,6 +1,9 @@
+import { jest } from "@jest/globals";
 import {
   buildPromptApiHelpDialogOptions,
   isNativePromptApiSupported,
+  isNativePromptApiAvailable,
+  isPromptApiPotentiallySupported,
   PROMPT_API_DOCS_URL,
   renderPromptApiStatusHtml,
 } from "./prompt-api.js";
@@ -49,6 +52,14 @@ describe("prompt-api help and capability utilities", () => {
       expect(isNativePromptApiSupported()).toBe(true);
     });
 
+    it("should return false when TRANSFORMERS_CONFIG is defined", () => {
+      const mockLm = { create: () => {} };
+      (globalThis as any).LanguageModel = mockLm;
+      (globalThis as any).TRANSFORMERS_CONFIG = {};
+      expect(isNativePromptApiSupported()).toBe(false);
+      delete (globalThis as any).TRANSFORMERS_CONFIG;
+    });
+
     it("should return false when LanguageModel and ai are undefined", () => {
       delete (globalThis as any).LanguageModel;
       delete (globalThis as any).ai;
@@ -57,6 +68,53 @@ describe("prompt-api help and capability utilities", () => {
         delete (window as any).ai;
       }
       expect(isNativePromptApiSupported()).toBe(false);
+    });
+  });
+
+  describe("isNativePromptApiAvailable", () => {
+    it("should return true when availability() is readily or downloadable", async () => {
+      const mockLm = {
+        create: () => {},
+        availability: jest.fn().mockResolvedValue("readily"),
+      };
+      (globalThis as any).LanguageModel = mockLm;
+      expect(await isNativePromptApiAvailable()).toBe(true);
+
+      mockLm.availability.mockResolvedValue("after-download");
+      expect(await isNativePromptApiAvailable()).toBe(true);
+    });
+
+    it("should return false when availability() is unavailable or no", async () => {
+      const mockLm = {
+        create: () => {},
+        availability: jest.fn().mockResolvedValue("unavailable"),
+      };
+      (globalThis as any).LanguageModel = mockLm;
+      expect(await isNativePromptApiAvailable()).toBe(false);
+
+      mockLm.availability.mockResolvedValue("no");
+      expect(await isNativePromptApiAvailable()).toBe(false);
+    });
+
+    it("should return false when availability() throws", async () => {
+      const mockLm = {
+        create: () => {},
+        availability: jest.fn().mockRejectedValue(new Error("API disabled")),
+      };
+      (globalThis as any).LanguageModel = mockLm;
+      expect(await isNativePromptApiAvailable()).toBe(false);
+    });
+
+    it("should return false when LanguageModel is not supported", async () => {
+      delete (globalThis as any).LanguageModel;
+      delete (globalThis as any).ai;
+      expect(await isNativePromptApiAvailable()).toBe(false);
+    });
+  });
+
+  describe("isPromptApiPotentiallySupported", () => {
+    it("should return false to treat undetected prompt API as unavailable", () => {
+      expect(isPromptApiPotentiallySupported()).toBe(false);
     });
   });
 

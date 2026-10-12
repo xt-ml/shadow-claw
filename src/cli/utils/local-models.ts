@@ -85,7 +85,7 @@ export const CURATED_LLAMAFILE_MODELS: LlamafileModelDefinition[] = [
     url: "https://huggingface.co/mozilla-ai/llamafile_0.10/resolve/main/gemma-4-E2B-it-Q5_K_M.llamafile",
     fileName: "gemma-4-E2B-it-Q5_K_M.llamafile",
     contextLength: 128000,
-    supportsTools: false,
+    supportsTools: true,
   },
   {
     id: "mozilla-ai/gemma-4-E4B-it-Q5_K_M.llamafile",
@@ -94,7 +94,7 @@ export const CURATED_LLAMAFILE_MODELS: LlamafileModelDefinition[] = [
     url: "https://huggingface.co/mozilla-ai/llamafile_0.10/resolve/main/gemma-4-E4B-it-Q5_K_M.llamafile",
     fileName: "gemma-4-E4B-it-Q5_K_M.llamafile",
     contextLength: 128000,
-    supportsTools: false,
+    supportsTools: true,
   },
   {
     id: "mozilla-ai/Qwen3.5-0.8B-Q8_0.llamafile",
@@ -103,7 +103,7 @@ export const CURATED_LLAMAFILE_MODELS: LlamafileModelDefinition[] = [
     url: "https://huggingface.co/mozilla-ai/llamafile_0.10/resolve/main/Qwen3.5-0.8B-Q8_0.llamafile",
     fileName: "Qwen3.5-0.8B-Q8_0.llamafile",
     contextLength: 32768,
-    supportsTools: false,
+    supportsTools: true,
   },
   {
     id: "mozilla-ai/Qwen3.5-2B-Q8_0.llamafile",
@@ -112,7 +112,7 @@ export const CURATED_LLAMAFILE_MODELS: LlamafileModelDefinition[] = [
     url: "https://huggingface.co/mozilla-ai/llamafile_0.10/resolve/main/Qwen3.5-2B-Q8_0.llamafile",
     fileName: "Qwen3.5-2B-Q8_0.llamafile",
     contextLength: 32768,
-    supportsTools: false,
+    supportsTools: true,
   },
   {
     id: "mozilla-ai/Qwen3.5-4B-Q5_K_S.llamafile",
@@ -121,7 +121,7 @@ export const CURATED_LLAMAFILE_MODELS: LlamafileModelDefinition[] = [
     url: "https://huggingface.co/mozilla-ai/llamafile_0.10/resolve/main/Qwen3.5-4B-Q5_K_S.llamafile",
     fileName: "Qwen3.5-4B-Q5_K_S.llamafile",
     contextLength: 32768,
-    supportsTools: false,
+    supportsTools: true,
   },
   {
     id: "mozilla-ai/Qwen3.5-9B-Q5_K_S.llamafile",
@@ -130,7 +130,7 @@ export const CURATED_LLAMAFILE_MODELS: LlamafileModelDefinition[] = [
     url: "https://huggingface.co/mozilla-ai/llamafile_0.10/resolve/main/Qwen3.5-9B-Q5_K_S.llamafile",
     fileName: "Qwen3.5-9B-Q5_K_S.llamafile",
     contextLength: 32768,
-    supportsTools: false,
+    supportsTools: true,
   },
 ];
 
@@ -193,6 +193,20 @@ export function isLlamafileLocallyCached(
   modelId: string,
   cacheDir?: string,
 ): boolean {
+  if (fs.existsSync(modelId)) {
+    try {
+      const st = fs.statSync(modelId);
+      if (st.size > 0) return true;
+    } catch {}
+  }
+  const cwdPath = path.resolve(process.cwd(), modelId);
+  if (fs.existsSync(cwdPath)) {
+    try {
+      const st = fs.statSync(cwdPath);
+      if (st.size > 0) return true;
+    } catch {}
+  }
+
   const dir = getLlamafileCacheDir(cacheDir);
   if (!fs.existsSync(dir)) {
     return false;
@@ -219,6 +233,64 @@ export function isLlamafileLocallyCached(
       return st.size > 0;
     }
   } catch {}
+
+  return false;
+}
+
+export function getAgentfileCacheDir(customCacheDir?: string): string {
+  if (customCacheDir) {
+    return path.resolve(customCacheDir, "agentfile");
+  }
+  return path.resolve(process.cwd(), "assets/cache/agentfile");
+}
+
+export function isAgentfile(modelId?: string): boolean {
+  if (!modelId || typeof modelId !== "string") return false;
+  return modelId.endsWith(".agentfile") || modelId.includes("agentfile");
+}
+
+export function isAgentfileLocallyCached(
+  modelId: string,
+  cacheDir?: string,
+): boolean {
+  if (fs.existsSync(modelId)) {
+    try {
+      const st = fs.statSync(modelId);
+      if (st.size > 0) return true;
+    } catch {}
+  }
+  const cwdPath = path.resolve(process.cwd(), modelId);
+  if (fs.existsSync(cwdPath)) {
+    try {
+      const st = fs.statSync(cwdPath);
+      if (st.size > 0) return true;
+    } catch {}
+  }
+
+  const dirs = [getAgentfileCacheDir(cacheDir), getLlamafileCacheDir(cacheDir)];
+
+  const base = path.basename(modelId);
+  const fileName = base.endsWith(".agentfile") ? base : `${base}.agentfile`;
+
+  for (const dir of dirs) {
+    if (!fs.existsSync(dir)) {
+      continue;
+    }
+    const targetPath = path.join(dir, fileName);
+    const partPath = path.join(dir, `${fileName}.part`);
+
+    try {
+      if (fs.existsSync(partPath)) {
+        return false;
+      }
+      if (fs.existsSync(targetPath)) {
+        const st = fs.statSync(targetPath);
+        if (st.size > 0) {
+          return true;
+        }
+      }
+    } catch {}
+  }
 
   return false;
 }
@@ -264,6 +336,10 @@ export function isModelLocallyCached(
   modelId: string,
   cacheDir?: string,
 ): boolean {
+  if (isAgentfile(modelId)) {
+    return isAgentfileLocallyCached(modelId, cacheDir);
+  }
+
   if (isLlamafile(modelId)) {
     return isLlamafileLocallyCached(modelId, cacheDir);
   }
@@ -311,17 +387,23 @@ export function listLlamafileModels(
   }));
 }
 
+export interface FetchRemoteModelsOptions {
+  endpoint?: string;
+  cacheDir?: string;
+  timeoutMs?: number;
+  query?: string;
+  limit?: number;
+  page?: number;
+  pageSize?: number;
+}
+
 export async function fetchRemoteModels(
-  options: {
-    endpoint?: string;
-    cacheDir?: string;
-    timeoutMs?: number;
-    query?: string;
-  } = {},
+  options: FetchRemoteModelsOptions = {},
 ): Promise<Array<{ id: string; name: string; cached: boolean }>> {
+  const limit = options.limit ?? 100;
   const endpoint =
     options.endpoint ||
-    "https://huggingface.co/api/models?author=onnx-community&pipeline_tag=text-generation&limit=100";
+    `https://huggingface.co/api/models?author=onnx-community&pipeline_tag=text-generation&limit=${limit}`;
   try {
     const res = await fetch(endpoint, {
       headers: { "User-Agent": "ShadowClaw-CLI" },
@@ -343,11 +425,20 @@ export async function fetchRemoteModels(
       models = models.filter((id) => id.toLowerCase().includes(q));
     }
 
-    return models.sort().map((id) => ({
+    let sortedModels = models.sort().map((id) => ({
       id,
       name: id.replace(/^onnx-community\//, ""),
       cached: isModelLocallyCached(id, options.cacheDir),
     }));
+
+    if (options.page !== undefined || options.pageSize !== undefined) {
+      const page = Math.max(1, options.page ?? 1);
+      const pageSize = Math.max(1, options.pageSize ?? 25);
+      const startIndex = (page - 1) * pageSize;
+      sortedModels = sortedModels.slice(startIndex, startIndex + pageSize);
+    }
+
+    return sortedModels;
   } catch {
     return [];
   }
@@ -391,6 +482,7 @@ export async function downloadLlamafile(
       m.url === modelId,
   );
 
+  const isAgent = isAgentfile(modelId);
   let url: string;
   let fileName: string;
   if (matched) {
@@ -399,6 +491,11 @@ export async function downloadLlamafile(
   } else if (modelId.startsWith("http://") || modelId.startsWith("https://")) {
     url = modelId;
     fileName = path.basename(new URL(modelId).pathname);
+  } else if (isAgent) {
+    fileName = path.basename(modelId).endsWith(".agentfile")
+      ? path.basename(modelId)
+      : `${path.basename(modelId)}.agentfile`;
+    url = `https://huggingface.co/mozilla-ai/agentfile/resolve/main/${fileName}`;
   } else {
     fileName = path.basename(modelId).endsWith(".llamafile")
       ? path.basename(modelId)
@@ -406,7 +503,9 @@ export async function downloadLlamafile(
     url = `https://huggingface.co/mozilla-ai/llamafile_0.10/resolve/main/${fileName}`;
   }
 
-  const dir = getLlamafileCacheDir(cacheDir);
+  const dir = isAgent
+    ? getAgentfileCacheDir(cacheDir)
+    : getLlamafileCacheDir(cacheDir);
   fs.mkdirSync(dir, { recursive: true });
 
   const destPath = path.join(dir, fileName);
@@ -572,6 +671,8 @@ export async function downloadLlamafile(
   }
 }
 
+export const downloadAgentfile = downloadLlamafile;
+
 export async function downloadLocalModel(
   modelId: string,
   options: {
@@ -585,7 +686,7 @@ export async function downloadLocalModel(
     quiet?: boolean;
   } = {},
 ): Promise<{ success: boolean; modelId: string; error?: string }> {
-  if (isLlamafile(modelId)) {
+  if (isLlamafile(modelId) || isAgentfile(modelId)) {
     return downloadLlamafile(modelId, options);
   }
 
@@ -709,169 +810,409 @@ export async function promptForAgentModel(
   }
 
   try {
-    output.write("\nShadowClaw CLI Agent — Model Selection:\n");
-    output.write("No default LLM model is configured for the agent.\n\n");
-    output.write("Please select a model for local or cloud execution:\n");
-    output.write(
-      "  1) onnx-community/gemma-4-E2B-it-ONNX (Gemma 4 E2B) [Default, local ONNX: 128k context, tools]\n",
-    );
-    output.write(
-      "  2) onnx-community/gemma-4-E4B-it-ONNX (Gemma 4 E4B) [Local ONNX: 128k context, tools]\n",
-    );
-    output.write(
-      "  3) onnx-community/Qwen3-0.6B-ONNX (Qwen 3 0.6B) [Local ONNX, tools]\n",
-    );
-    output.write(
-      "  4) onnx-community/gemma-3-1b-it-ONNX-GQA (Gemma 3 1B GQA) [Local ONNX, chat only]\n",
-    );
-    output.write(
-      "  5) mozilla-ai/gemma-4-E2B-it-Q5_K_M.llamafile (Gemma 4 E2B) [Local Llamafile]\n",
-    );
-    output.write(
-      "  6) mozilla-ai/gemma-4-E4B-it-Q5_K_M.llamafile (Gemma 4 E4B) [Local Llamafile]\n",
-    );
-    output.write(
-      "  7) mozilla-ai/Qwen3.5-0.8B-Q8_0.llamafile (Qwen 3.5 0.8B) [Local Llamafile]\n",
-    );
-    output.write(
-      "  8) mozilla-ai/Qwen3.5-2B-Q8_0.llamafile (Qwen 3.5 2B) [Local Llamafile]\n",
-    );
-    output.write(
-      "  9) mozilla-ai/Qwen3.5-4B-Q5_K_S.llamafile (Qwen 3.5 4B) [Local Llamafile]\n",
-    );
-    output.write(
-      "  10) mozilla-ai/Qwen3.5-9B-Q5_K_S.llamafile (Qwen 3.5 9B) [Local Llamafile]\n",
-    );
-    output.write(
-      "  11) OpenRouter Cloud (openrouter/free) [Cloud API: requires OPENROUTER_API_KEY]\n",
-    );
-    output.write(
-      "  12) Custom model ID (or 'r' to browse Hugging Face models)\n\n",
-    );
-
-    const answer = (
-      await rl.question("Enter choice [1-12] (default: 1): ")
-    ).trim();
-
     let providerId = "transformers_js_local";
     let model = DEFAULT_LOCAL_MODEL;
+    const sessionCache = new Map<
+      string,
+      Array<{ id: string; name: string; cached: boolean }>
+    >();
 
-    if (answer === "1" || answer === "") {
-      providerId = "transformers_js_local";
-      model = DEFAULT_LOCAL_MODEL;
-    } else if (answer === "2") {
-      providerId = "transformers_js_local";
-      model = "onnx-community/gemma-4-E4B-it-ONNX";
-    } else if (answer === "3") {
-      providerId = "transformers_js_local";
-      model = "onnx-community/Qwen3-0.6B-ONNX";
-    } else if (answer === "4") {
-      providerId = "transformers_js_local";
-      model = "onnx-community/gemma-3-1b-it-ONNX-GQA";
-    } else if (answer === "5") {
-      providerId = "llamafile";
-      model = "gemma-4-E2B-it-Q5_K_M.llamafile";
-    } else if (answer === "6") {
-      providerId = "llamafile";
-      model = "gemma-4-E4B-it-Q5_K_M.llamafile";
-    } else if (answer === "7") {
-      providerId = "llamafile";
-      model = "Qwen3.5-0.8B-Q8_0.llamafile";
-    } else if (answer === "8") {
-      providerId = "llamafile";
-      model = "Qwen3.5-2B-Q8_0.llamafile";
-    } else if (answer === "9") {
-      providerId = "llamafile";
-      model = "Qwen3.5-4B-Q5_K_S.llamafile";
-    } else if (answer === "10") {
-      providerId = "llamafile";
-      model = "Qwen3.5-9B-Q5_K_S.llamafile";
-    } else if (answer === "11") {
-      providerId = "openrouter";
-      model = "openrouter/free";
-    } else if (
-      answer === "12" ||
-      answer.toLowerCase() === "r" ||
-      answer.toLowerCase() === "remote"
-    ) {
-      let customModel = "";
-      if (answer.toLowerCase() === "r" || answer.toLowerCase() === "remote") {
-        customModel = "r";
-      } else {
-        customModel = (
-          await rl.question(
-            "Enter custom model ID (or 'r' to browse Hugging Face): ",
-          )
-        ).trim();
-      }
+    while (!exited) {
+      output.write("\nShadowClaw CLI Agent — Model Selection:\n");
+      output.write("No default LLM model is configured for the agent.\n\n");
+      output.write("Please select a model for local or cloud execution:\n");
+      output.write(
+        "  1) onnx-community/gemma-4-E2B-it-ONNX (Gemma 4 E2B) [Default, local ONNX: 128k context, tools]\n",
+      );
+      output.write(
+        "  2) onnx-community/gemma-4-E4B-it-ONNX (Gemma 4 E4B) [Local ONNX: 128k context, tools]\n",
+      );
+      output.write(
+        "  3) onnx-community/Qwen3-0.6B-ONNX (Qwen 3 0.6B) [Local ONNX, tools]\n",
+      );
+      output.write(
+        "  4) onnx-community/gemma-3-1b-it-ONNX-GQA (Gemma 3 1B GQA) [Local ONNX, chat only]\n",
+      );
+      output.write(
+        "  5) mozilla-ai/gemma-4-E2B-it-Q5_K_M.llamafile (Gemma 4 E2B) [Local Llamafile]\n",
+      );
+      output.write(
+        "  6) mozilla-ai/gemma-4-E4B-it-Q5_K_M.llamafile (Gemma 4 E4B) [Local Llamafile]\n",
+      );
+      output.write(
+        "  7) mozilla-ai/Qwen3.5-0.8B-Q8_0.llamafile (Qwen 3.5 0.8B) [Local Llamafile]\n",
+      );
+      output.write(
+        "  8) mozilla-ai/Qwen3.5-2B-Q8_0.llamafile (Qwen 3.5 2B) [Local Llamafile]\n",
+      );
+      output.write(
+        "  9) mozilla-ai/Qwen3.5-4B-Q5_K_S.llamafile (Qwen 3.5 4B) [Local Llamafile]\n",
+      );
+      output.write(
+        "  10) mozilla-ai/Qwen3.5-9B-Q5_K_S.llamafile (Qwen 3.5 9B) [Local Llamafile]\n",
+      );
+      output.write(
+        "  11) OpenRouter Cloud (openrouter/free) [Cloud API: requires OPENROUTER_API_KEY]\n",
+      );
+      output.write(
+        "  12) Custom model ID (or 'r' to browse Hugging Face models)\n\n",
+      );
 
-      if (
-        customModel.toLowerCase() === "r" ||
-        customModel.toLowerCase() === "remote"
+      const answer = (
+        await rl.question("Enter choice [1-12] (default: 1): ")
+      ).trim();
+      if (exited) break;
+
+      if (answer === "1" || answer === "") {
+        providerId = "transformers_js_local";
+        model = DEFAULT_LOCAL_MODEL;
+        break;
+      } else if (answer === "2") {
+        providerId = "transformers_js_local";
+        model = "onnx-community/gemma-4-E4B-it-ONNX";
+        break;
+      } else if (answer === "3") {
+        providerId = "transformers_js_local";
+        model = "onnx-community/Qwen3-0.6B-ONNX";
+        break;
+      } else if (answer === "4") {
+        providerId = "transformers_js_local";
+        model = "onnx-community/gemma-3-1b-it-ONNX-GQA";
+        break;
+      } else if (answer === "5") {
+        providerId = "llamafile";
+        model = "gemma-4-E2B-it-Q5_K_M.llamafile";
+        break;
+      } else if (answer === "6") {
+        providerId = "llamafile";
+        model = "gemma-4-E4B-it-Q5_K_M.llamafile";
+        break;
+      } else if (answer === "7") {
+        providerId = "llamafile";
+        model = "Qwen3.5-0.8B-Q8_0.llamafile";
+        break;
+      } else if (answer === "8") {
+        providerId = "llamafile";
+        model = "Qwen3.5-2B-Q8_0.llamafile";
+        break;
+      } else if (answer === "9") {
+        providerId = "llamafile";
+        model = "Qwen3.5-4B-Q5_K_S.llamafile";
+        break;
+      } else if (answer === "10") {
+        providerId = "llamafile";
+        model = "Qwen3.5-9B-Q5_K_S.llamafile";
+        break;
+      } else if (answer === "11") {
+        providerId = "openrouter";
+        model = "openrouter/free";
+        break;
+      } else if (
+        answer === "12" ||
+        answer.toLowerCase() === "r" ||
+        answer.toLowerCase() === "remote"
       ) {
-        output.write(
-          "\nFetching text-generation ONNX models from Hugging Face...\n",
-        );
-        const remote = await fetchRemoteModels({ cacheDir });
-        if (remote.length === 0) {
-          output.write(
-            "Could not fetch remote models from Hugging Face. Using default model.\n",
-          );
+        let customModel = "";
+        if (answer.toLowerCase() === "r" || answer.toLowerCase() === "remote") {
+          customModel = "r";
         } else {
-          output.write(
-            `\nHugging Face ONNX Models (${remote.length} available):\n`,
-          );
-          const displayLimit = Math.min(25, remote.length);
-          for (let i = 0; i < displayLimit; i++) {
-            const m = remote[i];
-            const cachedStr = m.cached ? " [Cached]" : "";
-            output.write(`  ${i + 1}) ${m.id}${cachedStr}\n`);
-          }
-          if (remote.length > displayLimit) {
-            output.write(`  ... and ${remote.length - displayLimit} more\n`);
-          }
-          output.write("\n");
-          const picked = (
+          customModel = (
             await rl.question(
-              `Select [1-${displayLimit}] or enter model name: `,
+              "Enter custom model ID (or 'r' to browse Hugging Face): ",
             )
           ).trim();
-          const pIdx = Number.parseInt(picked, 10);
-          if (!Number.isNaN(pIdx) && pIdx >= 1 && pIdx <= displayLimit) {
-            model = remote[pIdx - 1].id;
-          } else if (picked) {
-            model = picked.startsWith("onnx-community/")
-              ? picked
-              : `onnx-community/${picked}`;
-          }
+          if (exited) break;
         }
-      } else if (customModel) {
-        if (isLlamafile(customModel)) {
-          providerId = "llamafile";
-          const base = path.basename(customModel);
-          model = base.endsWith(".llamafile") ? base : `${base}.llamafile`;
-        } else if (
-          customModel.includes("/") &&
-          !customModel.toLowerCase().includes("onnx")
+
+        if (
+          customModel.toLowerCase() === "b" ||
+          customModel.toLowerCase() === "back"
         ) {
-          providerId = "openrouter";
-          model = customModel;
-        } else {
-          model = customModel;
+          continue;
         }
+
+        if (
+          customModel.toLowerCase() === "r" ||
+          customModel.toLowerCase() === "remote"
+        ) {
+          let currentQuery = "";
+          let currentPage = 1;
+          const pageSize = 25;
+          let backToMainMenu = false;
+
+          const loadModels = async (
+            query: string,
+          ): Promise<Array<{ id: string; name: string; cached: boolean }>> => {
+            const cacheKey = query.toLowerCase();
+            if (sessionCache.has(cacheKey)) {
+              return sessionCache.get(cacheKey)!;
+            }
+            output.write(
+              query
+                ? `\nSearching Hugging Face ONNX models for "${query}"...\n`
+                : "\nFetching text-generation ONNX models from Hugging Face...\n",
+            );
+            const fetched = await fetchRemoteModels({ cacheDir, query });
+            sessionCache.set(cacheKey, fetched);
+            return fetched;
+          };
+
+          let remoteModels = await loadModels(currentQuery);
+
+          while (!exited) {
+            if (remoteModels.length === 0) {
+              if (currentQuery) {
+                output.write(`\nNo models found matching "${currentQuery}".\n`);
+              } else {
+                output.write(
+                  "Could not fetch remote models from Hugging Face. Using default model.\n",
+                );
+                model = DEFAULT_LOCAL_MODEL;
+                providerId = "transformers_js_local";
+                break;
+              }
+              const action = (
+                await rl.question(
+                  "Enter 's <query>' to search, 'b' to go back, or enter model name: ",
+                )
+              ).trim();
+              if (exited) break;
+              const actionLower = action.toLowerCase();
+              if (actionLower === "b" || actionLower === "back") {
+                backToMainMenu = true;
+                break;
+              }
+              if (
+                actionLower.startsWith("s ") ||
+                actionLower.startsWith("search ") ||
+                actionLower.startsWith("s:")
+              ) {
+                const q = action.replace(/^(search\s+|s\s+|s:)/i, "").trim();
+                currentQuery = q;
+                currentPage = 1;
+                remoteModels = await loadModels(currentQuery);
+                continue;
+              }
+              if (actionLower === "s" || actionLower === "search") {
+                const q = (
+                  await rl.question(
+                    "Enter search query (or leave blank to clear): ",
+                  )
+                ).trim();
+                if (exited) break;
+                currentQuery = q;
+                currentPage = 1;
+                remoteModels = await loadModels(currentQuery);
+                continue;
+              }
+              if (action) {
+                if (isAgentfile(action)) {
+                  providerId = "agentfile";
+                  const base = path.basename(action);
+                  model = base.endsWith(".agentfile")
+                    ? base
+                    : `${base}.agentfile`;
+                } else if (isLlamafile(action)) {
+                  providerId = "llamafile";
+                  const base = path.basename(action);
+                  model = base.endsWith(".llamafile")
+                    ? base
+                    : `${base}.llamafile`;
+                } else if (
+                  action.includes("/") &&
+                  !action.toLowerCase().includes("onnx")
+                ) {
+                  providerId = "openrouter";
+                  model = action;
+                } else {
+                  providerId = "transformers_js_local";
+                  model = action.startsWith("onnx-community/")
+                    ? action
+                    : `onnx-community/${action}`;
+                }
+                break;
+              }
+              model = DEFAULT_LOCAL_MODEL;
+              providerId = "transformers_js_local";
+              break;
+            }
+
+            const totalModels = remoteModels.length;
+            const totalPages = Math.ceil(totalModels / pageSize);
+            if (currentPage > totalPages) currentPage = totalPages;
+            if (currentPage < 1) currentPage = 1;
+            const startIndex = (currentPage - 1) * pageSize;
+            const endIndex = Math.min(startIndex + pageSize, totalModels);
+            const displayCount = endIndex - startIndex;
+
+            output.write(
+              `\nHugging Face ONNX Models (${totalModels} available) — Page ${currentPage} of ${totalPages}, showing ${startIndex + 1}-${endIndex} of ${totalModels}:\n`,
+            );
+            for (let i = startIndex; i < endIndex; i++) {
+              const m = remoteModels[i];
+              const cachedStr = m.cached ? " [Cached]" : "";
+              output.write(`  ${i + 1}) ${m.id}${cachedStr}\n`);
+            }
+            const remainingAfter = totalModels - endIndex;
+            if (remainingAfter > 0) {
+              const navHint =
+                currentPage > 1
+                  ? "type 'n' for next page, 'p' for previous page"
+                  : "type 'n' for next page";
+              output.write(`  ... and ${remainingAfter} more (${navHint})\n`);
+            } else if (currentPage > 1) {
+              output.write("  (type 'p' for previous page)\n");
+            }
+            output.write("\n");
+
+            const promptRange = `${startIndex + 1}-${endIndex}`;
+            const picked = (
+              await rl.question(
+                `Select [${promptRange}], [n]ext, [p]rev, [s]earch, [b]ack, or enter model name: `,
+              )
+            ).trim();
+            if (exited) break;
+
+            const lower = picked.toLowerCase();
+            if (lower === "b" || lower === "back") {
+              backToMainMenu = true;
+              break;
+            }
+            if (lower === "n" || lower === "next") {
+              if (currentPage < totalPages) {
+                currentPage++;
+              } else {
+                output.write("Already on the last page.\n");
+              }
+              continue;
+            }
+            if (lower === "p" || lower === "prev" || lower === "previous") {
+              if (currentPage > 1) {
+                currentPage--;
+              } else {
+                output.write("Already on the first page.\n");
+              }
+              continue;
+            }
+            if (
+              lower.startsWith("s ") ||
+              lower.startsWith("search ") ||
+              lower.startsWith("s:")
+            ) {
+              const q = picked.replace(/^(search\s+|s\s+|s:)/i, "").trim();
+              currentQuery = q;
+              currentPage = 1;
+              remoteModels = await loadModels(currentQuery);
+              continue;
+            }
+            if (lower === "s" || lower === "search") {
+              const q = (
+                await rl.question(
+                  "Enter search query (or leave blank to clear): ",
+                )
+              ).trim();
+              if (exited) break;
+              currentQuery = q;
+              currentPage = 1;
+              remoteModels = await loadModels(currentQuery);
+              continue;
+            }
+
+            if (/^\d+$/.test(picked)) {
+              const pIdx = Number.parseInt(picked, 10);
+              if (pIdx >= startIndex + 1 && pIdx <= endIndex) {
+                model = remoteModels[pIdx - 1].id;
+                providerId = "transformers_js_local";
+                break;
+              } else if (pIdx >= 1 && pIdx <= displayCount) {
+                model = remoteModels[startIndex + pIdx - 1].id;
+                providerId = "transformers_js_local";
+                break;
+              } else {
+                output.write(
+                  `Invalid selection "${picked}". Please choose a number between ${startIndex + 1} and ${endIndex}.\n`,
+                );
+                continue;
+              }
+            } else if (picked) {
+              if (isAgentfile(picked)) {
+                providerId = "agentfile";
+                const base = path.basename(picked);
+                model = base.endsWith(".agentfile")
+                  ? base
+                  : `${base}.agentfile`;
+              } else if (isLlamafile(picked)) {
+                providerId = "llamafile";
+                const base = path.basename(picked);
+                model = base.endsWith(".llamafile")
+                  ? base
+                  : `${base}.llamafile`;
+              } else if (
+                picked.includes("/") &&
+                !picked.toLowerCase().includes("onnx")
+              ) {
+                providerId = "openrouter";
+                model = picked;
+              } else {
+                providerId = "transformers_js_local";
+                model = picked.startsWith("onnx-community/")
+                  ? picked
+                  : `onnx-community/${picked}`;
+              }
+              break;
+            } else {
+              model = remoteModels[startIndex]?.id || DEFAULT_LOCAL_MODEL;
+              providerId = "transformers_js_local";
+              break;
+            }
+          }
+
+          if (backToMainMenu) {
+            continue;
+          }
+          break;
+        } else if (customModel) {
+          if (isAgentfile(customModel)) {
+            providerId = "agentfile";
+            const base = path.basename(customModel);
+            model = base.endsWith(".agentfile") ? base : `${base}.agentfile`;
+          } else if (isLlamafile(customModel)) {
+            providerId = "llamafile";
+            const base = path.basename(customModel);
+            model = base.endsWith(".llamafile") ? base : `${base}.llamafile`;
+          } else if (
+            customModel.includes("/") &&
+            !customModel.toLowerCase().includes("onnx")
+          ) {
+            providerId = "openrouter";
+            model = customModel;
+          } else {
+            model = customModel;
+          }
+          break;
+        }
+      } else if (answer) {
+        if (isAgentfile(answer)) {
+          providerId = "agentfile";
+          const base = path.basename(answer);
+          model = base.endsWith(".agentfile") ? base : `${base}.agentfile`;
+        } else if (isLlamafile(answer)) {
+          providerId = "llamafile";
+          const base = path.basename(answer);
+          model = base.endsWith(".llamafile") ? base : `${base}.llamafile`;
+        } else if (answer.toLowerCase().includes("onnx")) {
+          providerId = "transformers_js_local";
+          model = answer;
+        } else {
+          providerId = "openrouter";
+          model = answer;
+        }
+        break;
       }
-    } else if (answer) {
-      if (isLlamafile(answer)) {
-        providerId = "llamafile";
-        const base = path.basename(answer);
-        model = base.endsWith(".llamafile") ? base : `${base}.llamafile`;
-      } else if (answer.toLowerCase().includes("onnx")) {
-        providerId = "transformers_js_local";
-        model = answer;
-      } else {
-        providerId = "openrouter";
-        model = answer;
-      }
+    }
+
+    if (exited) {
+      return { providerId, model };
     }
 
     if (providerId === "transformers_js_local") {
@@ -899,11 +1240,16 @@ export async function promptForAgentModel(
           });
         }
       }
-    } else if (providerId === "llamafile") {
-      const isCached = isLlamafileLocallyCached(model, cacheDir);
+    } else if (providerId === "llamafile" || providerId === "agentfile") {
+      const isCached =
+        providerId === "agentfile"
+          ? isAgentfileLocallyCached(model, cacheDir)
+          : isLlamafileLocallyCached(model, cacheDir);
       if (!isCached) {
+        const typeLabel =
+          providerId === "agentfile" ? "Agentfile" : "Llamafile";
         output.write(
-          `\nModel "${model}" is not yet downloaded to local disk.\n`,
+          `\n${typeLabel} "${model}" is not yet downloaded to local disk.\n`,
         );
         const dlChoice = (
           await rl.question("Download model weights now? (Y/n) [default: Y]: ")

@@ -32,6 +32,7 @@ describe("prompt-api-provider", () => {
     }
 
     delete globalThis.LanguageModel;
+    delete (globalThis as any).TRANSFORMERS_CONFIG;
   });
 
   it("reuses one warm session and clones per request", async () => {

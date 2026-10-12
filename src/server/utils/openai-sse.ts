@@ -89,7 +89,7 @@ export function writeOpenAiToolCallChunk(
 export function writeOpenAiDoneChunk(
   res: ExpressResponse,
   model: string,
-  finishReason: "stop" | "tool_calls" = "stop",
+  finishReason: "stop" | "tool_calls" | "length" = "stop",
 ) {
   const finalChunk = {
     id: `chatcmpl-${Date.now()}`,

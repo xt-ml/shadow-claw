@@ -399,12 +399,127 @@ export function sanitizeToolParameters(rawParams: any): Record<string, any> {
  */
 export function convertToolSchemasToOpenAI(tools: any[]): any[] {
   if (!Array.isArray(tools) || tools.length === 0) return [];
-  return tools.map((tool) => ({
-    type: "function",
-    function: {
-      name: tool.name,
-      description: tool.description || "",
-      parameters: sanitizeToolParameters(tool.input_schema ?? tool.parameters),
+  return tools.map((tool) => {
+    const fn = tool.function || tool;
+    return {
+      type: "function",
+      function: {
+        name: fn.name || tool.name,
+        description: fn.description || tool.description || "",
+        parameters: sanitizeToolParameters(
+          fn.parameters ?? tool.input_schema ?? tool.parameters,
+        ),
+      },
+    };
+  });
+}
+
+/**
+ * Streaming Tool Call Suppression Filter
+ *
+ * If tools are available, the model might emit raw tool-call grammars
+ * (e.g. `call:<name>{...}`, `<|tool_call>`, `<execute_tool>`, `[tool_code]`).
+ *
+ * Buffers tokens while output matches potential tool call prefixes.
+ * When determined to be a tool call, streaming is suppressed so raw syntax does not leak.
+ * If normal text, buffered tokens flush and streaming continues.
+ */
+export function createToolCallStreamFilter(onToken?: (text: string) => void): {
+  onToken: (text: string) => void;
+  finalize: (isToolCall: boolean) => void;
+} {
+  if (!onToken) {
+    return {
+      onToken: () => {},
+      finalize: () => {},
+    };
+  }
+
+  let buffered = "";
+  let isStreaming = false;
+  let isDefiniteToolCall = false;
+
+  const toolCallPrefixRegex =
+    /^\s*(?:call\s*:|call\b|<\|tool_call|<tool_call|<execute_tool|\[tool_code)/i;
+
+  const potentialPrefixes = [
+    "c",
+    "ca",
+    "cal",
+    "call",
+    "<",
+    "<|",
+    "<|t",
+    "<|tool_call",
+    "<t",
+    "<to",
+    "<too",
+    "<tool",
+    "<tool_",
+    "<tool_c",
+    "<tool_ca",
+    "<tool_cal",
+    "<tool_call",
+    "<e",
+    "<ex",
+    "<exe",
+    "<exec",
+    "<execu",
+    "<execut",
+    "<execute",
+    "<execute_",
+    "<execute_t",
+    "<execute_to",
+    "<execute_too",
+    "<execute_tool",
+    "[",
+    "[t",
+    "[to",
+    "[too",
+    "[tool",
+    "[tool_",
+    "[tool_c",
+    "[tool_co",
+    "[tool_cod",
+    "[tool_code",
+  ];
+
+  return {
+    onToken(text: string) {
+      if (isDefiniteToolCall) return;
+
+      if (isStreaming) {
+        onToken(text);
+        return;
+      }
+
+      buffered += text;
+      const trimmed = buffered.trimStart();
+
+      if (toolCallPrefixRegex.test(trimmed)) {
+        isDefiniteToolCall = true;
+        return;
+      }
+
+      const lowerTrimmed = trimmed.toLowerCase();
+      const isPossiblePrefix = potentialPrefixes.some(
+        (p) => p.startsWith(lowerTrimmed) || lowerTrimmed.startsWith(p),
+      );
+
+      if (isPossiblePrefix && trimmed.length < 20) {
+        return;
+      }
+
+      isStreaming = true;
+      onToken(buffered);
+      buffered = "";
     },
-  }));
+
+    finalize(isToolCall: boolean) {
+      if (!isToolCall && buffered && !isStreaming) {
+        onToken(buffered);
+      }
+      buffered = "";
+    },
+  };
 }

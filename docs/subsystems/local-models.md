@@ -105,6 +105,19 @@ Persists the selection to `shadow-claw.config.json` under `"agent": { "defaultMo
 shadow-claw agent init --model onnx-community/gemma-4-E2B-it-ONNX --download
 ```
 
+### 5. Interactive Hugging Face Model Browser (`agent init`)
+
+When running interactive initialization (`npx shadow-claw agent init`), option `12` (or typing `r` directly) opens the Hugging Face ONNX model browser:
+
+- **Bounded Pagination:** Displays 25 models per page with clear page indicators (e.g. `Page 2 of 4, showing 26-50 of 87`).
+- **Interactive Navigation Commands:**
+  - `n` / `next`: Advance to the next page.
+  - `p` / `prev`: Return to the previous page.
+  - `s <query>` or `s`: Filter available models by search query on the fly (leave query blank or type `s` to reset).
+  - `b` / `back`: Return to the main model selection menu.
+  - `1-N`: Select any displayed model by number (or type a custom model ID directly).
+- **Session Caching:** Model lists and search queries are cached in-memory during the picker session, eliminating redundant network requests while paging back and forth.
+
 ---
 
 ## Model & Dependency Downloading Architecture
@@ -155,5 +168,20 @@ Located at `src/subsystems/providers/utils/parseLocalModelToolCall.ts`, this uti
 - **Defensive Schema Sanitization**: Converts internal tool definitions (`ToolDefinition`) into standard OpenAI-compatible function definitions (`{ type: "function", function: { name, description, parameters } }`), recursively sanitizing nested property definitions (`sanitizePropertySchema`) so all object and array fields include explicit `type` metadata required by strict Jinja chat templates (e.g. Gemma 4).
 - **Tokenizer Template Integration**: Passes sanitized tool schemas directly into the tokenizer's Jinja chat template via `tools: currentTools`, allowing models trained on tool use (such as Qwen and Gemma) to structure tool calls natively.
 - **Multi-Tool Parsing & Grammar Support**: Parses single and multi-tool invocations (`parseLocalModelToolCalls`) across varied model grammars, including Gemma 4 `call:function{...}` syntax with balanced brace extraction, Qwen `<|tool_call>`, `<tool_call>`, `<execute_tool>`, and Markdown JSON code blocks, with `<think>` reasoning block stripping.
-- **Streaming Tool Call Suppression Filter**: Uses `createToolCallStreamFilter` in `src/worker/tools/node-transformers-executor.ts` to intercept and buffer token output that matches potential tool-call prefixes. When a tool call is detected, streaming is suppressed so raw tool-call syntax does not leak to stdout or the chat UI; when normal conversational text is detected, buffered tokens are flushed and subsequent tokens stream in real-time.
+- **Streaming Tool Call Suppression Filter**: Uses `createToolCallStreamFilter` in `src/subsystems/providers/utils/parseLocalModelToolCall.ts` to intercept and buffer token output that matches potential tool-call prefixes. When a tool call is detected, streaming is suppressed so raw tool-call syntax does not leak to stdout or the chat UI; when normal conversational text is detected, buffered tokens are flushed and subsequent tokens stream in real-time.
 - **Chat Template Normalization**: In `normalizeMessagesForChatTemplate` (`src/subsystems/providers/utils/chatTemplate.ts`), stringified assistant tool arguments are parsed to objects, and `tool_call_id` and tool `name` attributes are preserved on `role: "tool"` turns to satisfy Jinja template requirements.
+
+### 4. Llamafile & Agentfile Local Binary Driver Architecture (`LocalBinaryDriver`)
+
+Located at `src/server/services/llamafile-manager.ts`, `src/server/routes/llamafile.ts`, `src/cli/utils/local-models.ts`, and `src/worker/tools/node-llamafile-executor.ts`:
+
+- **Unified Tool Calling**: Llamafile models execute tools across both browser and headless environments:
+  - **Server Mode**: Forwards `tools` schemas directly to `/v1/chat/completions` when connected to a running Llamafile server, parsing OpenAI-standard `tool_calls`. Upstream built-in tools (`read_file`, `grep_search`, `exec_shell_command`, etc.) are exposed through the proxy via `GET /llamafile-proxy/tools` and `POST /llamafile-proxy/tools`.
+  - **CLI Mode**: When running directly against local binaries without a daemon, `buildCliPrompt` formats system tool declarations directly into the prompt. Output is parsed by `parseLocalModelToolCalls` (recovering both `call:name{...}` and `<tool_call>` formats), and `createToolCallStreamFilter` suppresses raw tool syntax from leaking over SSE streams.
+  - **Headless In-Process Execution**: `executeNodeLlamafileCompletion` in `node-llamafile-executor.ts` receives active runtime tool schemas from `handleInvoke` and dispatches them seamlessly to the local Llamafile CLI or server process.
+  - **POSIX Shell Script Mode Execution**: On POSIX platforms, spawned binary processes launch via `/bin/sh` to bypass Linux `binfmt_misc` / `run-detectors` interpreter resolution errors, ensuring reliable execution of Actually Portable Executable (APE) binaries across host distributions.
+- **Full Agentfile (`.agentfile`) Support**:
+  - **Autonomous Agent Binary Execution**: Single-executable autonomous agents built with Mozilla's `agent.cpp` / `agentfile` execute tools internally on the host OS or inside sandboxes (`--tools-runtime <docker|ssh>`).
+  - **I/O Channel Semantics**: Tool execution activity and progress warnings go to `stderr`, while final synthesized answers are streamed or emitted directly to `stdout`.
+  - **CLI Flag Translation (`buildAgentfileArgs`)**: Automatically constructs `-p <prompt>`, `-c <ctx_size>`, `-s <system_prompt>`, `--yes` (for unattended runs), `--tools <all|none|list>`, `--tools-runtime <sandbox>`, `--searxng-url <url>`, `--session <file>`, `--trace <file>`, and `--max-iterations <N>`.
+  - **Proxy & Provider Integration**: Exposes `PROVIDERS.agentfile` via `/agentfile-proxy/models`, `/agentfile-proxy/tools`, and `/agentfile-proxy/chat/completions`, with seamless fallback to headless in-process execution via `executeNodeLlamafileCompletion`.

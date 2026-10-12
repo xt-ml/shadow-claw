@@ -689,6 +689,62 @@ describe("shadow-claw-llm", () => {
     document.body.removeChild(el);
   });
 
+  it("loads configured Gemma 4 E2B Prompt API fallback model when set in DB", async () => {
+    (getConfig as any).mockImplementation(async (_db: any, key: string) => {
+      if (key === "prompt_api_fallback_model") {
+        return "onnx-community/gemma-4-E2B-it-ONNX";
+      }
+      return undefined;
+    });
+
+    const orch = createOrchestratorStub({
+      getProvider: jest.fn<any>().mockReturnValue("prompt_api"),
+    });
+    (orchestratorStore as any).orchestrator = orch;
+
+    const el = new ShadowClawLlm();
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 100));
+    await el.render();
+
+    const fallbackSelect = el.shadowRoot?.querySelector(
+      '[data-setting="prompt-api-fallback-select"]',
+    ) as HTMLSelectElement | null;
+
+    expect(fallbackSelect).not.toBeNull();
+    expect(fallbackSelect?.value).toBe("onnx-community/gemma-4-E2B-it-ONNX");
+
+    document.body.removeChild(el);
+  });
+
+  it("loads configured Gemma 4 E4B Prompt API fallback model when set in DB", async () => {
+    (getConfig as any).mockImplementation(async (_db: any, key: string) => {
+      if (key === "prompt_api_fallback_model") {
+        return "onnx-community/gemma-4-E4B-it-ONNX";
+      }
+      return undefined;
+    });
+
+    const orch = createOrchestratorStub({
+      getProvider: jest.fn<any>().mockReturnValue("prompt_api"),
+    });
+    (orchestratorStore as any).orchestrator = orch;
+
+    const el = new ShadowClawLlm();
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 100));
+    await el.render();
+
+    const fallbackSelect = el.shadowRoot?.querySelector(
+      '[data-setting="prompt-api-fallback-select"]',
+    ) as HTMLSelectElement | null;
+
+    expect(fallbackSelect).not.toBeNull();
+    expect(fallbackSelect?.value).toBe("onnx-community/gemma-4-E4B-it-ONNX");
+
+    document.body.removeChild(el);
+  });
+
   it("loads configured Prompt API device and dtype settings and saves them on saveModel", async () => {
     (getConfig as any).mockImplementation(async (_db: any, key: string) => {
       if (key === "prompt_api_backend") {

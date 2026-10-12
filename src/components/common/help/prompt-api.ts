@@ -13,6 +13,10 @@ export function isNativePromptApiSupported(): boolean {
 
   const g = (typeof window !== "undefined" ? window : globalThis) as any;
 
+  if (g.TRANSFORMERS_CONFIG) {
+    return false;
+  }
+
   if (g.LanguageModel && typeof g.LanguageModel.create === "function") {
     return true;
   }
@@ -25,26 +29,36 @@ export function isNativePromptApiSupported(): boolean {
 }
 
 /**
- * Checks whether native browser Prompt API is potentially supported in the current environment
- * (e.g. Chrome or Edge on non-Apple platforms).
+ * Asynchronously checks whether native browser Prompt API is detected and available
+ * in the current environment (verifying LanguageModel.availability() if exposed).
+ */
+export async function isNativePromptApiAvailable(): Promise<boolean> {
+  if (!isNativePromptApiSupported()) {
+    return false;
+  }
+
+  const g = (typeof window !== "undefined" ? window : globalThis) as any;
+  const lm = g.LanguageModel || g.ai?.languageModel;
+
+  if (typeof lm?.availability === "function") {
+    try {
+      const status = await lm.availability();
+      return status !== "unavailable" && status !== "no";
+    } catch {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Checks whether native browser Prompt API is potentially supported in the current environment.
+ * If native browser Prompt API is not detected, it is treated as unavailable so that clients
+ * fall back gracefully to the transformers.js alternative (just like Firefox).
  */
 export function isPromptApiPotentiallySupported(): boolean {
-  if (typeof navigator === "undefined") {
-    return false;
-  }
-
-  const ua = navigator.userAgent.toLowerCase();
-  const isApple =
-    ua.includes("mac") ||
-    ua.includes("iphone") ||
-    ua.includes("ipad") ||
-    ua.includes("ipod");
-
-  if (isApple) {
-    return false;
-  }
-
-  return ua.includes("chrome") || ua.includes("edg");
+  return false;
 }
 
 /**

@@ -18,6 +18,7 @@ import {
 import {
   setModelCacheProgressHook,
   clearModelCacheProgressHook,
+  createModelCacheFetch,
 } from "./utils/createModelCacheFetch.js";
 import { normalizeMessagesForChatTemplate } from "./utils/chatTemplate.js";
 
@@ -384,12 +385,14 @@ async function createPromptSessionWithProgress(
   tools?: ToolDefinition[],
 ) {
   await ensureBuiltinAiPolyfills();
-  const LanguageModelApi = getLanguageModelApi();
-  if (!LanguageModelApi) {
+  const initialLanguageModelApi = getLanguageModelApi();
+  if (!initialLanguageModelApi) {
     throw new Error(
       "Prompt API is unavailable in this browser. Enable Prompt API flags in a supported browser (for example Edge Dev/Canary or Chrome with the required flags) or switch provider.",
     );
   }
+  let LanguageModelApi: { availability: Function; create: Function } =
+    initialLanguageModelApi;
 
   const samplingParams = {
     ...(samplingOptions?.samplingMode
@@ -418,17 +421,76 @@ async function createPromptSessionWithProgress(
         }))
       : undefined;
 
-  const availability = await LanguageModelApi.availability({
-    ...PROMPT_IO_OPTIONS,
-    ...samplingParams,
-    ...(nativeTools ? { tools: nativeTools } : {}),
-    ...(initialPrompts && initialPrompts.length > 0 ? { initialPrompts } : {}),
-  });
+  let availability: string;
+  try {
+    availability =
+      (await LanguageModelApi.availability({
+        ...PROMPT_IO_OPTIONS,
+        ...samplingParams,
+        ...(nativeTools ? { tools: nativeTools } : {}),
+        ...(initialPrompts && initialPrompts.length > 0
+          ? { initialPrompts }
+          : {}),
+      })) ?? "available";
+  } catch {
+    availability = "unavailable";
+  }
   await emitPromptApiDiagnostic(
     emit,
     groupId,
     `availability() returned: ${availability}`,
   );
+
+  if (availability === "unavailable" || availability === "no") {
+    await emitPromptApiDiagnostic(
+      emit,
+      groupId,
+      `Native Prompt API is unavailable (${availability}). Falling back to local transformers.js model...`,
+    );
+
+    try {
+      const g = globalThis as any;
+      if (!g.TRANSFORMERS_CONFIG) {
+        const fallbackModel = await getPromptApiFallbackModel();
+        g.TRANSFORMERS_CONFIG = {
+          apiKey: "dummy",
+          device: "wasm",
+          dtype: "q4f16",
+          modelName: fallbackModel,
+          env: {
+            useBrowserCache: false,
+            useWasmCache: true,
+            fetch: createModelCacheFetch(),
+          },
+        };
+      }
+      const polyfillMod = await import("prompt-api-polyfill");
+      if (polyfillMod?.LanguageModel) {
+        g.LanguageModel = polyfillMod.LanguageModel;
+        LanguageModelApi = polyfillMod.LanguageModel;
+      }
+      try {
+        availability =
+          (await LanguageModelApi.availability({
+            ...PROMPT_IO_OPTIONS,
+            ...samplingParams,
+            ...(nativeTools ? { tools: nativeTools } : {}),
+            ...(initialPrompts && initialPrompts.length > 0
+              ? { initialPrompts }
+              : {}),
+          })) ?? "available";
+      } catch {
+        availability = "available";
+      }
+      await emitPromptApiDiagnostic(
+        emit,
+        groupId,
+        `Polyfill availability() returned: ${availability}`,
+      );
+    } catch (fallbackErr) {
+      console.warn("Failed to load prompt-api-polyfill fallback:", fallbackErr);
+    }
+  }
 
   if (availability === "unavailable" || availability === "no") {
     throw new Error(

@@ -244,6 +244,7 @@ export function setNodeTransformersCompletionExecutor(
 export type NodeLlamafileCompletionExecutor = (options: {
   model: string;
   messages: any[];
+  tools?: any[];
   maxTokens?: number;
   abortSignal?: AbortSignal;
   verbose?: boolean;
@@ -521,7 +522,7 @@ export async function handleInvoke(
         result = parseResponse(typedProvider, rawResult);
       } else if (
         isHeadlessMode() &&
-        providerId === "llamafile" &&
+        (providerId === "llamafile" || providerId === "agentfile") &&
         _nodeLlamafileCompletionExecutor
       ) {
         if (useStreaming) {
@@ -534,6 +535,7 @@ export async function handleInvoke(
         const rawResult = await _nodeLlamafileCompletionExecutor({
           model,
           messages: body?.messages || payloadMessages,
+          tools: (body?.tools ?? currentTools) as any[],
           maxTokens: safeMaxTokens,
           abortSignal,
           verbose: Boolean(payload.verbose),

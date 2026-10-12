@@ -35,6 +35,7 @@ export function setLlamafileServiceForTests(
 export interface NodeLlamafileCompletionOptions {
   model: string;
   messages: any[];
+  tools?: any[];
   maxTokens?: number;
   verbose?: boolean;
   onToken?: (text: string) => void;
@@ -52,6 +53,7 @@ export async function executeNodeLlamafileCompletion(
   const {
     model,
     messages,
+    tools,
     maxTokens = 8192,
     verbose = false,
     onToken,
@@ -73,6 +75,7 @@ export async function executeNodeLlamafileCompletion(
     body: {
       model,
       messages,
+      ...(tools ? { tools } : {}),
       max_tokens: maxTokens,
       stream: true,
     },

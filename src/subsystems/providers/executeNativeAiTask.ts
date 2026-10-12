@@ -62,6 +62,7 @@ export function setNodeTransformersTaskExecutor(
 export type NodeLlamafileTaskExecutor = (options: {
   model: string;
   messages: any[];
+  tools?: any[];
   maxTokens?: number;
   abortSignal?: AbortSignal;
   verbose?: boolean;
@@ -376,7 +377,10 @@ export async function executeNativeAiTask(
     }
   }
 
-  if (isHeadlessMode() && effectiveProviderId === "llamafile") {
+  if (
+    isHeadlessMode() &&
+    (effectiveProviderId === "llamafile" || effectiveProviderId === "agentfile")
+  ) {
     const executor =
       _nodeLlamafileTaskExecutor ??
       (globalThis as any).__nodeLlamafileTaskExecutor;

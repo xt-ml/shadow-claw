@@ -203,6 +203,10 @@ describe("config.js", () => {
       expect(PROVIDERS.llamafile).toBeDefined();
     });
 
+    it("should have agentfile provider", () => {
+      expect(PROVIDERS.agentfile).toBeDefined();
+    });
+
     it("should have transformers js local provider", () => {
       expect(PROVIDERS.transformers_js_local).toBeDefined();
     });
@@ -238,6 +242,17 @@ describe("config.js", () => {
       expect(provider.name).toBe("Llamafile (Local Proxy)");
       expect(provider.baseUrl).toBe(LLAMAFILE_PROXY_URL);
       expect(provider.modelsUrl).toBe(LLAMAFILE_PROXY_MODELS_URL);
+      expect(provider.format).toBe("openai");
+      expect(provider.requiresApiKey).toBe(false);
+      expect(provider.supportsStreaming).toBe(true);
+    });
+
+    it("agentfile provider should have required fields", () => {
+      const provider = PROVIDERS.agentfile;
+      expect(provider.id).toBe("agentfile");
+      expect(provider.name).toBe("Agentfile (Local Binary)");
+      expect(provider.baseUrl).toBeDefined();
+      expect(provider.modelsUrl).toBeDefined();
       expect(provider.format).toBe("openai");
       expect(provider.requiresApiKey).toBe(false);
       expect(provider.supportsStreaming).toBe(true);

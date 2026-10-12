@@ -120,4 +120,56 @@ describe("executeNodeLlamafileCompletion", () => {
     expect(capturedReq.destroyed).toBe(true);
     expect(closeEmitted).toBe(true);
   });
+
+  it("forwards tools array to request body when provided", async () => {
+    let capturedBody: any = null;
+    mockService.invokeCli = jest.fn(async (req: any, res: any) => {
+      capturedBody = req.body;
+      res.write('data: {"choices":[{"delta":{"content":"ok"}}]}\n\n');
+      res.write("data: [DONE]\n\n");
+      res.end();
+    });
+
+    const testTools = [
+      {
+        name: "read_file",
+        description: "Read file content",
+        input_schema: {
+          type: "object",
+          properties: { path: { type: "string" } },
+        },
+      },
+    ];
+
+    await executeNodeLlamafileCompletion({
+      model: "gemma-4-E2B-it-Q5_K_M.llamafile",
+      messages: [{ role: "user", content: "read a file" }],
+      tools: testTools,
+    });
+
+    expect(capturedBody).toBeDefined();
+    expect(capturedBody.tools).toEqual(testTools);
+  });
+
+  it("executes agentfile model completion seamlessly", async () => {
+    let capturedOpts: any = null;
+    mockService.invokeCli = jest.fn(
+      async (_req: any, res: any, _body: any, opts: any) => {
+        capturedOpts = opts;
+        res.write(
+          'data: {"choices":[{"delta":{"content":"Agentfile answer"}}]}\n\n',
+        );
+        res.write("data: [DONE]\n\n");
+        res.end();
+      },
+    );
+
+    const response = await executeNodeLlamafileCompletion({
+      model: "researcher.agentfile",
+      messages: [{ role: "user", content: "Research topic" }],
+    });
+
+    expect(capturedOpts.model).toBe("researcher.agentfile");
+    expect(response.choices[0].message.content).toBe("Agentfile answer");
+  });
 });

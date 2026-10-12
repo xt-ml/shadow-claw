@@ -366,6 +366,22 @@ export async function ensureBuiltinAiPolyfills(): Promise<void> {
     };
   }
 
+  if (typeof navigator !== "undefined") {
+    try {
+      if (!navigator.userActivation || !navigator.userActivation.isActive) {
+        Object.defineProperty(navigator, "userActivation", {
+          value: { isActive: true, hasBeenActive: true },
+          configurable: true,
+          writable: true,
+        });
+      }
+    } catch {}
+  } else if (!("navigator" in g)) {
+    g.navigator = {
+      userActivation: { isActive: true, hasBeenActive: true },
+    };
+  }
+
   let currentFallbackModel: string | undefined;
 
   if (!("LanguageModel" in g) && !g.ai?.languageModel) {

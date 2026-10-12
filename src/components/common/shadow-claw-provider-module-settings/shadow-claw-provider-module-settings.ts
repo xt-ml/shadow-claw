@@ -4,7 +4,7 @@ import shadowClawProviderModuleSettingsTemplate from "./shadow-claw-provider-mod
 
 const elementName = "shadow-claw-provider-module-settings";
 
-type ProviderId = "bedrock_proxy" | "llamafile" | string;
+type ProviderId = "bedrock_proxy" | "llamafile" | "agentfile" | string;
 
 export interface ProviderRuntimeOverrides {
   bedrock_proxy?: {
@@ -17,6 +17,12 @@ export interface ProviderRuntimeOverrides {
     mode?: "cli" | "server";
     offline?: boolean;
     port?: number;
+  };
+  agentfile?: {
+    toolsRuntime?: string;
+    searxngUrl?: string;
+    maxIterations?: number;
+    think?: boolean;
   };
 }
 

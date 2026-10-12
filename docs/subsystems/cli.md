@@ -255,6 +255,8 @@ npx shadow-claw agent model download onnx-community/gemma-4-E2B-it-ONNX
 npx shadow-claw agent model set onnx-community/gemma-4-E2B-it-ONNX
 ```
 
+During interactive workspace initialization (`npx shadow-claw agent init`), option `12` (or entering `r`) launches the interactive Hugging Face ONNX model browser, featuring bounded pagination (25 items per page), page indicator, navigation commands (`n` next, `p` previous), live search re-filtering (`s <query>`), back navigation (`b`), and session-level caching.
+
 #### Node-Native Offline Execution
 
 In headless mode, model inference does not require an external browser tab or running web dev server:

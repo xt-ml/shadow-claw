@@ -572,6 +572,15 @@ describe("git", () => {
 
       expect(result).toBe("No branches found.");
     });
+
+    it("handles detached HEAD when currentBranch throws", async () => {
+      mockGit.listBranches.mockResolvedValue(["main", "feature"]);
+      mockGit.currentBranch.mockRejectedValue(new Error("HEAD is detached"));
+
+      const result = await gitListBranches({ repo: "my-repo" });
+
+      expect(result).toBe("  main\n  feature");
+    });
   });
 
   describe("gitCurrentBranch", () => {
@@ -705,6 +714,22 @@ describe("git", () => {
         }),
       );
     });
+
+    it("returns result details when push is not ok", async () => {
+      mockGit.currentBranch.mockResolvedValue("main");
+      mockGit.push.mockResolvedValue({
+        ok: false,
+        refs: { "refs/heads/main": { ok: false, error: "non-fast-forward" } },
+      });
+
+      const result = await gitPush({
+        token: "fake",
+        repo: "my-repo",
+      });
+
+      expect(result).toContain("Push result:");
+      expect(result).toContain("non-fast-forward");
+    });
   });
 
   describe("gitListRepos", () => {
@@ -727,6 +752,14 @@ describe("git", () => {
 
     it("handles no repos", async () => {
       mockPfs.readdir.mockRejectedValue(new Error("ENOENT"));
+
+      const result = await gitListRepos();
+
+      expect(result).toBe("No repos cloned.");
+    });
+
+    it("returns 'No repos cloned.' when readdir returns empty array", async () => {
+      mockPfs.readdir.mockResolvedValue([]);
 
       const result = await gitListRepos();
 
@@ -929,6 +962,37 @@ describe("git", () => {
       expect(mockGit.add).toHaveBeenCalledWith(
         expect.objectContaining({ filepath: "new-file.txt" }),
       );
+    });
+
+    it("reports no changes when staging with '.' and clean status matrix", async () => {
+      mockGit.statusMatrix.mockResolvedValue([["file.txt", 1, 1, 1]]);
+
+      const result = await gitAdd({ repo: "my-repo", filepath: "." });
+
+      expect(result).toBe("No changes to add in my-repo");
+    });
+
+    it("stages multiple files when filepath is an array", async () => {
+      const result = await gitAdd({
+        repo: "my-repo",
+        filepath: ["./a.txt", "b.txt"],
+      });
+
+      expect(result).toContain("a.txt, b.txt");
+      expect(mockGit.add).toHaveBeenCalledWith(
+        expect.objectContaining({ filepath: "a.txt" }),
+      );
+      expect(mockGit.add).toHaveBeenCalledWith(
+        expect.objectContaining({ filepath: "b.txt" }),
+      );
+    });
+
+    it("defaults to '.' when filepath is an empty array", async () => {
+      mockGit.statusMatrix.mockResolvedValue([["file.txt", 1, 1, 1]]);
+
+      const result = await gitAdd({ repo: "my-repo", filepath: [] });
+
+      expect(result).toBe("No changes to add in my-repo");
     });
   });
 

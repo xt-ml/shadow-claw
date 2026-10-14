@@ -422,6 +422,146 @@ describe("LlamafileManagerService", () => {
       expect(res.send).toHaveBeenCalledWith("Bad Gateway");
     });
 
+    it("handles invokeLlamafileServer streaming success", async () => {
+      const { invokeLlamafileServer } = await import("./llamafile-manager.js");
+
+      const req: any = { headers: {} };
+      const res: any = {
+        status: jest.fn().mockReturnThis(),
+        setHeader: jest.fn().mockReturnThis(),
+        write: jest.fn().mockReturnThis(),
+        end: jest.fn().mockReturnThis(),
+      };
+
+      const chunks = [
+        new TextEncoder().encode(
+          'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\n',
+        ),
+      ];
+      let readIndex = 0;
+      const mockReader = {
+        read: jest.fn(async () => {
+          if (readIndex < chunks.length) {
+            return { done: false, value: chunks[readIndex++] };
+          }
+          return { done: true, value: undefined };
+        }),
+        releaseLock: jest.fn(),
+      };
+
+      (global.fetch as any) = jest.fn<any>().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers({ "content-type": "text/event-stream" }),
+        body: {
+          getReader: () => mockReader,
+        },
+      });
+
+      await invokeLlamafileServer(
+        req,
+        res,
+        { model: "custom-model", messages: [], stream: true },
+        { host: "127.0.0.1", port: 8080 },
+        true,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.write).toHaveBeenCalled();
+      expect(res.end).toHaveBeenCalled();
+      expect(mockReader.releaseLock).toHaveBeenCalled();
+    });
+
+    it("handles invokeLlamafileServer non-streaming success", async () => {
+      const { invokeLlamafileServer } = await import("./llamafile-manager.js");
+
+      const req: any = { headers: {} };
+      const res: any = {
+        status: jest.fn().mockReturnThis(),
+        setHeader: jest.fn().mockReturnThis(),
+        send: jest.fn().mockReturnThis(),
+      };
+
+      const jsonStr = JSON.stringify({
+        choices: [{ message: { content: "Hello" } }],
+      });
+      (global.fetch as any) = jest.fn<any>().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers({ "content-type": "application/json" }),
+        arrayBuffer: async () => Buffer.from(jsonStr),
+      });
+
+      await invokeLlamafileServer(
+        req,
+        res,
+        { model: "custom-model", messages: [] },
+        { host: "127.0.0.1", port: 8080 },
+        false,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(200);
+      expect(res.send).toHaveBeenCalled();
+    });
+
+    it("handles invokeLlamafileServer fetch error when headers not sent", async () => {
+      const { invokeLlamafileServer } = await import("./llamafile-manager.js");
+
+      const req: any = { headers: {} };
+      const res: any = {
+        headersSent: false,
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn().mockReturnThis(),
+      };
+
+      (global.fetch as any) = jest
+        .fn<any>()
+        .mockRejectedValue(new Error("Connection refused"));
+
+      await invokeLlamafileServer(
+        req,
+        res,
+        { model: "custom-model", messages: [] },
+        { host: "127.0.0.1", port: 8080 },
+        false,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(502);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.stringContaining("Connection refused"),
+        }),
+      );
+    });
+
+    it("handles invokeLlamafileServer fetch error when headers already sent", async () => {
+      const { invokeLlamafileServer } = await import("./llamafile-manager.js");
+
+      const req: any = { headers: {} };
+      const res: any = {
+        headersSent: true,
+        write: jest.fn().mockReturnThis(),
+        end: jest.fn().mockReturnThis(),
+      };
+
+      (global.fetch as any) = jest
+        .fn<any>()
+        .mockRejectedValue(new Error("Mid-stream abort"));
+
+      await invokeLlamafileServer(
+        req,
+        res,
+        { model: "custom-model", messages: [] },
+        { host: "127.0.0.1", port: 8080 },
+        false,
+      );
+
+      expect(res.write).toHaveBeenCalledWith(
+        expect.stringContaining("Mid-stream abort"),
+      );
+      expect(res.end).toHaveBeenCalled();
+    });
+
     it("rejects immediately if request is already destroyed or aborted before spawn", async () => {
       statMock.mockResolvedValue({ isDirectory: () => true });
       readdirMock.mockResolvedValue([
@@ -599,6 +739,65 @@ describe("LlamafileManagerService", () => {
       );
       expect(result).toEqual({ output: "2026-10-12T00:00:00Z" });
     });
+
+    it("listTools extracts tools from object with tools or data property", async () => {
+      const service = await getService();
+
+      (global.fetch as any) = jest.fn<any>().mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ tools: [{ name: "t_prop" }] }),
+      });
+
+      const res1 = await service.listTools({ mode: "server" });
+      expect(res1).toEqual([{ name: "t_prop" }]);
+
+      (global.fetch as any) = jest.fn<any>().mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ data: [{ name: "d_prop" }] }),
+      });
+
+      const res2 = await service.listTools({ mode: "server" });
+      expect(res2).toEqual([{ name: "d_prop" }]);
+    });
+
+    it("executeTool handles error from upstream in server mode", async () => {
+      const service = await getService();
+
+      (global.fetch as any) = jest.fn<any>().mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        text: async () => "Internal tool failure",
+      });
+
+      await expect(
+        service.executeTool("custom_tool", {}, { mode: "server" }),
+      ).rejects.toThrow(
+        "Upstream /tools returned HTTP 500: Internal tool failure",
+      );
+    });
+
+    it("executeTool handles local get_info and unsupported tools in CLI mode", async () => {
+      const service = await getService();
+
+      const info = await service.executeTool("get_info", {}, { mode: "cli" });
+      expect(info.platform).toBe(process.platform);
+      expect(info.cwd).toBe(process.cwd());
+
+      await expect(
+        service.executeTool("unsupported_action", {}, { mode: "cli" }),
+      ).rejects.toThrow(/requires server mode or is not supported locally/);
+    });
+
+    it("terminateAll calls cancellation handlers and cleans up processes", async () => {
+      const service = await getService();
+      const cancelFn = jest.fn();
+      service.__getActiveRequests().set("test-cancel", cancelFn);
+
+      service.terminateAll();
+      expect(cancelFn).toHaveBeenCalled();
+    });
   });
 
   describe("buildCliPrompt with tools support", () => {
@@ -628,6 +827,162 @@ describe("LlamafileManagerService", () => {
       expect(promptWithTools).toContain("Get server time");
       expect(promptWithTools).toContain("USER: What is the time?");
       expect(promptWithTools).toContain("ASSISTANT:");
+    });
+
+    it("handles complex array content in buildCliPrompt", async () => {
+      const { buildCliPrompt } = await import("./llamafile-manager.js");
+      const prompt = buildCliPrompt({
+        messages: [
+          {
+            role: "user",
+            content: [
+              "string block",
+              { type: "text", text: "text block" },
+              { type: "tool_result", content: "result content" },
+              { type: "tool_use", name: "bash", input: { command: "ls" } },
+              null as any,
+            ],
+          },
+        ],
+      });
+      expect(prompt).toContain("string block");
+      expect(prompt).toContain("text block");
+      expect(prompt).toContain("result content");
+      expect(prompt).toContain('[tool_use:bash] {"command":"ls"}');
+    });
+  });
+
+  describe("buildLlamafileArgs, buildAgentfileArgs and binary drivers", () => {
+    it("tests getBuiltinTools and binary drivers buildArgs / buildCliArgs", async () => {
+      const { getBuiltinTools, getBinaryDriver, buildAgentfileArgs } =
+        await import("./llamafile-manager.js");
+
+      expect(getBuiltinTools("llamafile")).toBeDefined();
+      expect(getBuiltinTools("agentfile")).toBeDefined();
+
+      const llamaDriver = getBinaryDriver("llamafile");
+      expect(llamaDriver).toBeDefined();
+      const llamaArgs = llamaDriver!.buildArgs!({
+        prompt: "hello llama",
+        nPredict: 256,
+        ctxSize: 4096,
+        offline: true,
+      });
+      expect(llamaArgs).toContain("--offline");
+      expect(llamaArgs).toContain("hello llama");
+
+      const llamaCliArgs = llamaDriver!.buildCliArgs!({
+        prompt: "cli hello",
+      });
+      expect(llamaCliArgs).toContain("cli hello");
+
+      const agentDriver = getBinaryDriver("agentfile");
+      expect(agentDriver).toBeDefined();
+      const agentArgs = agentDriver!.buildArgs!({
+        prompt: "hello agent",
+        tools: ["bash"],
+        modelPath: "/path/to/model",
+        runtimeOptions: {
+          systemPrompt: "system text",
+          confirm: true,
+          toolsRuntime: "node",
+          searxngUrl: "http://searxng.local",
+          sessionFile: "sess.json",
+          traceFile: "trace.json",
+          maxIterations: 5,
+          think: true,
+        },
+      });
+      expect(agentArgs).toContain("-m");
+      expect(agentArgs).toContain("/path/to/model");
+      expect(agentArgs).toContain("-s");
+      expect(agentArgs).toContain("system text");
+      expect(agentArgs).toContain("--tools");
+      expect(agentArgs).toContain("bash");
+      expect(agentArgs).toContain("--confirm");
+      expect(agentArgs).toContain("--tools-runtime");
+      expect(agentArgs).toContain("--searxng-url");
+      expect(agentArgs).toContain("--session");
+      expect(agentArgs).toContain("--trace");
+      expect(agentArgs).toContain("--max-iterations");
+      expect(agentArgs).toContain("--think");
+
+      const agentCliArgs = agentDriver!.buildCliArgs!({
+        prompt: "agent cli",
+        tools: [],
+        runtimeOptions: {
+          confirm: false,
+        },
+      });
+      expect(agentCliArgs).toContain("--tools");
+      expect(agentCliArgs).toContain("none");
+      expect(agentCliArgs).toContain("--yes");
+
+      const toolsArrayArgs = buildAgentfileArgs({
+        prompt: "tool array",
+        tools: [{ name: "tool_a" }, { function: { name: "tool_b" } }],
+      });
+      expect(toolsArrayArgs).toContain("tool_a,tool_b");
+
+      const toolsFromRuntime = buildAgentfileArgs({
+        prompt: "runtime tools",
+        runtimeOptions: { tools: "custom_runtime_tools" },
+      });
+      expect(toolsFromRuntime).toContain("custom_runtime_tools");
+    });
+
+    it("executes get_datetime in CLI mode and accesses active processes", async () => {
+      const service = await getService();
+      const dt = await service.executeTool("get_datetime", {}, { mode: "cli" });
+      expect(dt).toHaveProperty("datetime");
+      expect(service.__getActiveProcesses()).toBeDefined();
+    });
+
+    it("filters transport headers in invokeLlamafileServer", async () => {
+      const { invokeLlamafileServer } = await import("./llamafile-manager.js");
+
+      const req: any = { headers: {} };
+      const res: any = {
+        status: jest.fn().mockReturnThis(),
+        setHeader: jest.fn().mockReturnThis(),
+        send: jest.fn().mockReturnThis(),
+      };
+
+      const upstreamHeaders = new Headers({
+        "Content-Encoding": "gzip",
+        "Transfer-Encoding": "chunked",
+        "Content-Length": "1234",
+        Connection: "close",
+        "X-Custom-Header": "custom-val",
+      });
+
+      (global.fetch as any) = jest.fn<any>().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: upstreamHeaders,
+        arrayBuffer: async () => Buffer.from("response"),
+      });
+
+      await invokeLlamafileServer(
+        req,
+        res,
+        { model: "custom-model", messages: [] },
+        { host: "127.0.0.1", port: 8080 },
+        false,
+      );
+
+      expect(res.setHeader).toHaveBeenCalledWith(
+        "x-custom-header",
+        "custom-val",
+      );
+      expect(res.setHeader).not.toHaveBeenCalledWith(
+        "content-encoding",
+        expect.anything(),
+      );
+      expect(res.setHeader).not.toHaveBeenCalledWith(
+        "content-length",
+        expect.anything(),
+      );
     });
   });
 
@@ -1079,6 +1434,319 @@ describe("LlamafileManagerService", () => {
         "Partial result before cap",
       );
       expect(res.body.choices[0].finish_reason).toBe("length");
+    });
+
+    it("handles invokeCli streaming with tool calls", async () => {
+      statMock.mockResolvedValue({ isDirectory: () => true });
+      readdirMock.mockResolvedValue([
+        { name: "model1.llamafile", isFile: () => true },
+      ]);
+      accessMock.mockResolvedValue(undefined);
+
+      const service = await getService();
+
+      const fakeChild: any = new EventEmitter();
+      fakeChild.pid = 1234;
+      fakeChild.stdout = new EventEmitter();
+      fakeChild.stderr = new EventEmitter();
+      fakeChild.exitCode = null;
+      fakeChild.signalCode = null;
+      fakeChild.killed = false;
+
+      spawnMock.mockImplementation(() => {
+        queueMicrotask(() => fakeChild.emit("spawn"));
+        return fakeChild;
+      });
+
+      const mockReq: any = new EventEmitter();
+      mockReq.headers = {};
+      mockReq.socket = new EventEmitter();
+
+      const writtenChunks: string[] = [];
+      const res = Object.assign(new EventEmitter(), {
+        statusCode: 200,
+        headersSent: false,
+        status: jest.fn().mockReturnThis(),
+        write: jest.fn((chunk: string) => {
+          writtenChunks.push(chunk);
+          res.headersSent = true;
+        }),
+        end: jest.fn(),
+        setHeader: jest.fn(),
+        flushHeaders: jest.fn(),
+      }) as any;
+
+      const invokePromise = service.invokeCli(
+        mockReq,
+        res,
+        {
+          model: "model1",
+          messages: [{ role: "user", content: "call tool" }],
+          stream: true,
+        },
+        { model: "model1", offline: false },
+        false,
+      );
+
+      setImmediate(() => {
+        fakeChild.stdout.emit(
+          "data",
+          Buffer.from('call:read_file{path:"test.txt"}'),
+        );
+        fakeChild.emit("close", 0);
+      });
+
+      await invokePromise;
+
+      expect(res.write).toHaveBeenCalled();
+      expect(res.end).toHaveBeenCalled();
+      const fullWritten = writtenChunks.join("");
+      expect(fullWritten).toContain("read_file");
+      expect(fullWritten).toContain('"finish_reason":"tool_calls"');
+    });
+
+    it("handles invokeCli streaming process failure on close", async () => {
+      statMock.mockResolvedValue({ isDirectory: () => true });
+      readdirMock.mockResolvedValue([
+        { name: "model1.llamafile", isFile: () => true },
+      ]);
+      accessMock.mockResolvedValue(undefined);
+
+      const service = await getService();
+
+      const fakeChild: any = new EventEmitter();
+      fakeChild.pid = 1234;
+      fakeChild.stdout = new EventEmitter();
+      fakeChild.stderr = new EventEmitter();
+      fakeChild.exitCode = null;
+      fakeChild.signalCode = null;
+      fakeChild.killed = false;
+
+      spawnMock.mockImplementation(() => {
+        queueMicrotask(() => fakeChild.emit("spawn"));
+        return fakeChild;
+      });
+
+      const mockReq: any = new EventEmitter();
+      mockReq.headers = {};
+      mockReq.socket = new EventEmitter();
+
+      const writtenChunks: string[] = [];
+      const res = Object.assign(new EventEmitter(), {
+        statusCode: 200,
+        headersSent: false,
+        status: jest.fn().mockReturnThis(),
+        write: jest.fn((chunk: string) => {
+          writtenChunks.push(chunk);
+          res.headersSent = true;
+        }),
+        end: jest.fn(),
+        setHeader: jest.fn(),
+        flushHeaders: jest.fn(),
+      }) as any;
+
+      const invokePromise = service.invokeCli(
+        mockReq,
+        res,
+        {
+          model: "model1",
+          messages: [{ role: "user", content: "crash" }],
+          stream: true,
+        },
+        { model: "model1", offline: false },
+        false,
+      );
+
+      setImmediate(() => {
+        fakeChild.stderr.emit("data", Buffer.from("Fatal llamafile segfault"));
+        fakeChild.emit("close", 1);
+      });
+
+      await invokePromise;
+
+      expect(res.write).toHaveBeenCalled();
+      expect(res.end).toHaveBeenCalled();
+      const fullWritten = writtenChunks.join("");
+      expect(fullWritten).toContain("Fatal llamafile segfault");
+      expect(fullWritten).toContain("[DONE]");
+    });
+
+    it("handles invokeCli non-streaming failure on non-zero exit code", async () => {
+      statMock.mockResolvedValue({ isDirectory: () => true });
+      readdirMock.mockResolvedValue([
+        { name: "model1.llamafile", isFile: () => true },
+      ]);
+      accessMock.mockResolvedValue(undefined);
+
+      const service = await getService();
+
+      const fakeChild: any = new EventEmitter();
+      fakeChild.pid = 1234;
+      fakeChild.stdout = new EventEmitter();
+      fakeChild.stderr = new EventEmitter();
+      fakeChild.exitCode = null;
+      fakeChild.signalCode = null;
+      fakeChild.killed = false;
+
+      spawnMock.mockImplementation(() => {
+        queueMicrotask(() => fakeChild.emit("spawn"));
+        return fakeChild;
+      });
+
+      const mockReq: any = new EventEmitter();
+      mockReq.headers = {};
+      mockReq.socket = new EventEmitter();
+
+      const res = Object.assign(new EventEmitter(), {
+        statusCode: 200,
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn(),
+      }) as any;
+
+      const invokePromise = service.invokeCli(
+        mockReq,
+        res,
+        {
+          model: "model1",
+          messages: [{ role: "user", content: "fail" }],
+        },
+        { model: "model1", offline: false },
+        false,
+      );
+
+      setImmediate(() => {
+        fakeChild.stderr.emit("data", Buffer.from("Out of memory"));
+        fakeChild.emit("close", 1);
+      });
+
+      await invokePromise;
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith({ error: "Out of memory" });
+    });
+
+    it("handles invokeCli child process error", async () => {
+      statMock.mockResolvedValue({ isDirectory: () => true });
+      readdirMock.mockResolvedValue([
+        { name: "model1.llamafile", isFile: () => true },
+      ]);
+      accessMock.mockResolvedValue(undefined);
+
+      const service = await getService();
+
+      const fakeChild: any = new EventEmitter();
+      fakeChild.pid = 1234;
+      fakeChild.stdout = new EventEmitter();
+      fakeChild.stderr = new EventEmitter();
+      fakeChild.exitCode = null;
+      fakeChild.signalCode = null;
+      fakeChild.killed = false;
+
+      spawnMock.mockImplementation(() => {
+        queueMicrotask(() => fakeChild.emit("spawn"));
+        return fakeChild;
+      });
+
+      const mockReq: any = new EventEmitter();
+      mockReq.headers = {};
+      mockReq.socket = new EventEmitter();
+
+      const res = Object.assign(new EventEmitter(), {
+        statusCode: 200,
+        headersSent: false,
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn(),
+      }) as any;
+
+      const invokePromise = service.invokeCli(
+        mockReq,
+        res,
+        {
+          model: "model1",
+          messages: [{ role: "user", content: "spawn fail" }],
+        },
+        { model: "model1", offline: false },
+        false,
+      );
+
+      setImmediate(() => {
+        fakeChild.emit("error", new Error("EACCES permission denied"));
+      });
+
+      await invokePromise;
+
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.stringContaining("EACCES permission denied"),
+        }),
+      );
+    });
+
+    it("probes --offline support flag when offline option is true", async () => {
+      statMock.mockResolvedValue({ isDirectory: () => true });
+      readdirMock.mockResolvedValue([
+        { name: "model1.llamafile", isFile: () => true },
+      ]);
+      accessMock.mockResolvedValue(undefined);
+
+      const service = await getService();
+
+      let callCount = 0;
+      spawnMock.mockImplementation((_cmd: string, args: string[]) => {
+        const child: any = new EventEmitter();
+        child.pid = 5000 + callCount++;
+        child.stdout = new EventEmitter();
+        child.stderr = new EventEmitter();
+        child.exitCode = null;
+        child.signalCode = null;
+        child.killed = false;
+
+        queueMicrotask(() => {
+          child.emit("spawn");
+          setImmediate(() => {
+            if (args && args.includes("--help")) {
+              child.stdout.emit(
+                "data",
+                Buffer.from("Options:\n  --offline   Do not connect\n"),
+              );
+              child.emit("close", 0);
+            } else {
+              child.stdout.emit("data", Buffer.from("Answer offline"));
+              child.emit("close", 0);
+            }
+          });
+        });
+
+        return child;
+      });
+
+      const mockReq: any = new EventEmitter();
+      mockReq.headers = {};
+      mockReq.socket = new EventEmitter();
+
+      const res = Object.assign(new EventEmitter(), {
+        statusCode: 200,
+        body: undefined as any,
+        json: jest.fn((val: any) => {
+          res.body = val;
+        }),
+        status: jest.fn().mockReturnThis(),
+      }) as any;
+
+      await service.invokeCli(
+        mockReq,
+        res,
+        {
+          model: "model1",
+          messages: [{ role: "user", content: "hello" }],
+        },
+        { model: "model1", offline: true },
+        true,
+      );
+
+      expect(res.json).toHaveBeenCalled();
+      expect(service.__getOfflineSupportCache().size).toBeGreaterThan(0);
     });
   });
 });

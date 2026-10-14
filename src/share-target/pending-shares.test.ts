@@ -76,4 +76,94 @@ describe("consumePendingShares", () => {
 
     db.close();
   });
+
+  it("returns empty array when db is null or does not have transaction function", async () => {
+    expect(await consumePendingShares(null as any)).toEqual([]);
+    expect(await consumePendingShares({} as any)).toEqual([]);
+  });
+
+  it("handles NotFoundError DOMException by resolving with empty array", async () => {
+    const mockDb: any = {
+      transaction: () => {
+        throw new DOMException("Store not found", "NotFoundError");
+      },
+    };
+    const res = await consumePendingShares(mockDb);
+    expect(res).toEqual([]);
+  });
+
+  it("rejects when transaction throws other error", async () => {
+    const mockDb: any = {
+      transaction: () => {
+        throw new Error("Disk corruption");
+      },
+    };
+    await expect(consumePendingShares(mockDb)).rejects.toThrow(
+      "Disk corruption",
+    );
+  });
+
+  it("handles getAll error, clear error, and tx abort", async () => {
+    // 1. getAll error
+    const req1: any = {};
+    const mockDb1: any = {
+      transaction: () => ({
+        objectStore: () => ({
+          getAll: () => {
+            setTimeout(() => {
+              req1.error = new Error("Read error");
+              req1.onerror();
+            }, 0);
+            return req1;
+          },
+        }),
+      }),
+    };
+    await expect(consumePendingShares(mockDb1)).rejects.toThrow("Read error");
+
+    // 2. clear error
+    const req2: any = {};
+    const clearReq: any = {};
+    const mockDb2: any = {
+      transaction: () => ({
+        objectStore: () => ({
+          getAll: () => {
+            setTimeout(() => {
+              req2.result = [{ id: "x", createdAt: 1 }];
+              req2.onsuccess();
+            }, 0);
+            return req2;
+          },
+          clear: () => {
+            setTimeout(() => {
+              clearReq.error = new Error("Clear error");
+              clearReq.onerror();
+            }, 0);
+            return clearReq;
+          },
+        }),
+      }),
+    };
+    await expect(consumePendingShares(mockDb2)).rejects.toThrow("Clear error");
+
+    // 3. tx abort
+    const req3: any = {};
+    const tx3: any = {
+      objectStore: () => ({
+        getAll: () => {
+          setTimeout(() => {
+            tx3.error = new Error("Aborted error");
+            tx3.onabort();
+          }, 0);
+          return req3;
+        },
+      }),
+    };
+    const mockDb3: any = {
+      transaction: () => tx3,
+    };
+    await expect(consumePendingShares(mockDb3)).rejects.toThrow(
+      "Aborted error",
+    );
+  });
 });

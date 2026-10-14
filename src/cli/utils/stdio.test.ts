@@ -1,4 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  jest,
+} from "@jest/globals";
 import { Readable } from "node:stream";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -54,6 +61,29 @@ describe("src/cli/utils/stdio.ts", () => {
 
       const result = await readStdin({ stdin: mockStdin, force: true });
       expect(result).toBe("forced stream content");
+    });
+
+    it("returns null on stream error", async () => {
+      const mockStdin = new Readable({
+        read() {
+          this.emit("error", new Error("stream read failure"));
+        },
+      });
+      (mockStdin as any).isTTY = false;
+      const result = await readStdin({ stdin: mockStdin });
+      expect(result).toBeNull();
+    });
+
+    it("resolves immediately when stream readableEnded is already true", async () => {
+      const mockStdin = new Readable({
+        read() {
+          this.push(null);
+        },
+      });
+      (mockStdin as any).isTTY = false;
+      Object.defineProperty(mockStdin, "readableEnded", { get: () => true });
+      const result = await readStdin({ stdin: mockStdin });
+      expect(result).toBe("");
     });
   });
 
@@ -129,6 +159,26 @@ describe("src/cli/utils/stdio.ts", () => {
 
       const content = await readFile(targetFile, "utf8");
       expect(JSON.parse(content)).toEqual({ success: true, count: 42 });
+    });
+
+    it("logs string and JSON to console when output is not specified and quiet is false", async () => {
+      const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        await writeOutput("console text output");
+        expect(logSpy).toHaveBeenCalledWith("console text output");
+
+        await writeOutput({ count: 1 });
+        expect(logSpy).toHaveBeenCalledWith(
+          JSON.stringify({ count: 1 }, null, 2),
+        );
+
+        // When quiet is true, does not log
+        logSpy.mockClear();
+        await writeOutput("quiet text", { quiet: true });
+        expect(logSpy).not.toHaveBeenCalled();
+      } finally {
+        logSpy.mockRestore();
+      }
     });
   });
 });

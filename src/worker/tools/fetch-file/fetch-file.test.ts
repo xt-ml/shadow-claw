@@ -492,4 +492,115 @@ describe("worker/tools/fetch-file — bind safety", () => {
 
     expect(result).toContain("Saved");
   });
+
+  it("handles OAuth Git re-auth required on 401", async () => {
+    const deps = makeDeps({
+      fetchImpl: jest.fn(async () =>
+        createResponse({
+          status: 401,
+          statusText: "Unauthorized",
+          contentType: "text/plain",
+          body: "auth required",
+        }),
+      ),
+      resolveGitCredentials: jest
+        .fn()
+        .mockResolvedValueOnce({
+          token: "old-token",
+          authMode: "oauth",
+          accountId: "git-1",
+        } as any)
+        .mockResolvedValueOnce({
+          reauthRequired: true,
+          provider: "github",
+        } as any),
+      buildAuthHeaders: jest.fn(() => ({ Authorization: "Bearer old-token" })),
+    });
+
+    const result = await executeFetchFileTool(
+      {} as any,
+      {
+        url: "https://api.github.com/repos/org/repo/raw",
+        path: "out/file.txt",
+        use_git_auth: true,
+      },
+      "group-1",
+      deps,
+    );
+
+    expect(result).toContain("OAuth Git account reconnect required for github");
+  });
+
+  it("refreshes OAuth Git token and retries on 401", async () => {
+    let callCount = 0;
+    const deps = makeDeps({
+      fetchImpl: jest.fn(async () => {
+        callCount++;
+        if (callCount === 1) {
+          return createResponse({
+            status: 401,
+            statusText: "Unauthorized",
+            contentType: "text/plain",
+            body: "unauthorized",
+          });
+        }
+        return createResponse({
+          status: 200,
+          statusText: "OK",
+          contentType: "text/plain",
+          body: "success content",
+        });
+      }),
+      resolveGitCredentials: jest
+        .fn()
+        .mockResolvedValueOnce({
+          token: "old-token",
+          authMode: "oauth",
+          accountId: "git-1",
+        } as any)
+        .mockResolvedValueOnce({
+          token: "new-token",
+          authMode: "oauth",
+          accountId: "git-1",
+        } as any),
+      buildAuthHeaders: jest
+        .fn()
+        .mockReturnValueOnce({ Authorization: "Bearer old-token" })
+        .mockReturnValueOnce({ Authorization: "Bearer new-token" }),
+    });
+
+    const result = await executeFetchFileTool(
+      {} as any,
+      {
+        url: "https://api.github.com/repos/org/repo/raw",
+        path: "out/file.txt",
+        use_git_auth: true,
+      },
+      "group-1",
+      deps,
+    );
+
+    expect(deps.fetchImpl).toHaveBeenCalledTimes(2);
+    expect(result).toContain("Saved");
+  });
+
+  it("handles generic network fetch errors", async () => {
+    const deps = makeDeps({
+      fetchImpl: jest.fn(async () => {
+        throw new Error("Connection refused");
+      }),
+    });
+
+    const result = await executeFetchFileTool(
+      {} as any,
+      { url: "https://unreachable.test", path: "out/file.txt" },
+      "group-1",
+      deps,
+    );
+
+    expect(result).toContain(
+      "Network Error: Failed to fetch https://unreachable.test",
+    );
+    expect(result).toContain("Connection refused");
+  });
 });

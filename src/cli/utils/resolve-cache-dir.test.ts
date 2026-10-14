@@ -96,6 +96,39 @@ describe("src/cli/utils/resolve-cache-dir.ts", () => {
     expect(resolved).toBe(path.resolve(tempDir, ".legacy-cache"));
   });
 
+  it("checks pages/site-config.json and shadowclaw.config.json variants and handles malformed JSON", async () => {
+    // Malformed JSON should be ignored
+    const badConfigPath = path.join(tempDir, "shadow-claw-config.json");
+    await fs.writeFile(badConfigPath, "{ bad json", "utf8");
+    expect(readConfigFileCacheDir(tempDir)).toBeNull();
+    await fs.unlink(badConfigPath);
+
+    // shadowclaw.config.json variant
+    const shadowclawPath = path.join(tempDir, "shadowclaw.config.json");
+    await fs.writeFile(
+      shadowclawPath,
+      JSON.stringify({ cacheDir: "sc-variant-cache" }),
+      "utf8",
+    );
+    expect(readConfigFileCacheDir(tempDir)).toBe(
+      path.resolve(tempDir, "sc-variant-cache"),
+    );
+    await fs.unlink(shadowclawPath);
+
+    // pages/site-config.json variant
+    const pagesDir = path.join(tempDir, "pages");
+    await fs.mkdir(pagesDir, { recursive: true });
+    const pagesSiteConfig = path.join(pagesDir, "site-config.json");
+    await fs.writeFile(
+      pagesSiteConfig,
+      JSON.stringify({ cacheDir: "pages-sub-cache" }),
+      "utf8",
+    );
+    expect(readConfigFileCacheDir(tempDir)).toBe(
+      path.resolve(tempDir, "pages-sub-cache"),
+    );
+  });
+
   it("respects explicit --tmp option", async () => {
     const result = await resolveCacheDir({
       contentRoot: tempDir,
@@ -365,5 +398,33 @@ describe("src/cli/utils/resolve-cache-dir.ts", () => {
 
     expect(exitCode).toBe(130);
     expect(output).toContain("Operation cancelled.");
+  });
+
+  it("handles explicit databaseDir ending in /database and non-/database", async () => {
+    const res1 = await resolveCacheDir({
+      contentRoot: tempDir,
+      databaseDir: "my-cache/database",
+    });
+    expect(res1.databaseDir).toBe(path.resolve(tempDir, "my-cache/database"));
+    expect(res1.cacheDir).toBe(path.resolve(tempDir, "my-cache"));
+
+    const res2 = await resolveCacheDir({
+      contentRoot: tempDir,
+      databaseDir: "custom-db-dir",
+    });
+    expect(res2.databaseDir).toBe(path.resolve(tempDir, "custom-db-dir"));
+    expect(res2.cacheDir).toBe(path.resolve(tempDir));
+  });
+
+  it("reads server.cacheDir from site-config.json", async () => {
+    const cfgPath = path.join(tempDir, "site-config.json");
+    await fs.writeFile(
+      cfgPath,
+      JSON.stringify({ server: { cacheDir: "server-cache" } }),
+      "utf8",
+    );
+
+    const res = await resolveCacheDir({ contentRoot: tempDir });
+    expect(res.cacheDir).toBe(path.resolve(tempDir, "server-cache"));
   });
 });

@@ -11,7 +11,9 @@ import {
   beforeEach,
   afterEach,
 } from "@jest/globals";
-import { createCliMcpEngine } from "./mcp.js";
+import http from "node:http";
+import readline from "node:readline";
+import { createCliMcpEngine, runMcpCommand } from "./mcp.js";
 
 const pkg = JSON.parse(
   fs.readFileSync(
@@ -1085,6 +1087,263 @@ describe("CLI MCP Engine (createCliMcpEngine)", () => {
       expect(toolNames).not.toContain("shadowclaw_local_read_file");
       expect(toolNames).not.toContain("shadowclaw_local_write_file");
       expect(toolNames).not.toContain("shadowclaw_local_bash");
+    });
+
+    it("supports setting and getting activeClientId", () => {
+      const engine = createCliMcpEngine({});
+      expect(engine.getActiveClientId()).toBe("");
+      engine.setActiveClientId?.("client-custom-1");
+      expect(engine.getActiveClientId()).toBe("client-custom-1");
+    });
+
+    it("handles tasks/get method", async () => {
+      const engine = createCliMcpEngine({});
+      const res = await engine.handleMessage({
+        jsonrpc: "2.0",
+        id: 50,
+        method: "tasks/get",
+        params: { taskId: "task-test-99" },
+      });
+      expect(res.result.task.taskId).toBe("task-test-99");
+      expect(res.result.task.status).toBe("completed");
+    });
+
+    it("handles unknown method returning error or null for notification", async () => {
+      const engine = createCliMcpEngine({});
+      const errRes = await engine.handleMessage({
+        jsonrpc: "2.0",
+        id: 51,
+        method: "unknown/method",
+      });
+      expect(errRes.error.code).toBe(-32601);
+
+      const notifRes = await engine.handleMessage({
+        jsonrpc: "2.0",
+        method: "unknown/notification",
+      });
+      expect(notifRes).toBeNull();
+    });
+
+    it("handles tools/call when no client is available", async () => {
+      const engine = createCliMcpEngine({
+        client: { listClients: async () => [] },
+      });
+      const res = await engine.handleMessage({
+        jsonrpc: "2.0",
+        id: 52,
+        method: "tools/call",
+        params: {
+          name: "remote_tool_1",
+          arguments: {},
+        },
+      });
+      expect(res.result.isError).toBe(true);
+      expect(res.result.content[0].text).toContain(
+        "No connected client available",
+      );
+    });
+
+    it("closes sqlite database when engine.close is invoked after headless context creation", async () => {
+      const tmpDir = await mkdtemp(path.join(tmpdir(), "sc-mcp-close-test-"));
+      const engine = createCliMcpEngine({
+        workspace: tmpDir,
+        localTools: true,
+      });
+
+      // Invoke local tool to initialize headlessContextPromise
+      await engine.handleMessage({
+        jsonrpc: "2.0",
+        id: 53,
+        method: "tools/call",
+        params: {
+          name: "shadowclaw_local_list_files",
+          arguments: {},
+        },
+      });
+
+      // Call close
+      await engine.close?.();
+      await rm(tmpDir, { recursive: true, force: true });
+    });
+  });
+
+  describe("runMcpCommand", () => {
+    let tmpWorkspace: string;
+
+    beforeEach(async () => {
+      tmpWorkspace = await mkdtemp(path.join(tmpdir(), "sc-mcp-cmd-test-"));
+    });
+
+    afterEach(async () => {
+      try {
+        await rm(tmpWorkspace, { recursive: true, force: true });
+      } catch (_) {}
+    });
+
+    it("handles HTTP transport requests including 404, parse error, success, notification, and 500", async () => {
+      let requestHandler: any;
+      const mockServer = {
+        listen: jest.fn((_port: any, _host: any, cb: any) => cb?.()),
+        close: jest.fn(),
+      };
+      jest.spyOn(http, "createServer").mockImplementation((handler: any) => {
+        requestHandler = handler;
+        return mockServer as any;
+      });
+
+      await runMcpCommand({
+        mcpTransport: "http",
+        port: 9999,
+        host: "127.0.0.1",
+        workspace: tmpWorkspace,
+      });
+
+      expect(http.createServer).toHaveBeenCalled();
+      expect(mockServer.listen).toHaveBeenCalledWith(
+        9999,
+        "127.0.0.1",
+        expect.any(Function),
+      );
+
+      // 1. Non-POST or wrong URL -> 404
+      const res404 = {
+        writeHead: jest.fn(),
+        end: jest.fn(),
+      };
+      await requestHandler({ method: "GET", url: "/mcp" }, res404);
+      expect(res404.writeHead).toHaveBeenCalledWith(404, expect.any(Object));
+
+      // Helper to simulate request events
+      const invokeHandler = (reqMeta: any, rawData: string) => {
+        return new Promise<any>((resolve) => {
+          const res = {
+            writeHead: jest.fn(),
+            end: jest.fn(() => resolve(res)),
+          };
+          const handlers: Record<string, Function> = {};
+          const req: any = {
+            method: "POST",
+            url: "/mcp",
+            headers: {},
+            ...reqMeta,
+            on: (event: string, cb: any) => {
+              handlers[event] = cb;
+            },
+          };
+          Promise.resolve(requestHandler(req, res)).then(() => {
+            handlers["data"]?.(rawData);
+            handlers["end"]?.();
+          });
+        });
+      };
+
+      // 2. Parse error -> 400
+      const res400 = await invokeHandler({}, "not-valid-json");
+      expect(res400.writeHead).toHaveBeenCalledWith(400, expect.any(Object));
+
+      // 3. Valid JSON-RPC method -> 200
+      const validReq = JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/list",
+      });
+      const res200 = await invokeHandler(
+        {
+          headers: {
+            "mcp-protocol-version": "2026-07-28",
+            "mcp-method": "tools/list",
+            "mcp-name": "test-client",
+          },
+        },
+        validReq,
+      );
+      expect(res200.writeHead).toHaveBeenCalledWith(200, expect.any(Object));
+
+      // 4. Notification (reply === null) -> 202
+      const notifReq = JSON.stringify({
+        jsonrpc: "2.0",
+        method: "notifications/initialized",
+      });
+      const res202 = await invokeHandler({}, notifReq);
+      expect(res202.writeHead).toHaveBeenCalledWith(202);
+
+      // 5. Error during handling -> 500
+      const throwingHeaders = {
+        get ["mcp-protocol-version"]() {
+          throw new Error("Boom headers");
+        },
+      };
+      const res500 = await invokeHandler(
+        { headers: throwingHeaders },
+        validReq,
+      );
+      expect(res500.writeHead).toHaveBeenCalledWith(500, expect.any(Object));
+
+      // Restore
+      jest.spyOn(http, "createServer").mockRestore();
+    });
+
+    it("handles STDIO transport lines including parse error, valid request, notification, and close", async () => {
+      let lineHandler: any;
+      let closeHandler: any;
+      const mockRl = {
+        on: jest.fn((event: string, cb: any) => {
+          if (event === "line") lineHandler = cb;
+          if (event === "close") closeHandler = cb;
+          return mockRl;
+        }),
+      };
+      jest.spyOn(readline, "createInterface").mockReturnValue(mockRl as any);
+      const writeSpy = jest
+        .spyOn(process.stdout, "write")
+        .mockImplementation(() => true);
+
+      await runMcpCommand({
+        mcpTransport: "stdio",
+        workspace: tmpWorkspace,
+      });
+
+      expect(readline.createInterface).toHaveBeenCalled();
+
+      // Empty line ignored
+      await lineHandler("   ");
+      expect(writeSpy).not.toHaveBeenCalled();
+
+      // Parse error
+      await lineHandler("bad-json");
+      expect(writeSpy).toHaveBeenCalledWith(expect.stringContaining("-32700"));
+      writeSpy.mockClear();
+
+      // Valid tools/list
+      await lineHandler(
+        JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" }),
+      );
+      expect(writeSpy).toHaveBeenCalledWith(
+        expect.stringContaining('"result"'),
+      );
+      writeSpy.mockClear();
+
+      // Exception during write triggering catch block (lines 1613-1620)
+      writeSpy.mockImplementationOnce(() => {
+        throw new Error("Stdout write failure");
+      });
+      await lineHandler(
+        JSON.stringify({ jsonrpc: "2.0", id: 3, method: "tools/list" }),
+      );
+      expect(writeSpy).toHaveBeenCalledWith(expect.stringContaining("-32603"));
+      writeSpy.mockClear();
+
+      // Notification
+      await lineHandler(
+        JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }),
+      );
+      expect(writeSpy).not.toHaveBeenCalled();
+
+      // Close handler
+      await closeHandler();
+
+      writeSpy.mockRestore();
+      jest.spyOn(readline, "createInterface").mockRestore();
     });
   });
 });

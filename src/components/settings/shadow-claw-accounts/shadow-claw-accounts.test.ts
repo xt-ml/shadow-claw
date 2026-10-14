@@ -423,4 +423,135 @@ describe("shadow-claw-accounts", () => {
 
     document.body.removeChild(el);
   });
+
+  it("updates an existing account and supports basic auth", async () => {
+    const el = new ShadowClawAccounts();
+    document.body.appendChild(el);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await el.render();
+    el.db = {} as any;
+
+    el.accounts = [
+      {
+        id: "acct-existing",
+        label: "Old Label",
+        service: "GitHub",
+        hostPattern: "api.github.com",
+        authMode: "token",
+        token: "old-token",
+      } as any,
+    ];
+
+    el.showAccountForm("acct-existing");
+
+    const root = el.shadowRoot!;
+    (
+      root.querySelector('[data-field="acct-label"]') as HTMLInputElement
+    ).value = "Updated Label";
+    (
+      root.querySelector('[data-field="acct-auth-mode"]') as HTMLSelectElement
+    ).value = "basic";
+    (
+      root.querySelector(
+        '[data-field="acct-basic-username"]',
+      ) as HTMLInputElement
+    ).value = "admin";
+    (
+      root.querySelector('[data-field="acct-token"]') as HTMLInputElement
+    ).value = "secret-pass";
+
+    await el.saveAccountForm();
+
+    expect(showSuccess).toHaveBeenCalledWith("Account updated", 3000);
+    const updated = el.accounts.find((a) => a.id === "acct-existing");
+    expect(updated?.label).toBe("Updated Label");
+    expect(updated?.authMode).toBe("basic");
+    expect(updated?.basicUsername).toBe("admin");
+
+    document.body.removeChild(el);
+  });
+
+  it("handles validation errors when saving account", async () => {
+    const el = new ShadowClawAccounts();
+    document.body.appendChild(el);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await el.render();
+    el.db = {} as any;
+
+    el.showAccountForm("new");
+    const root = el.shadowRoot!;
+
+    // 1. Missing label/service/host
+    (
+      root.querySelector('[data-field="acct-label"]') as HTMLInputElement
+    ).value = "";
+    await el.saveAccountForm();
+    expect(showError).toHaveBeenCalledWith(
+      "Label, Service, and Host Pattern are required.",
+      4000,
+    );
+
+    // Fill required base fields
+    (
+      root.querySelector('[data-field="acct-label"]') as HTMLInputElement
+    ).value = "Test";
+    (
+      root.querySelector('[data-field="acct-service"]') as HTMLInputElement
+    ).value = "Service";
+    (root.querySelector('[data-field="acct-host"]') as HTMLInputElement).value =
+      "example.com";
+    (
+      root.querySelector('[data-field="acct-auth-mode"]') as HTMLSelectElement
+    ).value = "oauth";
+
+    // 2. OAuth mode missing client ID
+    (
+      root.querySelector(
+        '[data-field="acct-oauth-provider"]',
+      ) as HTMLSelectElement
+    ).value = "github";
+    (
+      root.querySelector(
+        '[data-field="acct-oauth-client-id"]',
+      ) as HTMLInputElement
+    ).value = "";
+    await el.saveAccountForm();
+    expect(showError).toHaveBeenCalledWith(
+      "OAuth client ID is required for OAuth mode.",
+      4000,
+    );
+
+    document.body.removeChild(el);
+  });
+
+  it("handles error when setConfig fails during saveAccountForm", async () => {
+    const el = new ShadowClawAccounts();
+    document.body.appendChild(el);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await el.render();
+    el.db = {} as any;
+
+    el.showAccountForm("new");
+    const root = el.shadowRoot!;
+    (
+      root.querySelector('[data-field="acct-label"]') as HTMLInputElement
+    ).value = "Faulty";
+    (
+      root.querySelector('[data-field="acct-service"]') as HTMLInputElement
+    ).value = "Service";
+    (root.querySelector('[data-field="acct-host"]') as HTMLInputElement).value =
+      "example.com";
+
+    (setConfig as jest.Mock).mockRejectedValueOnce(
+      new Error("Database write error"),
+    );
+    await el.saveAccountForm();
+
+    expect(showError).toHaveBeenCalledWith(
+      expect.stringContaining("Database write error"),
+      6000,
+    );
+
+    document.body.removeChild(el);
+  });
 });

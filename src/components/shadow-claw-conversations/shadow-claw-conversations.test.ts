@@ -1943,4 +1943,365 @@ describe("shadow-claw-conversations dialog submission methods", () => {
 
     document.body.removeChild(el);
   });
+
+  it("covers keyboard reordering, resize handling, autoscroll, peer participants, and dialog helpers", async () => {
+    const el = new ShadowClawConversations() as any;
+    document.body.appendChild(el);
+    el.db = {} as any;
+    await el.render();
+
+    el.shadowRoot?.querySelectorAll("dialog").forEach((d: any) => {
+      d.showModal = jest.fn();
+      d.close = jest.fn();
+    });
+
+    // 1. Keyboard navigation and reordering
+    console.log("CP1: start");
+    mockOrchStore.groups = [
+      { groupId: "g1", name: "Group 1" },
+      { groupId: "g2", name: "Group 2" },
+      { groupId: "g3", name: "Group 3" },
+    ];
+    el.render();
+
+    const targetEl = document.createElement("div");
+    targetEl.classList.add("conversation-item");
+
+    // Grab g2 with 'm'
+    el._handleKeyboard(
+      { key: "m", preventDefault: jest.fn(), target: targetEl } as any,
+      "g2",
+      "Group 2",
+    );
+    expect(el._keyboardGrabbedId).toBe("g2");
+
+    // ArrowUp swaps g2 with g1
+    el._handleKeyboard(
+      { key: "ArrowUp", preventDefault: jest.fn(), target: targetEl } as any,
+      "g2",
+      "Group 2",
+    );
+    expect(mockOrchStore.reorderConversations).toHaveBeenCalledWith(
+      expect.anything(),
+      ["g2", "g1", "g3"],
+    );
+
+    // ArrowDown swaps g2 with g3
+    mockOrchStore.groups = [
+      { groupId: "g1", name: "Group 1" },
+      { groupId: "g2", name: "Group 2" },
+      { groupId: "g3", name: "Group 3" },
+    ];
+    el._keyboardGrabbedId = "g2";
+    el._handleKeyboard(
+      { key: "ArrowDown", preventDefault: jest.fn(), target: targetEl } as any,
+      "g2",
+      "Group 2",
+    );
+    expect(mockOrchStore.reorderConversations).toHaveBeenCalledWith(
+      expect.anything(),
+      ["g1", "g3", "g2"],
+    );
+
+    // ArrowUp at top edge
+    mockOrchStore.groups = [
+      { groupId: "g1", name: "Group 1" },
+      { groupId: "g2", name: "Group 2" },
+    ];
+    el._keyboardGrabbedId = "g1";
+    el._handleKeyboard(
+      { key: "ArrowUp", preventDefault: jest.fn(), target: targetEl } as any,
+      "g1",
+      "Group 1",
+    );
+
+    // Escape cancels
+    el._handleKeyboard(
+      { key: "Escape", preventDefault: jest.fn(), target: targetEl } as any,
+      "g1",
+      "Group 1",
+    );
+    expect(el._keyboardGrabbedId).toBeNull();
+
+    // Enter / Space drops
+    el._keyboardGrabbedId = "g1";
+    el._handleKeyboard(
+      { key: "Enter", preventDefault: jest.fn(), target: targetEl } as any,
+      "g1",
+      "Group 1",
+    );
+    expect(el._keyboardGrabbedId).toBeNull();
+
+    el._keyboardGrabbedId = "g1";
+    el._handleKeyboard(
+      { key: " ", preventDefault: jest.fn(), target: targetEl } as any,
+      "g1",
+      "Group 1",
+    );
+    expect(el._keyboardGrabbedId).toBeNull();
+
+    // When not grabbed: navigation keys
+    el._keyboardGrabbedId = null;
+    el._handleKeyboard(
+      { key: "ArrowDown", preventDefault: jest.fn(), target: targetEl } as any,
+      "g1",
+      "Group 1",
+    );
+    el._handleKeyboard(
+      { key: "ArrowUp", preventDefault: jest.fn(), target: targetEl } as any,
+      "g1",
+      "Group 1",
+    );
+    el._handleKeyboard(
+      { key: "ArrowRight", preventDefault: jest.fn(), target: targetEl } as any,
+      "g1",
+      "Group 1",
+    );
+    el._handleKeyboard(
+      { key: "ArrowLeft", preventDefault: jest.fn(), target: targetEl } as any,
+      "g1",
+      "Group 1",
+    );
+    const navListener = jest.fn();
+    document.addEventListener("shadow-claw-navigate", navListener);
+    el._handleKeyboard(
+      { key: "Enter", preventDefault: jest.fn(), target: targetEl } as any,
+      "g1",
+      "Group 1",
+    );
+    expect(navListener).toHaveBeenCalledWith(
+      expect.objectContaining({
+        detail: expect.objectContaining({ groupId: "g1" }),
+      }),
+    );
+    document.removeEventListener("shadow-claw-navigate", navListener);
+
+    // 2. Resize handle pointer events & dblclick
+    el._initResizeHandle();
+    const handle = el.shadowRoot?.querySelector(
+      ".resize-handle",
+    ) as HTMLElement;
+    if (handle) {
+      handle.setPointerCapture = jest.fn() as any;
+      // non-primary mouse button ignored
+      handle.dispatchEvent(
+        new PointerEvent("pointerdown", { pointerType: "mouse", button: 2 }),
+      );
+
+      // primary pointerdown
+      handle.dispatchEvent(
+        new PointerEvent("pointerdown", { pointerId: 1, button: 0 }),
+      );
+      expect(handle.classList.contains("active")).toBe(true);
+
+      // pointermove
+      document.dispatchEvent(
+        new PointerEvent("pointermove", { pointerId: 1, clientY: 100 }),
+      );
+
+      // pointerup
+      handle.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1 }));
+      expect(handle.classList.contains("active")).toBe(false);
+
+      // pointercancel
+      handle.dispatchEvent(
+        new PointerEvent("pointerdown", { pointerId: 2, button: 0 }),
+      );
+      handle.dispatchEvent(new PointerEvent("pointercancel"));
+      expect(handle.classList.contains("active")).toBe(false);
+
+      // dblclick resets
+      handle.dispatchEvent(new MouseEvent("dblclick"));
+      expect(mockSetConfig).toHaveBeenCalledWith(
+        el.db,
+        "conversations_height",
+        0,
+      );
+    }
+
+    // 3. Autoscroll
+    jest.spyOn(window, "requestAnimationFrame").mockImplementation(() => 1);
+    (global.fetch as any) = jest.fn<any>().mockResolvedValue({
+      ok: true,
+      json: async () => [],
+    });
+
+    const listEl = el.shadowRoot?.querySelector(
+      ".conversation-list",
+    ) as HTMLElement;
+    if (listEl) {
+      listEl.getBoundingClientRect = () => ({ top: 100, bottom: 500 }) as any;
+    }
+
+    el._startAutoScroll();
+    el._startAutoScroll(); // duplicate branch test
+    el._updateAutoScrollSpeed(110); // near top
+    expect(el._autoScrollSpeed).toBeLessThan(0);
+    el._updateAutoScrollSpeed(490); // near bottom
+    expect(el._autoScrollSpeed).toBeGreaterThan(0);
+    el._updateAutoScrollSpeed(300); // middle
+    expect(el._autoScrollSpeed).toBe(0);
+    el._stopAutoScroll();
+    expect(el._autoScrollActive).toBe(false);
+
+    // 4. itemAtPoint
+    const itemEl = el.shadowRoot?.querySelector(".conversation-item");
+    (el.shadowRoot as any).elementFromPoint = jest.fn().mockReturnValue(itemEl);
+    expect(el._itemAtPoint(10, 10)).toBe(itemEl);
+
+    // 5. Dialog submissions & cancel
+    // Create dialog
+    const createInput = el.shadowRoot?.querySelector(
+      ".conversations__create-dialog .conversations__input",
+    ) as HTMLInputElement;
+    if (createInput) {
+      createInput.value = "";
+      await el._submitCreateDialog();
+      createInput.value = "New Conversation";
+      await el._submitCreateDialog();
+      expect(mockOrchStore.createConversation).toHaveBeenCalledWith(
+        el.db,
+        "New Conversation",
+      );
+    }
+
+    // Delete dialog
+    el._pendingDeleteGroupId = null;
+    await el._submitDeleteDialog();
+    el._pendingDeleteGroupId = "br:to-delete";
+    await el._submitDeleteDialog();
+    expect(mockOrchStore.deleteConversation).toHaveBeenCalledWith(
+      el.db,
+      "br:to-delete",
+    );
+    expect(el._pendingDeleteGroupId).toBeNull();
+
+    // Clone dialog
+    el._pendingCloneGroupId = null;
+    await el._submitCloneDialog();
+    el._pendingCloneGroupId = "br:to-clone";
+    await el._submitCloneDialog();
+    expect(mockOrchStore.cloneConversation).toHaveBeenCalledWith(
+      el.db,
+      "br:to-clone",
+    );
+    expect(el._pendingCloneGroupId).toBeNull();
+
+    // Details dialog empty / missing pending
+    el._pendingRenameGroupId = null;
+    await el._submitDetailsDialog();
+
+    // Dialog cancel buttons
+    const createCancel = el.shadowRoot?.querySelector(
+      ".conversations__create-dialog .conversations__cancel",
+    ) as HTMLButtonElement;
+    createCancel?.click();
+
+    const detailsCancel = el.shadowRoot?.querySelector(
+      ".conversations__details-dialog .conversations__cancel",
+    ) as HTMLButtonElement;
+    detailsCancel?.click();
+
+    const deleteCancel = el.shadowRoot?.querySelector(
+      ".conversations__delete-dialog .conversations__cancel",
+    ) as HTMLButtonElement;
+    deleteCancel?.click();
+
+    const cloneCancel = el.shadowRoot?.querySelector(
+      ".conversations__clone-dialog .conversations__cancel",
+    ) as HTMLButtonElement;
+    cloneCancel?.click();
+
+    // 6. Peer participant details & copy button
+    mockOrchStore.orchestrator = {
+      ...mockOrchStore.orchestrator,
+      peerjs: {
+        connectedPeersSignal: {
+          get: () => ["peer-12345678"],
+        },
+      },
+      peerjsPeerAliases: {
+        Alice: "peer-12345678",
+      },
+      getApiKeyForSpecificProvider: jest.fn().mockResolvedValue("test-key"),
+    };
+
+    // Open details for peer group
+    el.openDetailsDialog("Peer Chat", "peer:peer-12345678");
+    const copyBtn = el.shadowRoot?.querySelector(
+      ".conversations__group-id-copy-btn",
+    ) as HTMLButtonElement;
+    if (copyBtn) {
+      await copyBtn.click();
+    }
+
+    // Also test peer not connected
+    el.openDetailsDialog("Disconnected Peer", "peer:unknown-peer");
+
+    // 7. _loadProviderModels edge cases
+    // array models
+    const pStatic = { id: "p1", name: "P1", models: [{ id: "m1" }] };
+    const resStatic = await el._loadProviderModels(pStatic as any);
+    expect(resStatic).toEqual([{ id: "m1" }]);
+
+    // no modelsUrl
+    const pNoUrl = { id: "p2", name: "P2" };
+    const resNoUrl = await el._loadProviderModels(pNoUrl as any);
+    expect(resNoUrl).toEqual([]);
+
+    // fetch error
+    (global.fetch as any) = jest.fn<any>().mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+    });
+    await expect(
+      el._loadProviderModels({
+        id: "p3",
+        modelsUrl: "http://example.com",
+      } as any),
+    ).rejects.toThrow("HTTP 500");
+
+    // fetch returns array
+    (global.fetch as any) = jest.fn<any>().mockResolvedValueOnce({
+      ok: true,
+      json: async () => [{ id: "arr-model" }],
+    });
+    const resArr = await el._loadProviderModels({
+      id: "p4",
+      modelsUrl: "http://example.com",
+    } as any);
+    expect(resArr[0].id).toBe("arr-model");
+
+    // fetch with apiKeyHeader
+    (global.fetch as any) = jest.fn<any>().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ models: [{ id: "obj-model" }] }),
+    });
+    const resObj = await el._loadProviderModels({
+      id: "p5",
+      modelsUrl: "http://example.com",
+      apiKeyHeader: "Authorization",
+      apiKeyHeaderFormat: "Bearer {key}",
+    } as any);
+    expect(resObj[0].id).toBe("obj-model");
+
+    // fetch single object
+    (global.fetch as any) = jest.fn<any>().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ id: "single-model", name: "Single" }),
+    });
+    const resSingle = await el._loadProviderModels({
+      id: "p6",
+      modelsUrl: "http://example.com",
+    } as any);
+    expect(resSingle).toHaveLength(1);
+
+    // persist height without argument & when db is null
+    el.getBoundingClientRect = () => ({ height: 320 }) as any;
+    await el._persistHeight();
+    el.db = null;
+    await el._persistHeight();
+
+    document.body.removeChild(el);
+  });
 });

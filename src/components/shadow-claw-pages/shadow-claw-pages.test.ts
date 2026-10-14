@@ -1814,5 +1814,90 @@ describe("shadow-claw-pages", () => {
 
       (orchestratorStore.isPageAllowed as jest.Mock).mockReturnValue(true);
     });
+
+    it("updates header when frontmatter title is present in renderPageList", async () => {
+      const component = new ShadowClawPages();
+      await component.connectedCallback();
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      component.selectedPage = { groupId: "group-1", path: "docs/page.md" };
+      component.pageFrontmatter.set({ title: "Amazing Guide" } as any);
+      component.renderPageList(
+        [{ groupId: "group-1", path: "docs/page.md" }],
+        [],
+      );
+
+      const header = root.querySelector("shadow-claw-page-header");
+      expect(header?.getAttribute("title")).toBe("Amazing Guide");
+    });
+
+    it("handles drag and drop events on page rows", async () => {
+      const component = new ShadowClawPages();
+      await component.connectedCallback();
+      component.db = {} as any;
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const pages = [
+        { groupId: "group-1", path: "docs/1.md" },
+        { groupId: "group-1", path: "docs/2.md" },
+      ];
+      component.renderPageList(pages, []);
+
+      const rows = root.querySelectorAll(".pages__list-item");
+      expect(rows.length).toBeGreaterThanOrEqual(2);
+
+      const dragHandle0 = rows[0].querySelector(".pages__drag-handle");
+      const dragEvent = new Event("dragstart", { bubbles: true }) as any;
+      dragEvent.dataTransfer = { effectAllowed: "" };
+      dragHandle0?.dispatchEvent(dragEvent);
+      expect((component as any).draggedPageIndex).toBe(0);
+
+      const dragOverEvent = new Event("dragover", { bubbles: true }) as any;
+      dragOverEvent.preventDefault = jest.fn();
+      rows[1].dispatchEvent(dragOverEvent);
+      expect(rows[1].classList.contains("drag-over")).toBe(true);
+
+      const dragLeaveEvent = new Event("dragleave", { bubbles: true });
+      rows[1].dispatchEvent(dragLeaveEvent);
+      expect(rows[1].classList.contains("drag-over")).toBe(false);
+
+      const dropEvent = new Event("drop", { bubbles: true }) as any;
+      dropEvent.preventDefault = jest.fn();
+      rows[1].dispatchEvent(dropEvent);
+
+      const dragEndEvent = new Event("dragend", { bubbles: true });
+      rows[0].dispatchEvent(dragEndEvent);
+      expect((component as any).draggedPageIndex).toBeNull();
+    });
+
+    it("handles setupAutoRefreshTimer lifecycle", async () => {
+      const component = new ShadowClawPages();
+      (component as any).autoRefreshTimer = setInterval(() => {}, 10000);
+      component.db = null as any;
+
+      await component.setupAutoRefreshTimer();
+      expect((component as any).autoRefreshTimer).toBeNull();
+    });
+
+    it("handles resolveRelativeImagesInHtml with empty and present html", async () => {
+      const component = new ShadowClawPages();
+      component.db = {} as any;
+
+      const emptyRes = await component.resolveRelativeImagesInHtml(
+        "",
+        "doc.html",
+        "group-1",
+      );
+      expect(emptyRes).toBe("");
+
+      const htmlRes = await component.resolveRelativeImagesInHtml(
+        "<p>Hello</p>",
+        "doc.html",
+        "group-1",
+      );
+      expect(htmlRes).toContain("<p>Hello</p>");
+    });
   });
 });

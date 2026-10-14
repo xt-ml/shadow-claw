@@ -2,6 +2,7 @@ import {
   parseLocalModelToolCall,
   parseLocalModelToolCalls,
   convertToolSchemasToOpenAI,
+  createToolCallStreamFilter,
 } from "./parseLocalModelToolCall.js";
 
 describe("parseLocalModelToolCall", () => {
@@ -341,5 +342,61 @@ describe("convertToolSchemasToOpenAI", () => {
     expect(params.properties.dataModel.properties).toBeDefined();
     expect(typeof params.properties.dataModel.properties).toBe("object");
     expect(params.properties.value.type).toBe("string");
+  });
+
+  describe("createToolCallStreamFilter", () => {
+    it("handles undefined onToken callback gracefully", () => {
+      const filter = createToolCallStreamFilter();
+      expect(() => {
+        filter.onToken("token");
+        filter.finalize(false);
+      }).not.toThrow();
+    });
+
+    it("suppresses tokens when a tool call prefix is detected", () => {
+      const emitted: string[] = [];
+      const filter = createToolCallStreamFilter((t) => emitted.push(t));
+
+      filter.onToken("call");
+      filter.onToken(":fetch_url");
+      filter.onToken('{"url":"https://example.com"}');
+      filter.finalize(true);
+
+      expect(emitted).toEqual([]);
+    });
+
+    it("emits normal text after buffering non-prefix token", () => {
+      const emitted: string[] = [];
+      const filter = createToolCallStreamFilter((t) => emitted.push(t));
+
+      filter.onToken("The ");
+      filter.onToken("weather ");
+      filter.onToken("is sunny.");
+      filter.finalize(false);
+
+      expect(emitted.join("")).toBe("The weather is sunny.");
+    });
+
+    it("flushes remaining buffered text on finalize when not a tool call", () => {
+      const emitted: string[] = [];
+      const filter = createToolCallStreamFilter((t) => emitted.push(t));
+
+      filter.onToken("c");
+      filter.onToken("at");
+      filter.finalize(false);
+
+      expect(emitted.join("")).toBe("cat");
+    });
+
+    it("suppresses <|tool_call and other XML-style prefixes", () => {
+      const emitted: string[] = [];
+      const filter = createToolCallStreamFilter((t) => emitted.push(t));
+
+      filter.onToken("<|tool_call");
+      filter.onToken(">call:bash{}");
+      filter.finalize(true);
+
+      expect(emitted).toEqual([]);
+    });
   });
 });

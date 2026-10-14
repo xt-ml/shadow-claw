@@ -21,6 +21,9 @@ import {
   writeIpcFile,
   clearIpcFile,
   CliWebRtcListener,
+  resolveListenerIpc,
+  sendCommandViaIpc,
+  getIpcSocketPath,
 } from "./webrtc-control-client.js";
 
 describe("src/cli/utils/webrtc-control-client.ts", () => {
@@ -422,5 +425,571 @@ describe("CliWebRtcListener", () => {
       }),
       120000,
     );
+  });
+
+  it("CliWebRtcControlClient.listClients returns empty array when no IPC or IPC error", async () => {
+    const client = new CliWebRtcControlClient({ cacheDir: tempDir });
+    const empty = await client.listClients();
+    expect(empty).toEqual([]);
+
+    // With invalid IPC socket
+    writeIpcFile("/tmp/non-existent-sock-" + Date.now(), tempDir);
+    const emptyWithIpc = await client.listClients();
+    expect(emptyWithIpc).toEqual([]);
+    clearIpcFile(tempDir);
+  });
+
+  it("CliWebRtcControlClient.sendFile throws when file does not exist or is directory", async () => {
+    const client = new CliWebRtcControlClient({ cacheDir: tempDir });
+    await expect(client.sendFile("peer-1", "/not/found.txt")).rejects.toThrow(
+      "File not found",
+    );
+    await expect(client.sendFile("peer-1", tempDir)).rejects.toThrow(
+      "Cannot send directory",
+    );
+  });
+
+  it("CliWebRtcListener._setupConnection handles open, agent cards, invalid JSON, close, and error", async () => {
+    const listener = new CliWebRtcListener({
+      cacheDir: tempDir,
+      trustedPeerIds: ["trusted-peer", "prefix-*"],
+    });
+
+    expect(listener._isTrusted("trusted-peer")).toBe(true);
+    expect(listener._isTrusted("prefix-abc")).toBe(true);
+    expect(listener._isTrusted("untrusted-peer")).toBe(false);
+
+    const handlers: Record<string, Function> = {};
+    const mockConn = {
+      on: jest.fn((event: string, handler: Function) => {
+        handlers[event] = handler;
+      }),
+      send: jest.fn(),
+      close: jest.fn(),
+    };
+
+    listener._setupConnection(mockConn, "trusted-peer");
+
+    // open event
+    handlers["open"]();
+    expect(mockConn.send).toHaveBeenCalledWith(
+      expect.objectContaining({ method: "GetAgentCard" }),
+    );
+
+    // data: invalid string
+    await handlers["data"]("invalid-json");
+
+    // data: card result
+    await handlers["data"]({ result: { name: "Remote Agent" } });
+
+    // data: GetAgentCard request
+    await handlers["data"]({ method: "GetAgentCard", id: "card-req-1" });
+    expect(mockConn.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "card-req-1",
+        result: expect.objectContaining({ name: "ShadowClaw CLI" }),
+      }),
+    );
+
+    // error event
+    handlers["error"](new Error("conn err"));
+
+    // close event
+    handlers["close"]();
+  });
+
+  it("CliWebRtcListener._handleCommand handles errors and unknown actions", async () => {
+    const listener = new CliWebRtcListener({
+      cacheDir: tempDir,
+      handlers: {
+        "failing-action": async () => {
+          throw new Error("Action failure");
+        },
+      },
+    });
+
+    const mockConn = { send: jest.fn() };
+
+    // Failing action
+    await listener._handleCommand(mockConn, "peer-1", {
+      payload: { commandId: "cmd-err", action: "failing-action", args: {} },
+    });
+    expect(mockConn.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "command:result",
+        payload: expect.objectContaining({
+          commandId: "cmd-err",
+          success: false,
+          error: "Action failure",
+        }),
+      }),
+    );
+
+    // Unknown action
+    await listener._handleCommand(mockConn, "peer-1", {
+      payload: { commandId: "cmd-unk", action: "unknown-action", args: {} },
+    });
+    expect(mockConn.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "command:result",
+        payload: expect.objectContaining({
+          commandId: "cmd-unk",
+          success: false,
+          error: "Unknown action: unknown-action",
+        }),
+      }),
+    );
+  });
+});
+
+describe("resolveListenerIpc and sendCommandViaIpc", () => {
+  let tempDir: string;
+  let http: typeof import("node:http");
+
+  beforeEach(async () => {
+    http = await import("node:http");
+    tempDir = path.join(
+      os.tmpdir(),
+      "test-webrtc-ipc-func-" +
+        Date.now() +
+        "-" +
+        Math.random().toString(36).slice(2),
+    );
+    fs.mkdirSync(tempDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    try {
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    } catch (_) {}
+  });
+
+  it("resolveListenerIpc returns null when socket does not exist", async () => {
+    const res = await resolveListenerIpc(tempDir);
+    expect(res).toBeNull();
+  });
+
+  it("resolveListenerIpc returns socketPath when /ping returns 200, and null when /ping errors", async () => {
+    const socketPath = getIpcSocketPath(tempDir);
+    let pingStatus = 200;
+    const server = http.createServer((req, res) => {
+      if (req.url === "/ping") {
+        res.writeHead(pingStatus);
+        res.end(JSON.stringify({ ok: true }));
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+    });
+
+    await new Promise((resolve) => server.listen(socketPath, resolve as any));
+    try {
+      const resOk = await resolveListenerIpc(tempDir);
+      expect(resOk).toEqual({ socketPath });
+
+      pingStatus = 500;
+      const resFail = await resolveListenerIpc(tempDir);
+      expect(resFail).toBeNull();
+    } finally {
+      await new Promise((resolve) => server.close(resolve as any));
+    }
+  });
+
+  it("sendCommandViaIpc sends command to IPC socket and handles success, failure, and bad JSON", async () => {
+    const socketPath = getIpcSocketPath(tempDir);
+    let responseStatus = 200;
+    let responseBody: string = JSON.stringify({ ok: true, data: "pong" });
+
+    const server = http.createServer((req, res) => {
+      if (req.method === "POST" && req.url === "/command") {
+        let body = "";
+        req.on("data", (c) => (body += c));
+        req.on("end", () => {
+          res.writeHead(responseStatus, { "Content-Type": "application/json" });
+          res.end(responseBody);
+        });
+      }
+    });
+
+    await new Promise((resolve) => server.listen(socketPath, resolve as any));
+    try {
+      // 1. Success
+      const res = await sendCommandViaIpc(
+        { socketPath },
+        "target-peer-1",
+        "ping",
+        { val: 1 },
+        5000,
+      );
+      expect(res).toEqual({ ok: true, data: "pong" });
+
+      // 2. HTTP error with error message
+      responseStatus = 400;
+      responseBody = JSON.stringify({ error: "Invalid target peer" });
+      await expect(
+        sendCommandViaIpc(
+          { socketPath },
+          "target-peer-1",
+          "bad-action",
+          {},
+          5000,
+        ),
+      ).rejects.toThrow("Invalid target peer");
+
+      // 3. Bad JSON
+      responseStatus = 200;
+      responseBody = "not valid json";
+      await expect(
+        sendCommandViaIpc({ socketPath }, "target-peer-1", "ping", {}, 5000),
+      ).rejects.toThrow("Bad IPC response");
+    } finally {
+      await new Promise((resolve) => server.close(resolve as any));
+    }
+  });
+});
+
+describe("CliWebRtcControlClient sendCommand and sendFile", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = path.join(
+      os.tmpdir(),
+      "test-webrtc-client-cmd-" +
+        Date.now() +
+        "-" +
+        Math.random().toString(36).slice(2),
+    );
+    fs.mkdirSync(tempDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    try {
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    } catch (_) {}
+  });
+
+  it("sendCommand uses IPC when listener socket is active", async () => {
+    const http = await import("node:http");
+    const socketPath = getIpcSocketPath(tempDir);
+    const server = http.createServer((req, res) => {
+      if (req.url === "/ping") {
+        res.writeHead(200);
+        res.end("ok");
+        return;
+      }
+      if (req.method === "POST" && req.url === "/command") {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ success: true, result: "ipc-done" }));
+        return;
+      }
+    });
+
+    await new Promise((resolve) => server.listen(socketPath, resolve as any));
+    try {
+      const client = new CliWebRtcControlClient({ cacheDir: tempDir });
+      const res = await client.sendCommand("target-1", "action-1", { a: 1 });
+      expect(res).toEqual({ success: true, result: "ipc-done" });
+    } finally {
+      await new Promise((resolve) => server.close(resolve as any));
+    }
+  });
+
+  it("sendCommand connects via WebRTC peer when IPC is inactive", async () => {
+    const client = new CliWebRtcControlClient({ cacheDir: tempDir });
+    const handlers: Record<string, Function> = {};
+    const mockConn = {
+      on: jest.fn((evt: string, fn: Function) => {
+        handlers[evt] = fn;
+      }),
+      send: jest.fn(),
+      close: jest.fn(),
+    };
+    const mockPeer = {
+      connect: jest.fn().mockReturnValue(mockConn),
+      destroy: jest.fn(),
+    };
+    (client as any)._getPeer = jest.fn().mockResolvedValue(mockPeer);
+
+    const promise = client.sendCommand("peer-x", "run", { arg: 123 });
+    for (let i = 0; i < 20 && !handlers["open"]; i++) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    // Simulate open
+    handlers["open"]();
+    expect(mockConn.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "command:execute",
+        payload: expect.objectContaining({ action: "run" }),
+      }),
+    );
+
+    // Simulate GetAgentCard message received
+    handlers["data"]({ method: "GetAgentCard", id: "card-msg-1" });
+    expect(mockConn.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "card-msg-1",
+        result: expect.objectContaining({ name: "ShadowClaw CLI" }),
+      }),
+    );
+
+    // Simulate result data
+    handlers["data"]({
+      type: "command:result",
+      payload: { success: true, output: "finished" },
+    });
+
+    const res = await promise;
+    expect(res).toEqual({ success: true, output: "finished" });
+    expect(mockConn.close).toHaveBeenCalled();
+  });
+
+  it("sendCommand rejects when connection receives error or error payload", async () => {
+    const client = new CliWebRtcControlClient({ cacheDir: tempDir });
+    let handlers: Record<string, Function> = {};
+    const mockConn = {
+      on: jest.fn((evt: string, fn: Function) => {
+        handlers[evt] = fn;
+      }),
+      send: jest.fn(),
+      close: jest.fn(),
+    };
+    const mockPeer = {
+      connect: jest.fn().mockReturnValue(mockConn),
+      destroy: jest.fn(),
+    };
+    (client as any)._getPeer = jest.fn().mockResolvedValue(mockPeer);
+
+    // 1. Error payload
+    const p1 = client.sendCommand("peer-x", "fail-action", {});
+    for (let i = 0; i < 20 && !handlers["open"]; i++) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    handlers["open"]();
+    handlers["data"]({
+      type: "command:result",
+      payload: { error: "Remote execution failed" },
+    });
+    await expect(p1).rejects.toThrow("Remote execution failed");
+
+    // 2. Connection error
+    handlers = {};
+    const p2 = client.sendCommand("peer-x", "err-action", {});
+    for (let i = 0; i < 20 && !handlers["error"]; i++) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    handlers["error"](new Error("Peer disconnected abruptly"));
+    await expect(p2).rejects.toThrow(
+      "WebRTC connection error to peer 'peer-x': Peer disconnected abruptly",
+    );
+  });
+
+  it("sendFile validates file existence and directory before sending", async () => {
+    const client = new CliWebRtcControlClient({ cacheDir: tempDir });
+
+    // Non-existent file
+    await expect(
+      client.sendFile("peer-x", "/non/existent/file.bin"),
+    ).rejects.toThrow("File not found");
+
+    // Directory
+    await expect(client.sendFile("peer-x", tempDir)).rejects.toThrow(
+      "Cannot send directory",
+    );
+
+    // Valid file
+    const filePath = path.join(tempDir, "sample.txt");
+    fs.writeFileSync(filePath, "test content", "utf8");
+    client.sendCommand = jest.fn().mockResolvedValue({ success: true });
+
+    const res = await client.sendFile("peer-x", filePath, {
+      prompt: "Analyze this",
+    });
+    expect(res).toEqual({ success: true });
+    expect(client.sendCommand).toHaveBeenCalledWith(
+      "peer-x",
+      "send-file",
+      expect.objectContaining({
+        fileName: "sample.txt",
+        prompt: "Analyze this",
+      }),
+      120000,
+    );
+
+    // client.close destroys peer if present
+    client.peer = { destroy: jest.fn() } as any;
+    client.close();
+    expect(client.peer).toBeNull();
+  });
+});
+
+describe("CliWebRtcListener lifecycle and RPC handling", () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = path.join(
+      os.tmpdir(),
+      "test-webrtc-listener-adv-" +
+        Date.now() +
+        "-" +
+        Math.random().toString(36).slice(2),
+    );
+  });
+
+  afterEach(() => {
+    try {
+      if (fs.existsSync(tempDir)) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    } catch (_) {}
+  });
+
+  it("_scheduleReconnect handles running and non-running states", () => {
+    const listener = new CliWebRtcListener({ cacheDir: tempDir });
+    (listener as any)._running = false;
+    (listener as any)._scheduleReconnect();
+    expect((listener as any)._reconnectTimer).toBeNull();
+
+    (listener as any)._running = true;
+    (listener as any)._scheduleReconnect();
+    expect((listener as any)._reconnectTimer).not.toBeNull();
+    expect((listener as any)._reconnectAttempts).toBe(1);
+
+    // Calling again while timer exists does not reschedule
+    (listener as any)._scheduleReconnect();
+    expect((listener as any)._reconnectAttempts).toBe(1);
+
+    // cleanup
+    listener.close();
+    expect((listener as any)._reconnectTimer).toBeNull();
+    expect((listener as any)._running).toBe(false);
+  });
+
+  it("_setupConnection handles SendMessage A2A RPC with send-message and prompt handlers", async () => {
+    const listener = new CliWebRtcListener({
+      cacheDir: tempDir,
+      handlers: {
+        "send-message": async (args: any) => {
+          return { reply: `Echo: ${args.text}` };
+        },
+      },
+    });
+
+    const handlers: Record<string, Function> = {};
+    const mockConn = {
+      on: jest.fn((evt: string, fn: Function) => {
+        handlers[evt] = fn;
+      }),
+      send: jest.fn(),
+      close: jest.fn(),
+    };
+
+    listener._setupConnection(mockConn, "remote-a2a-peer");
+
+    // SendMessage request
+    await handlers["data"]({
+      jsonrpc: "2.0",
+      id: "a2a-msg-1",
+      method: "SendMessage",
+      params: {
+        message: {
+          parts: [{ text: "Hello A2A" }],
+        },
+        contextId: "ctx-1",
+      },
+    });
+
+    expect(mockConn.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "a2a-msg-1",
+        result: expect.objectContaining({
+          role: "ROLE_AGENT",
+          parts: [{ text: "Echo: Hello A2A" }],
+        }),
+      }),
+    );
+
+    // SendMessage failure handling
+    listener.handlers["send-message"] = async () => {
+      throw new Error("RPC handling crashed");
+    };
+
+    await handlers["data"]({
+      jsonrpc: "2.0",
+      id: "a2a-msg-2",
+      method: "SendMessage",
+      params: {
+        message: {
+          parts: [{ text: "Break it" }],
+        },
+      },
+    });
+
+    expect(mockConn.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "a2a-msg-2",
+        error: expect.objectContaining({
+          code: -32603,
+          message: "RPC handling crashed",
+        }),
+      }),
+    );
+  });
+
+  it("_setupConnection handles command:execute messages", async () => {
+    const listener = new CliWebRtcListener({
+      cacheDir: tempDir,
+      handlers: {
+        hello: async () => ({ msg: "world" }),
+      },
+    });
+    const handlers: Record<string, Function> = {};
+    const mockConn = {
+      on: jest.fn((evt: string, fn: Function) => {
+        handlers[evt] = fn;
+      }),
+      send: jest.fn(),
+      close: jest.fn(),
+    };
+    listener._setupConnection(mockConn, "remote-cmd-peer");
+    await handlers["data"]({
+      type: "command:execute",
+      payload: { commandId: "cmd-1", action: "hello", args: {} },
+    });
+    expect(mockConn.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "command:result",
+        payload: expect.objectContaining({
+          success: true,
+          data: { msg: "world" },
+        }),
+      }),
+    );
+  });
+
+  it("close() closes active connections, clears state and destroys peer", () => {
+    const listener = new CliWebRtcListener({ cacheDir: tempDir });
+    const mockConn1 = { close: jest.fn() };
+    const mockConn2 = { close: jest.fn() };
+    const mockPeer = { destroy: jest.fn() };
+
+    (listener as any)._connections.set("p1", mockConn1);
+    (listener as any)._connections.set("p2", mockConn2);
+    (listener as any)._peerCards.set("p1", { name: "Card 1" });
+    (listener as any)._peer = mockPeer;
+    (listener as any)._running = true;
+
+    listener.close();
+
+    expect(mockConn1.close).toHaveBeenCalled();
+    expect(mockConn2.close).toHaveBeenCalled();
+    expect(mockPeer.destroy).toHaveBeenCalled();
+    expect((listener as any)._connections.size).toBe(0);
+    expect((listener as any)._peerCards.size).toBe(0);
+    expect((listener as any)._peer).toBeNull();
+    expect((listener as any)._running).toBe(false);
   });
 });

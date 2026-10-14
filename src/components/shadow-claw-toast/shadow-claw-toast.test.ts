@@ -76,4 +76,83 @@ describe("shadow-claw-toast", () => {
     await new Promise((r) => setTimeout(r, 50));
     expect(onClick).toHaveBeenCalled();
   });
+
+  it("dismisses toast on Escape key press", async () => {
+    toastStore.show("Dismiss on esc", { type: "info" });
+    await el.render();
+
+    const toastEl = el.shadowRoot?.querySelector(".toast");
+    expect(toastEl).not.toBeNull();
+
+    const escEvent = new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    });
+    toastEl?.dispatchEvent(escEvent);
+
+    await new Promise((r) => setTimeout(r, 250));
+    expect(toastStore.toasts.length).toBe(0);
+  });
+
+  it("ignores non-Escape keydown or invalid targets", async () => {
+    toastStore.show("Stay open", { type: "info" });
+    await el.render();
+
+    const enterEvent = new KeyboardEvent("keydown", {
+      key: "Enter",
+      bubbles: true,
+      cancelable: true,
+    });
+    el.shadowRoot?.dispatchEvent(enterEvent);
+
+    // Event on non-toast element
+    const escOnRoot = new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: false,
+    });
+    el.shadowRoot?.dispatchEvent(escOnRoot);
+
+    expect(toastStore.toasts.length).toBe(1);
+  });
+
+  it("pauses and resumes on mouseenter / mouseleave", async () => {
+    const pauseSpy = jest.spyOn(toastStore, "pause");
+    const resumeSpy = jest.spyOn(toastStore, "resume");
+
+    const id = toastStore.show("Hover me", { type: "warning" });
+    await el.render();
+
+    const toastEl = el.shadowRoot?.querySelector(".toast");
+    toastEl?.dispatchEvent(new MouseEvent("mouseenter"));
+    expect(pauseSpy).toHaveBeenCalledWith(id);
+
+    toastEl?.dispatchEvent(new MouseEvent("mouseleave"));
+    expect(resumeSpy).toHaveBeenCalledWith(id);
+  });
+
+  it("renders appropriate icons for all toast types", () => {
+    expect(el.iconForType("success")).toBe("✓");
+    expect(el.iconForType("error")).toBe("!");
+    expect(el.iconForType("warning")).toBe("⚠");
+    expect(el.iconForType("info")).toBe("i");
+  });
+
+  it("delegates show() to toastStore.show", () => {
+    const id = el.show("Via helper", { type: "success" });
+    expect(id).toBeDefined();
+    expect(toastStore.toasts.some((t) => t.message === "Via helper")).toBe(
+      true,
+    );
+  });
+
+  it("returns early if toast is already exiting", async () => {
+    const id = toastStore.show("Exiting toast", { type: "info" });
+    await el.render();
+
+    el.exitingToasts.add(id);
+    await el.dismissWithAnimation(id);
+    // Should not re-add or throw
+    expect(el.exitingToasts.has(id)).toBe(true);
+  });
 });

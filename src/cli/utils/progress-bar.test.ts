@@ -205,9 +205,48 @@ describe("progress-bar", () => {
         total: 1000,
       });
       bar.update({ status: "done", file: "model.onnx" });
-      bar.finish();
-
       expect(output).toBe("");
+    });
+
+    it("handles failure message with prior files in TTY mode", () => {
+      let output = "";
+      const mockStream = {
+        isTTY: true,
+        write: (str: string) => {
+          output += str;
+        },
+      };
+
+      const bar = createCliProgressBar({
+        modelId: "bad-model",
+        stream: mockStream,
+        isTTY: true,
+      });
+
+      bar.update({ status: "progress", file: "part.bin", progress: 10 });
+      bar.fail("Custom failure occurred");
+      expect(output).toContain("Custom failure occurred");
+    });
+
+    it("handles done status directly in non-TTY mode without prior entry and formatBytes negative decimals", () => {
+      let output = "";
+      const mockStream = {
+        isTTY: false,
+        write: (str: string) => {
+          output += str;
+        },
+      };
+
+      const bar = createCliProgressBar({
+        modelId: "quick-model",
+        stream: mockStream,
+        isTTY: false,
+      });
+
+      bar.update({ status: "done", file: "direct-done.bin" });
+      expect(output).toContain("[Download] Finished file: direct-done.bin");
+
+      expect(formatBytes(1536, -1)).toBe("2 KB");
     });
   });
 });

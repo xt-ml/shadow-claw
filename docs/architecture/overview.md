@@ -11,7 +11,7 @@ ShadowClaw is a **dual-runtime AI assistant** combining a rich, interactive fron
 1. **Interactive Frontend Client (Browser & Electron)**: Runs the complete orchestration state machine, context management, and tool-use loop off the main thread in a dedicated Web Worker, with UI reactivity powered by native Web Components and TC39 Signals, and sandboxed storage across OPFS and IndexedDB.
 2. **Headless Server-Side Client (`shadow-claw agent`)**: Runs the exact same reasoning loop, declarative skills, and tool chain pipelines natively on Node.js—backed by SQLite (`node:sqlite`), native filesystem handles (`NodeFsDirectoryHandle`), and direct host OS shell execution (`node:child_process`).
 
-Inference routes across in-browser models (Prompt API with polyfill fallbacks, LiteRT WebGPU), local servers (Ollama, Llamafile, Transformers.js with automatic Hugging Face downloading), and cloud providers (defaulting to OpenRouter with `openrouter/free`).
+Inference routes across in-browser models (Transformers.js defaulting out-of-the-box to `onnx-community/Qwen3-0.6B-ONNX`, Prompt API with polyfill fallbacks, LiteRT WebGPU), local servers (Ollama, Llamafile, Transformers.js with automatic Hugging Face downloading), and cloud providers (defaulting to OpenRouter with `openrouter/free`).
 
 **Stack at a glance:**
 
@@ -47,7 +47,7 @@ graph TD
   Worker --> CoreEngine["Shared Tool & Reasoning Core<br>handleInvoke · executeTool · executeToolChain"]
   HeadlessAgent --> CoreEngine
 
-  CoreEngine --> Providers["☁️ Providers & Local Engines<br>OpenRouter · Hugging Face · Ollama · Bedrock · Prompt API"]
+  CoreEngine --> Providers["☁️ Providers & Local Engines<br>Transformers.js · OpenRouter · Hugging Face · Ollama · Bedrock · Prompt API"]
   CoreEngine --> Tools["Tool Execution Matrix<br>Files · Git · Bash · Tasks · Fetch · MCP"]
 
   Worker --> BrowserStorage["Browser Storage: IndexedDB + OPFS<br>br:main"]
@@ -77,7 +77,7 @@ In production builds (`npm run build:prod`), critical assets (`index.css`, `them
 The LLM tool-use loop runs in a dedicated Web Worker. This means:
 
 - The UI thread never blocks during LLM calls or tool execution
-- Default provider (`prompt_api`) executes browser-native inference with transparent CPU/WASM fallback
+- Default browser provider (`transformers_js_browser`) executes in-browser inference with transparent CPU/WASM fallback
 - The VM (v86) runs in the worker, fully isolated from the UI
 - Cancellation is clean — abort the worker's `AbortController`
 

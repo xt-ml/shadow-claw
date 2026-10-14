@@ -57,4 +57,36 @@ describe("runClientsCommand", () => {
       "No clients currently registered or connected.",
     );
   });
+
+  it("formats client without peerId, empty capabilities, and older lastSeen", async () => {
+    jest
+      .spyOn(CliControlClient.prototype, "listClients")
+      .mockResolvedValueOnce([
+        {
+          clientId: "c-old",
+          deviceLabel: "Headless Agent",
+          capabilities: [],
+          version: "2.0.0",
+          lastSeen: Date.now() - 125000,
+        },
+      ]);
+
+    await runClientsCommand({});
+
+    expect(logSpy).toHaveBeenCalledWith("     Capabilities: none");
+    expect(logSpy).toHaveBeenCalledWith("     Last seen:    2m ago\n");
+  });
+
+  it("handles exception during fetch", async () => {
+    jest
+      .spyOn(CliControlClient.prototype, "listClients")
+      .mockRejectedValueOnce(new Error("Connection refused"));
+
+    await runClientsCommand({});
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      "Error fetching clients: Connection refused",
+    );
+    expect(process.exitCode).toBe(1);
+  });
 });

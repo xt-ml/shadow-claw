@@ -1,6 +1,9 @@
 import { describe, expect, it, jest } from "@jest/globals";
 
-import { patchServiceWorkerTrustedTypesFile } from "./patch-service-worker-trusted-types.js";
+import {
+  patchServiceWorkerTrustedTypesFile,
+  main,
+} from "./patch-service-worker-trusted-types.js";
 
 describe("patchServiceWorkerTrustedTypesFile", () => {
   it("writes the patched service worker when content changes", async () => {
@@ -68,5 +71,25 @@ describe("patchServiceWorkerTrustedTypesFile", () => {
         patchImpl: jest.fn<any>(),
       }),
     ).rejects.toBe(error);
+  });
+
+  it("main() patches target path specified in process.argv[2]", async () => {
+    const fs = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "sw-patch-"));
+    const tempFile = path.join(tempDir, "service-worker.js");
+    await fs.writeFile(tempFile, "/* sw content */", "utf8");
+
+    const prevArgv = process.argv;
+    try {
+      process.argv = ["node", "patch.js", tempFile];
+      await main();
+      const content = await fs.readFile(tempFile, "utf8");
+      expect(content).toBeDefined();
+    } finally {
+      process.argv = prevArgv;
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
   });
 });

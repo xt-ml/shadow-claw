@@ -139,4 +139,233 @@ describe("shadow-claw-pdf-viewer", () => {
 
     expect(panWrap.classList.contains("is-panning")).toBe(false);
   });
+
+  it("handles pagination and zoom button interactions", async () => {
+    const renderTask: any = {
+      promise: Promise.resolve(),
+      cancel: jest.fn(),
+    };
+    const page: any = {
+      getViewport: ({ scale }: any) => ({
+        width: 200 * scale,
+        height: 300 * scale,
+      }),
+      render: jest.fn(() => renderTask),
+    };
+    const pdfDocument: any = {
+      numPages: 3,
+      getPage: jest.fn(async () => page),
+      destroy: jest.fn(),
+    };
+
+    (getDocumentMock as any).mockImplementation(() => ({
+      promise: Promise.resolve(pdfDocument),
+      destroy: jest.fn(),
+    }));
+
+    const viewer = new ShadowClawPdfViewer();
+    document.body.appendChild(viewer);
+
+    viewer.file = {
+      name: "sample.pdf",
+      binaryContent: new Uint8Array([1, 2, 3, 4]),
+    };
+    await new Promise((r) => setTimeout(r, 50));
+
+    const nextBtn = viewer.shadowRoot?.querySelector(
+      ".pdf-next",
+    ) as HTMLButtonElement;
+    const prevBtn = viewer.shadowRoot?.querySelector(
+      ".pdf-prev",
+    ) as HTMLButtonElement;
+    const zoomInBtn = viewer.shadowRoot?.querySelector(
+      ".pdf-zoom-in",
+    ) as HTMLButtonElement;
+    const zoomOutBtn = viewer.shadowRoot?.querySelector(
+      ".pdf-zoom-out",
+    ) as HTMLButtonElement;
+    const pageInfo = viewer.shadowRoot?.querySelector(".pdf-page");
+
+    expect(viewer._pageNumber).toBe(1);
+    expect(pageInfo?.textContent).toContain("Page 1 of 3");
+
+    // Click Next
+    nextBtn.dispatchEvent(new Event("click"));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(viewer._pageNumber).toBe(2);
+
+    // Click Next again
+    nextBtn.dispatchEvent(new Event("click"));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(viewer._pageNumber).toBe(3);
+
+    // Clicking Next when at max pages does not exceed max
+    nextBtn.dispatchEvent(new Event("click"));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(viewer._pageNumber).toBe(3);
+
+    // Click Prev
+    prevBtn.dispatchEvent(new Event("click"));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(viewer._pageNumber).toBe(2);
+
+    // Click Prev to 1
+    prevBtn.dispatchEvent(new Event("click"));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(viewer._pageNumber).toBe(1);
+
+    // Clicking Prev at page 1 does not decrement
+    prevBtn.dispatchEvent(new Event("click"));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(viewer._pageNumber).toBe(1);
+
+    // Zoom in
+    const initialScale = viewer._scale;
+    zoomInBtn.dispatchEvent(new Event("click"));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(viewer._scale).toBeGreaterThan(initialScale);
+
+    // Zoom out
+    zoomOutBtn.dispatchEvent(new Event("click"));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(viewer._scale).toBeCloseTo(initialScale);
+  });
+
+  it("handles touch panning", async () => {
+    const viewer = new ShadowClawPdfViewer();
+    document.body.appendChild(viewer);
+
+    viewer.file = {
+      name: "sample.pdf",
+      binaryContent: new Uint8Array([1, 2, 3, 4]),
+    };
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const wrap = viewer.shadowRoot?.querySelector(
+      ".pdf-canvas-wrap",
+    ) as HTMLElement;
+    wrap.scrollLeft = 50;
+    wrap.scrollTop = 50;
+
+    const touchStartEvent = new CustomEvent("touchstart", {
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(touchStartEvent, "touches", {
+      value: [{ clientX: 100, clientY: 100 }],
+    });
+    wrap.dispatchEvent(touchStartEvent);
+
+    expect(viewer._isPanning).toBe(true);
+
+    const touchMoveEvent = new CustomEvent("touchmove", {
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(touchMoveEvent, "touches", {
+      value: [{ clientX: 70, clientY: 60 }],
+    });
+    globalThis.dispatchEvent(touchMoveEvent);
+
+    expect(wrap.scrollLeft).toBe(80);
+    expect(wrap.scrollTop).toBe(90);
+
+    const touchEndEvent = new CustomEvent("touchend", {
+      bubbles: true,
+      cancelable: true,
+    });
+    globalThis.dispatchEvent(touchEndEvent);
+
+    expect(viewer._isPanning).toBe(false);
+  });
+
+  it("handles empty or unavailable PDF data", async () => {
+    const viewer = new ShadowClawPdfViewer();
+    document.body.appendChild(viewer);
+
+    viewer.file = {
+      name: "empty.pdf",
+      binaryContent: new Uint8Array(0),
+    };
+    await Promise.resolve();
+
+    const status = viewer.shadowRoot?.querySelector(".pdf-status");
+    expect(status?.textContent).toBe("PDF data unavailable.");
+  });
+
+  it("handles getDocument rejection during PDF load", async () => {
+    (getDocumentMock as any).mockImplementationOnce(() => ({
+      promise: Promise.reject(new Error("Corrupt PDF")),
+      destroy: jest.fn(),
+    }));
+
+    const viewer = new ShadowClawPdfViewer();
+    document.body.appendChild(viewer);
+
+    viewer.file = {
+      name: "corrupt.pdf",
+      binaryContent: new Uint8Array([1, 2, 3]),
+    };
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const status = viewer.shadowRoot?.querySelector(".pdf-status");
+    expect(status?.textContent).toBe("Failed to render PDF preview.");
+  });
+
+  it("handles RenderingCancelledException gracefully", async () => {
+    const renderTask: any = {
+      promise: Promise.reject({ name: "RenderingCancelledException" }),
+      cancel: jest.fn(),
+    };
+    const page: any = {
+      getViewport: ({ scale }: any) => ({
+        width: 200 * scale,
+        height: 300 * scale,
+      }),
+      render: jest.fn(() => renderTask),
+    };
+    const pdfDocument: any = {
+      numPages: 1,
+      getPage: jest.fn(async () => page),
+      destroy: jest.fn(),
+    };
+
+    (getDocumentMock as any).mockImplementationOnce(() => ({
+      promise: Promise.resolve(pdfDocument),
+      destroy: jest.fn(),
+    }));
+
+    const viewer = new ShadowClawPdfViewer();
+    document.body.appendChild(viewer);
+
+    viewer.file = {
+      name: "sample.pdf",
+      binaryContent: new Uint8Array([1, 2, 3, 4]),
+    };
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Should not show error status on cancelled rendering
+    const status = viewer.shadowRoot?.querySelector(".pdf-status");
+    expect(status?.textContent).not.toBe("Failed to render PDF page.");
+  });
+
+  it("cleans up on disconnectedCallback", async () => {
+    const viewer = new ShadowClawPdfViewer();
+    document.body.appendChild(viewer);
+
+    viewer.file = {
+      name: "sample.pdf",
+      binaryContent: new Uint8Array([1, 2, 3, 4]),
+    };
+    await Promise.resolve();
+    await Promise.resolve();
+
+    viewer.remove();
+    expect(viewer._pdfDocument).toBeNull();
+  });
 });

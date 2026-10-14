@@ -104,6 +104,7 @@ const mockSetMaxIterations = jest.fn(async () => {});
 const mockSetLlamafileSettings = jest.fn(async () => {});
 const mockSetContextCompressionEnabled = jest.fn(async () => {});
 const mockSetStreamingEnabled = jest.fn(async () => {});
+const mockSetModel = jest.fn(async () => {});
 
 jest.unstable_mockModule(
   "../../../core/orchestrator/utils/operations/provider.js",
@@ -113,6 +114,8 @@ jest.unstable_mockModule(
         id,
         name: p.name,
         models: p.models,
+        modelsUrl: p.modelsUrl,
+        headers: p.headers,
         requiresApiKey: p.requiresApiKey,
       })),
     ),
@@ -136,14 +139,14 @@ jest.unstable_mockModule(
     setBedrockSettings: mockSetBedrockSettings,
     setLlamafileSettings: mockSetLlamafileSettings,
     setMeshLlmSettings: jest.fn(async () => {}),
-    setModel: jest.fn(async () => {}),
+    setModel: mockSetModel,
     setAssistantName: jest.fn(async () => {}),
     setPeerjsMyAlias: jest.fn(async () => {}),
     setPeerjsPeerAliases: jest.fn(async () => {}),
     autoActivateProfile: jest.fn(async () => {}),
     stopTransformersProgressPolling: jest.fn(),
-    getApiKeyForHeaders: jest.fn(),
-    getApiKeyForRequest: jest.fn(),
+    getApiKeyForHeaders: jest.fn<any>().mockResolvedValue(""),
+    getApiKeyForRequest: jest.fn<any>().mockResolvedValue(""),
   }),
 );
 
@@ -192,11 +195,8 @@ jest.unstable_mockModule("../../../db/db.js", () => ({
 
 const { orchestratorStore } = await import("../../../stores/orchestrator.js");
 const { ShadowClawLlm } = await import("./shadow-claw-llm.js");
-const {
-  showSuccess,
-  showWarning: _showWarning,
-  showError,
-} = await import("../../../ui/toast.js");
+const { showSuccess, showWarning, showError } =
+  await import("../../../ui/toast.js");
 const { getConfig } = await import("../../../db/getConfig.js");
 const { setConfig } = await import("../../../db/setConfig.js");
 
@@ -1212,6 +1212,528 @@ describe("shadow-claw-llm", () => {
     });
     orch.getProvider.mockReturnValue("bedrock_proxy");
     el.updateModelSelector();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    document.body.removeChild(el);
+  });
+
+  it("handles dynamic model fetching for llamafile and bedrock_proxy (success and failure)", async () => {
+    const el = new ShadowClawLlm();
+    const orch = createOrchestratorStub() as any;
+    orch.getProvider.mockReturnValue("llamafile");
+    (orchestratorStore as any).orchestrator = orch;
+    el.orchestrator = orch;
+    el.db = {} as any;
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    await el.render();
+
+    // Success response for llamafile
+    (global.fetch as any) = jest.fn<any>().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => [{ id: "discovered-llama-1" }],
+    });
+    el.updateModelSelector();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(el.llamafileDiscoveredModelIds).toContain("discovered-llama-1");
+
+    // Failure response for llamafile
+    (global.fetch as any) = jest
+      .fn<any>()
+      .mockRejectedValue(new Error("Llamafile offline"));
+    el.updateModelSelector();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(el.llamafileModelLoadError).toBe("Llamafile offline");
+
+    // Dynamic fetch failure for provider with static fallback
+    orch.getProvider.mockReturnValue("provider-a");
+    (global.fetch as any) = jest
+      .fn<any>()
+      .mockRejectedValue(new Error("Network fail"));
+    el.updateModelSelector();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    document.body.removeChild(el);
+  });
+
+  it("handles saveModel for llamafile with request restart", async () => {
+    const el = new ShadowClawLlm();
+    const orch = createOrchestratorStub() as any;
+    orch.getProvider.mockReturnValue("llamafile");
+    (orchestratorStore as any).orchestrator = orch;
+    el.orchestrator = orch;
+    el.db = {} as any;
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    await el.render();
+
+    (orchestratorStore as any).restartCurrentRequest = jest
+      .fn<any>()
+      .mockResolvedValue(true);
+    await el.saveModel();
+    expect(showSuccess).toHaveBeenCalledWith(
+      "Model saved, request restarted",
+      3000,
+    );
+
+    (orchestratorStore as any).restartCurrentRequest.mockResolvedValueOnce(
+      false,
+    );
+    await el.saveModel();
+    expect(showSuccess).toHaveBeenCalledWith("Model saved", 3000);
+
+    // Save model error
+    mockSetModel.mockRejectedValueOnce(new Error("Disk full"));
+    await el.saveModel();
+    expect(showError).toHaveBeenCalledWith(
+      "Error saving model: Disk full",
+      6000,
+    );
+
+    document.body.removeChild(el);
+  });
+
+  it("handles validations for rate limits, subagent parallel, workspace mode, and reasoning effort", async () => {
+    const el = new ShadowClawLlm();
+    const orch = createOrchestratorStub();
+    el.orchestrator = orch as any;
+    el.db = {} as any;
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    await el.render();
+
+    // Rate limit input validation
+    const callsInput = el.shadowRoot?.querySelector(
+      '[data-setting="rate-limit-calls-per-minute-input"]',
+    ) as HTMLInputElement;
+    if (callsInput) {
+      callsInput.value = "-5";
+      await el.saveRateLimitSettings();
+      expect(showWarning).toHaveBeenCalledWith(
+        "Please enter a valid non-negative calls-per-minute value",
+        3000,
+      );
+
+      callsInput.value = "10";
+      await el.saveRateLimitSettings();
+      expect(showSuccess).toHaveBeenCalledWith(
+        "Rate limit settings saved",
+        3000,
+      );
+    }
+
+    // Subagent max parallel validation
+    const parallelInput = el.shadowRoot?.querySelector(
+      '[data-setting="subagent-max-parallel-input"]',
+    ) as HTMLInputElement;
+    if (parallelInput) {
+      parallelInput.value = "0";
+      await el.saveSubagentMaxParallel();
+      expect(showWarning).toHaveBeenCalledWith(
+        "Please enter a valid number (1 or higher)",
+        3000,
+      );
+
+      parallelInput.value = "8";
+      await el.saveSubagentMaxParallel();
+      expect(showSuccess).toHaveBeenCalledWith("Subagent limit saved", 3000);
+    }
+
+    // Subagent workspace mode validation
+    const wsModeSelect = el.shadowRoot?.querySelector(
+      '[data-setting="subagent-workspace-mode-select"]',
+    ) as HTMLSelectElement;
+    if (wsModeSelect) {
+      wsModeSelect.value = "invalid-mode";
+      await el.saveSubagentWorkspaceMode();
+      expect(showWarning).toHaveBeenCalledWith(
+        "Please select a valid subagent workspace mode",
+        3000,
+      );
+
+      wsModeSelect.value = "parent";
+      await el.saveSubagentWorkspaceMode();
+      expect(showSuccess).toHaveBeenCalledWith(
+        "Subagent workspace mode saved",
+        3000,
+      );
+    }
+
+    // Null db branches for subagents
+    el.db = null;
+    await el.saveSubagentMaxParallel();
+    expect(showError).toHaveBeenCalledWith("Database not initialized", 3000);
+
+    await el.saveSubagentWorkspaceMode();
+    expect(showError).toHaveBeenCalledWith("Database not initialized", 3000);
+
+    // Reasoning effort error path
+    el.db = {} as any;
+    mockSetReasoningEffort.mockRejectedValueOnce(new Error("Effort invalid"));
+    await el.saveReasoningEffort();
+    expect(showError).toHaveBeenCalledWith(
+      "Error saving reasoning effort: Effort invalid",
+      6000,
+    );
+
+    document.body.removeChild(el);
+  });
+
+  it("handles UI event listeners for buttons and toggles", async () => {
+    const el = new ShadowClawLlm();
+    const orch = createOrchestratorStub();
+    el.orchestrator = orch as any;
+    el.db = {} as any;
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    await el.render();
+
+    // Click save-model
+    const saveModelBtn = el.shadowRoot?.querySelector(
+      '[data-action="save-model"]',
+    ) as HTMLElement;
+    saveModelBtn?.click();
+
+    // Click refresh-models
+    const refreshBtn = el.shadowRoot?.querySelector(
+      '[data-action="refresh-models"]',
+    ) as HTMLElement;
+    refreshBtn?.click();
+
+    // Click save-rate-limit-settings
+    const saveRateBtn = el.shadowRoot?.querySelector(
+      '[data-action="save-rate-limit-settings"]',
+    ) as HTMLElement;
+    saveRateBtn?.click();
+
+    // Click save-subagent-max-parallel
+    const saveParallelBtn = el.shadowRoot?.querySelector(
+      '[data-action="save-subagent-max-parallel"]',
+    ) as HTMLElement;
+    saveParallelBtn?.click();
+
+    // Click save-subagent-workspace-mode
+    const saveWsBtn = el.shadowRoot?.querySelector(
+      '[data-action="save-subagent-workspace-mode"]',
+    ) as HTMLElement;
+    saveWsBtn?.click();
+
+    // Click save-reasoning-effort
+    const saveReasoningBtn = el.shadowRoot?.querySelector(
+      '[data-action="save-reasoning-effort"]',
+    ) as HTMLElement;
+    saveReasoningBtn?.click();
+
+    // Model select change to __custom__ shows custom input
+    const modelSelect = el.shadowRoot?.querySelector(
+      '[data-setting="model-select"]',
+    ) as HTMLSelectElement;
+    const customInput = el.shadowRoot?.querySelector(
+      '[data-setting="custom-model-input"]',
+    ) as HTMLElement;
+    if (modelSelect && customInput) {
+      const optCustom = document.createElement("option");
+      optCustom.value = "__custom__";
+      modelSelect.appendChild(optCustom);
+      modelSelect.value = "__custom__";
+      modelSelect.dispatchEvent(new Event("change"));
+      expect(customInput.style.display).toBe("block");
+
+      const optModel = document.createElement("option");
+      optModel.value = "model-a";
+      modelSelect.appendChild(optModel);
+      modelSelect.value = "model-a";
+      modelSelect.dispatchEvent(new Event("change"));
+      expect(customInput.style.display).toBe("none");
+    }
+
+    // Streaming toggle
+    const streamingToggle = el.shadowRoot?.querySelector(
+      '[data-setting="streaming-toggle"]',
+    ) as HTMLInputElement;
+    if (streamingToggle) {
+      streamingToggle.checked = false;
+      streamingToggle.dispatchEvent(new Event("change"));
+    }
+
+    // Context compression toggle
+    const ctxToggle = el.shadowRoot?.querySelector(
+      '[data-setting="context-compression-toggle"]',
+    ) as HTMLInputElement;
+    if (ctxToggle) {
+      ctxToggle.checked = true;
+      ctxToggle.dispatchEvent(new Event("change"));
+    }
+
+    // Prompt API fallback select change
+    const fallbackSelect = el.shadowRoot?.querySelector(
+      '[data-setting="prompt-api-fallback-select"]',
+    ) as HTMLSelectElement;
+    if (fallbackSelect) {
+      fallbackSelect.value = "test-model";
+      fallbackSelect.dispatchEvent(new Event("change"));
+    }
+
+    // Repeated showLlamafileHelpDialog
+    el.requestAppDialog = jest.fn<any>().mockResolvedValue(undefined);
+    await el.showLlamafileHelpDialog("same-reason");
+    await el.showLlamafileHelpDialog("same-reason");
+    expect(el.requestAppDialog).toHaveBeenCalledTimes(1);
+
+    document.body.removeChild(el);
+  });
+
+  it("handles edge cases and error handling in saveApiKey, Bedrock, Llamafile, and BuiltinAi", async () => {
+    const el = new ShadowClawLlm();
+    const orch = createOrchestratorStub();
+    (orchestratorStore as any).orchestrator = orch;
+    el.orchestrator = orch as any;
+    el.db = {} as any;
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    await el.render();
+
+    // 1. saveApiKey without required key (provider-b)
+    const providerSelect = el.shadowRoot?.querySelector(
+      '[data-setting="provider-select"]',
+    ) as HTMLSelectElement;
+    const keyInput = el.shadowRoot?.querySelector(
+      '[data-setting="api-key-input"]',
+    ) as HTMLInputElement;
+
+    providerSelect.value = "provider-b";
+    await el.saveApiKey();
+    expect(showSuccess).toHaveBeenCalledWith(
+      "Provider saved (no API key required)",
+      3000,
+    );
+
+    // saveApiKey error path for provider-b
+    mockSetProvider.mockRejectedValueOnce(new Error("Set provider crash"));
+    await el.saveApiKey();
+    expect(showError).toHaveBeenCalledWith(
+      "Error saving provider: Set provider crash",
+      6000,
+    );
+
+    // saveApiKey requiring key with empty key
+    providerSelect.value = "provider-a";
+    keyInput.value = "   ";
+    await el.saveApiKey();
+    expect(showWarning).toHaveBeenCalledWith("Please enter an API key", 3000);
+
+    // saveApiKey with null orchestrator
+    el.orchestrator = null;
+    await el.saveApiKey();
+    expect(showError).toHaveBeenCalledWith(
+      "Orchestrator not initialized",
+      5000,
+    );
+    el.orchestrator = orch as any;
+
+    // 2. saveBedrockSettings validation & error
+    const regionInput = el.shadowRoot?.querySelector(
+      '[data-setting="bedrock-region-input"]',
+    ) as HTMLInputElement;
+    const profileInput = el.shadowRoot?.querySelector(
+      '[data-setting="bedrock-profile-input"]',
+    ) as HTMLInputElement;
+
+    if (regionInput && profileInput) {
+      regionInput.value = "us-west-2";
+      profileInput.value = "";
+      await el.saveBedrockSettings();
+      expect(showWarning).toHaveBeenCalledWith(
+        expect.stringContaining("Enter both Bedrock region and profile"),
+        4000,
+      );
+
+      regionInput.value = "us-west-2";
+      profileInput.value = "default";
+      mockSetBedrockSettings.mockRejectedValueOnce(
+        new Error("Bedrock auth fail"),
+      );
+      await el.saveBedrockSettings();
+      expect(showError).toHaveBeenCalledWith(
+        "Error saving Bedrock fallback settings: Bedrock auth fail",
+        6000,
+      );
+    }
+
+    // 3. saveBuiltinAiSettings error
+    (setConfig as any).mockRejectedValueOnce(new Error("DB locked"));
+    await el.saveBuiltinAiSettings();
+    expect(showError).toHaveBeenCalledWith(
+      "Error saving Built-in AI settings: DB locked",
+      5000,
+    );
+
+    // 4. saveLlamafileSettings validations & error
+    const hostInput = el.shadowRoot?.querySelector(
+      '[data-setting="llamafile-host-input"]',
+    ) as HTMLInputElement;
+    const portInput = el.shadowRoot?.querySelector(
+      '[data-setting="llamafile-port-input"]',
+    ) as HTMLInputElement;
+
+    if (hostInput && portInput) {
+      hostInput.value = "";
+      await el.saveLlamafileSettings();
+      expect(showWarning).toHaveBeenCalledWith("Please enter a host", 3000);
+
+      hostInput.value = "localhost";
+      portInput.value = "999999";
+      await el.saveLlamafileSettings();
+      expect(showWarning).toHaveBeenCalledWith(
+        "Please enter a valid port (1-65535)",
+        3000,
+      );
+
+      portInput.value = "8080";
+      mockSetLlamafileSettings.mockRejectedValueOnce(new Error("Host down"));
+      await el.saveLlamafileSettings();
+      expect(showError).toHaveBeenCalledWith(
+        "Error saving llamafile settings: Host down",
+        6000,
+      );
+    }
+
+    // 5. saveMaxIterations
+    const maxIterInput = el.shadowRoot?.querySelector(
+      '[data-setting="max-iterations-input"]',
+    ) as HTMLInputElement;
+    if (maxIterInput) {
+      maxIterInput.value = "0";
+      await el.saveMaxIterations();
+      expect(showWarning).toHaveBeenCalledWith(
+        "Please enter a valid number (1 or higher)",
+        3000,
+      );
+
+      maxIterInput.value = "10";
+      await el.saveMaxIterations();
+      expect(mockSetMaxIterations).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        10,
+      );
+
+      mockSetMaxIterations.mockRejectedValueOnce(new Error("Save failed"));
+      await el.saveMaxIterations();
+      expect(showError).toHaveBeenCalledWith(
+        "Error saving max iterations: Save failed",
+        6000,
+      );
+    }
+
+    // 6. saveMaxTokens
+    const maxTokensInput = el.shadowRoot?.querySelector(
+      '[data-setting="max-tokens-input"]',
+    ) as HTMLInputElement;
+    if (maxTokensInput) {
+      maxTokensInput.value = "0";
+      await el.saveMaxTokens();
+      expect(showWarning).toHaveBeenCalledWith(
+        "Please enter a valid number (1 or higher)",
+        3000,
+      );
+
+      maxTokensInput.value = "4096";
+      await el.saveMaxTokens();
+      expect(mockSetMaxTokens).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        4096,
+      );
+
+      mockSetMaxTokens.mockRejectedValueOnce(new Error("Token save failed"));
+      await el.saveMaxTokens();
+      expect(showError).toHaveBeenCalledWith(
+        "Error saving max tokens: Token save failed",
+        6000,
+      );
+    }
+
+    // 7. onStreamingToggle and onContextCompressionToggle
+    await el.onStreamingToggle(true);
+    expect(mockSetStreamingEnabled).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      true,
+    );
+    await el.onStreamingToggle(false);
+    expect(mockSetStreamingEnabled).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      false,
+    );
+    mockSetStreamingEnabled.mockRejectedValueOnce(new Error("Stream err"));
+    await el.onStreamingToggle(true);
+    expect(showError).toHaveBeenCalledWith(
+      "Error saving streaming setting: Stream err",
+      6000,
+    );
+
+    await el.onContextCompressionToggle(true);
+    expect(mockSetContextCompressionEnabled).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      true,
+    );
+    await el.onContextCompressionToggle(false);
+    expect(mockSetContextCompressionEnabled).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      false,
+    );
+    mockSetContextCompressionEnabled.mockRejectedValueOnce(
+      new Error("Compress err"),
+    );
+    await el.onContextCompressionToggle(true);
+    expect(showError).toHaveBeenCalledWith(
+      "Error saving context compression setting: Compress err",
+      6000,
+    );
+
+    // 8. requestAppDialog fallback when shadow-claw element is absent
+    const dialogFallback = await el.requestAppDialog({
+      title: "T",
+      message: "M",
+    });
+    expect(dialogFallback).toBe(false);
+
+    // 9. saveTransformersJsSettings and showLlamafileHelpDialog
+    await el.saveTransformersJsSettings();
+    await el.showLlamafileHelpDialog("help needed");
+    // Repeating should trigger cache check:
+    await el.showLlamafileHelpDialog("help needed");
+
+    // 10. saveSubagentWorkspaceMode invalid & error
+    const subagentSelect = el.shadowRoot?.querySelector(
+      '[data-setting="subagent-workspace-mode"], [data-setting="subagent-workspace-mode-select"]',
+    ) as HTMLSelectElement;
+    if (subagentSelect) {
+      subagentSelect.value = "invalid-mode";
+      await el.saveSubagentWorkspaceMode();
+      expect(showWarning).toHaveBeenCalledWith(
+        "Please select a valid subagent workspace mode",
+        3000,
+      );
+
+      subagentSelect.value = "parent";
+      (setConfig as any).mockRejectedValueOnce(
+        new Error("Subagent save error"),
+      );
+      await el.saveSubagentWorkspaceMode();
+      expect(showError).toHaveBeenCalledWith(
+        "Error saving subagent workspace mode: Subagent save error",
+        6000,
+      );
+    }
+
+    // 11. saveMeshLlmSettings
+    await el.saveMeshLlmSettings();
 
     document.body.removeChild(el);
   });

@@ -332,4 +332,299 @@ describe("worker/tools/fetch-url", () => {
     expect(statusIndex).toBeGreaterThanOrEqual(0);
     expect(beginIndex).toBeGreaterThan(statusIndex);
   });
+
+  it("handles binary image and pdf responses and uploads to workspace", async () => {
+    const deps = makeDeps({
+      fetchImpl: jest.fn(async () => ({
+        ...createResponse({
+          status: 200,
+          statusText: "OK",
+          contentType: "image/jpeg",
+          body: "image-bytes",
+        }),
+        headers: new Map([["content-type", "image/jpeg"]]),
+      })),
+    });
+
+    const imgResult = await executeFetchUrlTool(
+      {} as any,
+      {
+        url: "https://example.com/photo",
+        include_headers: true,
+        headers: { "X-Test": "1" },
+      },
+      "group-1",
+      deps,
+    );
+
+    expect(imgResult).toContain("Successfully downloaded binary file");
+    expect(imgResult).toContain("![Attachment](downloads/photo.jpg)");
+    expect(deps.uploadGroupFile).toHaveBeenCalledWith(
+      {},
+      "group-1",
+      "downloads/photo.jpg",
+      expect.any(Blob),
+    );
+
+    // PDF binary
+    deps.fetchImpl = jest.fn(async () => ({
+      ...createResponse({
+        status: 200,
+        statusText: "OK",
+        contentType: "application/pdf",
+        body: "pdf-bytes",
+      }),
+      headers: new Map([["content-type", "application/pdf"]]),
+    }));
+
+    const pdfResult = await executeFetchUrlTool(
+      {} as any,
+      { url: "https://example.com/manual" },
+      "group-1",
+      deps,
+    );
+
+    expect(pdfResult).toContain("[Attachment](downloads/manual.pdf)");
+  });
+
+  it("truncates long response bodies exceeding fetchMaxResponse", async () => {
+    const deps = makeDeps({
+      fetchMaxResponse: 20,
+      fetchImpl: jest.fn(async () =>
+        createResponse({
+          status: 200,
+          statusText: "OK",
+          contentType: "text/plain",
+          body: "01234567890123456789extra_content_here",
+        }),
+      ),
+    });
+
+    const result = await executeFetchUrlTool(
+      {} as any,
+      { url: "https://example.com/large" },
+      "group-1",
+      deps,
+    );
+
+    expect(result).toContain(
+      "--- Response truncated (showed 20 of 38 chars) ---",
+    );
+  });
+
+  it("handles git auth, reauth requirement, and 401 retry", async () => {
+    // 1. Initial reauthRequired
+    const deps1 = makeDeps({
+      resolveGitCredentials: jest.fn(async () => ({
+        token: undefined,
+        reauthRequired: true,
+        hostPattern: "github.com",
+      })),
+    });
+
+    const res1 = await executeFetchUrlTool(
+      {} as any,
+      { url: "https://github.com/org/repo", use_git_auth: true },
+      "group-1",
+      deps1,
+    );
+    expect(res1).toContain(
+      "OAuth Git account reconnect required for github.com",
+    );
+
+    // 2. 401 on git auth with refreshed credentials needing reauth
+    const deps2 = makeDeps({
+      resolveGitCredentials: jest
+        .fn<any>()
+        .mockResolvedValueOnce({
+          token: "old-token",
+          authMode: "oauth",
+          hostPattern: "github.com",
+        })
+        .mockResolvedValueOnce({
+          token: undefined,
+          authMode: "oauth",
+          reauthRequired: true,
+          hostPattern: "github.com",
+        }),
+      buildAuthHeaders: jest.fn(() => ({ Authorization: "Bearer old-token" })),
+      fetchImpl: jest.fn(async () =>
+        createResponse({
+          status: 401,
+          statusText: "Unauthorized",
+          contentType: "text/plain",
+          body: "Bad credentials",
+        }),
+      ),
+    });
+
+    const res2 = await executeFetchUrlTool(
+      {} as any,
+      { url: "https://github.com/org/repo", use_git_auth: true },
+      "group-1",
+      deps2,
+    );
+    expect(res2).toContain(
+      "OAuth Git account reconnect required for github.com",
+    );
+
+    // 3. 401 on git auth with headers updated succeeds on second try
+    const deps3 = makeDeps({
+      resolveGitCredentials: jest
+        .fn<any>()
+        .mockResolvedValueOnce({
+          token: "token1",
+          authMode: "oauth",
+        })
+        .mockResolvedValueOnce({
+          token: "token2",
+          authMode: "oauth",
+        }),
+      buildAuthHeaders: jest
+        .fn<any>()
+        .mockReturnValueOnce({ Authorization: "Bearer token1" })
+        .mockReturnValueOnce({ Authorization: "Bearer token2" }),
+      fetchImpl: jest
+        .fn<any>()
+        .mockResolvedValueOnce(
+          createResponse({
+            status: 401,
+            statusText: "Unauthorized",
+            contentType: "text/plain",
+            body: "stale",
+          }),
+        )
+        .mockResolvedValueOnce(
+          createResponse({
+            status: 200,
+            statusText: "OK",
+            contentType: "text/plain",
+            body: "refreshed git data",
+          }),
+        ),
+    });
+
+    const res3 = await executeFetchUrlTool(
+      {} as any,
+      { url: "https://github.com/org/repo", use_git_auth: true },
+      "group-1",
+      deps3,
+    );
+    expect(res3).toContain("refreshed git data");
+  });
+
+  it("provides helpful hints on 401 and 404 responses", async () => {
+    // 401 on github without use_git_auth
+    const deps = makeDeps({
+      fetchImpl: jest.fn(async () =>
+        createResponse({
+          status: 401,
+          statusText: "Unauthorized",
+          contentType: "text/plain",
+          body: "Need auth",
+        }),
+      ),
+      resolveServiceCredentials: jest.fn(
+        async () =>
+          ({
+            service: "Slack",
+            hostPattern: "slack.com",
+          }) as any,
+      ),
+    });
+
+    const gitHintRes = await executeFetchUrlTool(
+      {} as any,
+      { url: "https://github.com/private/repo" },
+      "group-1",
+      deps,
+    );
+    expect(gitHintRes).toContain(
+      "This looks like a Git host and you received a 401",
+    );
+    expect(gitHintRes).toContain("use_git_auth: true");
+
+    // 401 on non-git host with saved account
+    const svcHintRes = await executeFetchUrlTool(
+      {} as any,
+      { url: "https://slack.com/api/test" },
+      "group-1",
+      deps,
+    );
+    expect(svcHintRes).toContain(
+      'A saved account for "Slack" (slack.com) was found',
+    );
+    expect(svcHintRes).toContain("use_account_auth: true");
+
+    // Generic 404 error
+    deps.fetchImpl = jest.fn(async () =>
+      createResponse({
+        status: 404,
+        statusText: "Not Found",
+        contentType: "text/plain",
+        body: "Missing page",
+      }),
+    );
+    const notFoundRes = await executeFetchUrlTool(
+      {} as any,
+      { url: "https://example.com/notfound" },
+      "group-1",
+      deps,
+    );
+    expect(notFoundRes).toContain("[HTTP 404 Not Found]");
+    expect(notFoundRes).toContain(
+      "Error fetching URL. Content preview:\nMissing page",
+    );
+  });
+
+  it("handles retryable error toast and exceptions", async () => {
+    const deps = makeDeps({
+      withRetry: jest.fn(async (fn: any, options: any) => {
+        // Trigger onRetry callback
+        options.onRetry(1, 3, 1000, new Error("Temporary timeout"));
+        return fn();
+      }),
+      fetchImpl: jest.fn(async () => {
+        throw new TypeError("Failed to fetch");
+      }),
+    });
+
+    const networkErr = await executeFetchUrlTool(
+      {} as any,
+      { url: "https://broken.domain" },
+      "group-1",
+      deps,
+    );
+
+    expect(deps.post).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "show-toast",
+        payload: expect.objectContaining({
+          message: expect.stringContaining("Temporary timeout"),
+        }),
+      }),
+    );
+    expect(networkErr).toContain(
+      "Network Error: Failed to fetch https://broken.domain",
+    );
+
+    // HttpError instance thrown during fetch
+    const { HttpError } = await import("../utils/HttpError.js");
+    deps.fetchImpl = jest.fn(async () => {
+      throw new HttpError(
+        503,
+        "Service Unavailable",
+        "Over capacity",
+        "X-Retry-After: 5\n",
+      );
+    });
+    const httpErr = await executeFetchUrlTool(
+      {} as any,
+      { url: "https://overloaded.domain" },
+      "group-1",
+      deps,
+    );
+    expect(httpErr).toContain("[HTTP 503 Service Unavailable]");
+    expect(httpErr).toContain("Over capacity");
+  });
 });

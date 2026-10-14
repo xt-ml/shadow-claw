@@ -39,35 +39,35 @@ All communication uses `postMessage()` with typed payloads defined in `src/subsy
 
 ### Worker → Main
 
-| Type                      | Payload                         | Purpose                           |
-| ------------------------- | ------------------------------- | --------------------------------- |
-| `response`                | `{ groupId, text }`             | Final text response               |
-| `intermediate-response`   | `{ groupId, text }`             | Text emitted before tool calls    |
-| `streaming-start`         | `{ groupId }`                   | SSE stream beginning              |
-| `streaming-chunk`         | `{ groupId, text }`             | Incremental text (throttled 50ms) |
-| `streaming-end`           | `{ groupId }`                   | Stream paused for tool calls      |
-| `streaming-done`          | `{ groupId, text }`             | Final streamed text               |
-| `streaming-error`         | `{ groupId, error }`            | Stream failed                     |
-| `error`                   | `{ groupId, error }`            | Error payload                     |
-| `typing`                  | `{ groupId, typing }`           | Typing indicator                  |
-| `tool-activity`           | `{ groupId, tool, status }`     | Tool execution status             |
-| `token-usage`             | per payload                     | Token consumption stats           |
-| `thinking-log`            | `ThinkingLogEntry`              | Debug/reasoning log               |
-| `compact-done`            | `{ groupId, summary }`          | Compaction complete               |
-| `model-download-progress` | `ModelDownloadProgressPayload`  | Prompt API download               |
-| `vm-status`               | `VMStatus`                      | VM ready/booting/error            |
-| `vm-terminal-opened`      | `{ ok: true }`                  | Terminal session ready            |
-| `vm-terminal-output`      | `{ chunk: string }`             | Terminal stdout bytes             |
-| `vm-terminal-closed`      | `{ ok: true }`                  | Terminal session closed           |
-| `vm-terminal-error`       | `{ error: string }`             | Terminal error                    |
-| `vm-workspace-synced`     | `{ groupId }`                   | Workspace sync complete           |
-| `show-toast`              | `{ message, type?, duration? }` | UI toast notification             |
-| `send-notification`       | `{ title, body, groupId }`      | OS-level push notification        |
-| `open-file`               | `{ groupId, path }`             | Open file in UI viewer            |
-| `manage-tools`            | `ManageToolsPayload`            | Agent-driven tool reconfiguration |
-| `task-created`            | `{ task }`                      | New task created by agent         |
-| `update-task`             | `{ task }`                      | Task updated by agent             |
-| `delete-task`             | `{ id, groupId }`               | Task deleted by agent             |
+| Type                      | Payload                         | Purpose                                                  |
+| ------------------------- | ------------------------------- | -------------------------------------------------------- |
+| `response`                | `{ groupId, text }`             | Final text response                                      |
+| `intermediate-response`   | `{ groupId, text }`             | Text emitted before tool calls                           |
+| `streaming-start`         | `{ groupId }`                   | SSE stream beginning                                     |
+| `streaming-chunk`         | `{ groupId, text }`             | Incremental text (throttled 50ms)                        |
+| `streaming-end`           | `{ groupId }`                   | Stream paused for tool calls                             |
+| `streaming-done`          | `{ groupId, text }`             | Final streamed text                                      |
+| `streaming-error`         | `{ groupId, error }`            | Stream failed                                            |
+| `error`                   | `{ groupId, error }`            | Error payload                                            |
+| `typing`                  | `{ groupId, typing }`           | Typing indicator                                         |
+| `tool-activity`           | `{ groupId, tool, status }`     | Tool execution status                                    |
+| `token-usage`             | per payload                     | Token consumption stats                                  |
+| `thinking-log`            | `ThinkingLogEntry`              | Debug/reasoning log                                      |
+| `compact-done`            | `{ groupId, summary }`          | Compaction complete                                      |
+| `model-download-progress` | `ModelDownloadProgressPayload`  | In-browser model download (Transformers.js / Prompt API) |
+| `vm-status`               | `VMStatus`                      | VM ready/booting/error                                   |
+| `vm-terminal-opened`      | `{ ok: true }`                  | Terminal session ready                                   |
+| `vm-terminal-output`      | `{ chunk: string }`             | Terminal stdout bytes                                    |
+| `vm-terminal-closed`      | `{ ok: true }`                  | Terminal session closed                                  |
+| `vm-terminal-error`       | `{ error: string }`             | Terminal error                                           |
+| `vm-workspace-synced`     | `{ groupId }`                   | Workspace sync complete                                  |
+| `show-toast`              | `{ message, type?, duration? }` | UI toast notification                                    |
+| `send-notification`       | `{ title, body, groupId }`      | OS-level push notification                               |
+| `open-file`               | `{ groupId, path }`             | Open file in UI viewer                                   |
+| `manage-tools`            | `ManageToolsPayload`            | Agent-driven tool reconfiguration                        |
+| `task-created`            | `{ task }`                      | New task created by agent                                |
+| `update-task`             | `{ task }`                      | Task updated by agent                                    |
+| `delete-task`             | `{ id, groupId }`               | Task deleted by agent                                    |
 
 ## Worker Startup
 

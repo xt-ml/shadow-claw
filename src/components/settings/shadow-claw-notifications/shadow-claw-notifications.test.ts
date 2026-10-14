@@ -235,4 +235,96 @@ describe("shadow-claw-notifications", () => {
 
     document.body.removeChild(el);
   });
+
+  it("handles push toggle error branch", async () => {
+    const el = new ShadowClawNotifications();
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 50));
+
+    el._subscribed = false;
+    (
+      (pushClient as any).subscribeToPush as jest.Mock<any>
+    ).mockRejectedValueOnce(new Error("Permission denied"));
+
+    const toggle = el.shadowRoot?.querySelector('[data-action="toggle-push"]');
+    toggle?.dispatchEvent(new Event("click"));
+    await new Promise((r) => setTimeout(r, 50));
+
+    document.body.removeChild(el);
+  });
+
+  it("handles refreshState failure branch", async () => {
+    (
+      (pushClient as any).getCurrentSubscription as jest.Mock<any>
+    ).mockRejectedValue(new Error("SW failed"));
+    const el = new ShadowClawNotifications();
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 50));
+    await el.refreshState();
+
+    expect(el._subscribed).toBe(false);
+    (
+      (pushClient as any).getCurrentSubscription as jest.Mock<any>
+    ).mockResolvedValue(null);
+    document.body.removeChild(el);
+  });
+
+  it("handles loadSubscriptions non-ok response", async () => {
+    const el = new ShadowClawNotifications();
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 50));
+
+    global.fetch = jest.fn<any>().mockResolvedValue({
+      ok: false,
+      status: 500,
+    });
+    await el.loadSubscriptions();
+    expect(el._subscriptions.length).toBe(0);
+    expect(el._backendAvailable).toBe(false);
+
+    document.body.removeChild(el);
+  });
+
+  it("handles delete subscription error and failure", async () => {
+    const el = new ShadowClawNotifications();
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 50));
+
+    el._selectedId = 1;
+    global.fetch = jest.fn<any>().mockResolvedValue({ ok: false });
+
+    const deleteBtn = el.shadowRoot?.querySelector(
+      '[data-action="delete-subscription"]',
+    );
+    deleteBtn?.dispatchEvent(new Event("click"));
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Also throw
+    global.fetch = jest.fn<any>().mockRejectedValue(new Error("Network fail"));
+    deleteBtn?.dispatchEvent(new Event("click"));
+    await new Promise((r) => setTimeout(r, 50));
+
+    document.body.removeChild(el);
+  });
+
+  it("handles send notification failure", async () => {
+    const el = new ShadowClawNotifications();
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 50));
+
+    el._subscriptions = [{ id: 1, endpoint: "test-end", created_at: "" }];
+    el._selectedId = 1;
+    global.fetch = jest.fn<any>().mockResolvedValue({
+      ok: false,
+      text: () => Promise.resolve("Bad request"),
+    });
+
+    const sendBtn = el.shadowRoot?.querySelector(
+      '[data-action="send-notification"]',
+    );
+    sendBtn?.dispatchEvent(new Event("click"));
+    await new Promise((r) => setTimeout(r, 50));
+
+    document.body.removeChild(el);
+  });
 });

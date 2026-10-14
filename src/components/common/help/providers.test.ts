@@ -89,4 +89,71 @@ describe("provider help", () => {
       dialog.details?.some((line) => line.includes("Runtime missing")),
     ).toBe(true);
   });
+
+  it("checks isLlamafileResolutionError", async () => {
+    const { isLlamafileResolutionError } = await import("./llamafile.js");
+    expect(isLlamafileResolutionError("assets/cache/llamafile not found")).toBe(
+      true,
+    );
+    expect(
+      isLlamafileResolutionError(
+        "missing or invalid 'model' parameter for cli mode",
+      ),
+    ).toBe(true);
+    expect(
+      isLlamafileResolutionError("failed to list llamafile binaries"),
+    ).toBe(true);
+    expect(isLlamafileResolutionError("some random error")).toBe(false);
+  });
+
+  it("checks isTransformersJsResolutionError", async () => {
+    const { isTransformersJsResolutionError } =
+      await import("./transformers.js");
+    expect(
+      isTransformersJsResolutionError(
+        "transformers.js runtime is not installed",
+      ),
+    ).toBe(true);
+    expect(
+      isTransformersJsResolutionError("transformers.js runtime is unavailable"),
+    ).toBe(true);
+    expect(
+      isTransformersJsResolutionError(
+        "no supported transformers.js model loader",
+      ),
+    ).toBe(true);
+    expect(
+      isTransformersJsResolutionError(
+        "cannot find package @huggingface/transformers",
+      ),
+    ).toBe(true);
+    expect(isTransformersJsResolutionError("network error")).toBe(false);
+  });
+
+  it("builds dialogs for api-key-invalid and provider-unreachable", () => {
+    const invalidDialog = buildProviderHelpDialogOptions(
+      "openrouter",
+      "api-key-invalid",
+    );
+    expect(invalidDialog.title).toContain("Authentication Failed");
+
+    const localUnreachable = buildProviderHelpDialogOptions(
+      "transformers_js_local",
+      "provider-unreachable",
+    );
+    expect(localUnreachable.title).toContain("Not Reachable");
+    expect(localUnreachable.details?.some((d) => d.includes("npm start"))).toBe(
+      true,
+    );
+
+    const remoteUnreachable = buildProviderHelpDialogOptions(
+      "openrouter",
+      "provider-unreachable",
+    );
+    expect(
+      remoteUnreachable.details?.some((d) =>
+        d.includes("internet connectivity"),
+      ),
+    ).toBe(true);
+  });
 });

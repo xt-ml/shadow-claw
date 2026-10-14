@@ -2370,5 +2370,312 @@ describe("shadow-claw-file-viewer", () => {
 
       document.body.removeChild(component);
     });
+
+    it("handles handleAnchorNavigation with line numbers and elements", async () => {
+      const component = new ShadowClawFileViewer();
+      document.body.appendChild(component);
+      await component.render();
+
+      const content = component.shadowRoot!.querySelector(
+        ".file-content",
+      ) as HTMLElement;
+      content.innerHTML = `
+        <div class="code-line" data-line="1">Line 1</div>
+        <div class="code-line" data-line="2">Line 2</div>
+        <div class="code-line" data-line="3">Line 3</div>
+        <h2 id="heading-test">Heading</h2>
+      `;
+
+      window.HTMLElement.prototype.scrollIntoView = jest.fn();
+
+      const matchedLine = component.handleAnchorNavigation("#L1-L2");
+      expect(matchedLine).toBe(true);
+      expect(window.HTMLElement.prototype.scrollIntoView).toHaveBeenCalled();
+
+      const matchedHeading = component.handleAnchorNavigation("#heading-test");
+      expect(matchedHeading).toBe(true);
+
+      const nonExistent = component.handleAnchorNavigation("#not-found");
+      expect(nonExistent).toBe(false);
+
+      document.body.removeChild(component);
+    });
+
+    it("handles storage proxy requests from iframe", async () => {
+      const component = new ShadowClawFileViewer();
+      document.body.appendChild(component);
+      await component.render();
+
+      (fileViewerStore as any).file = {
+        name: "test.html",
+        path: "test.html",
+      };
+
+      const mockSource = {
+        postMessage: jest.fn(),
+      } as any;
+
+      await (component as any).handleStorageProxyRequest(
+        mockSource,
+        "req-1",
+        "removeItem",
+        { key: "item-1" },
+      );
+      expect(mockSource.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "shadow-claw-storage-proxy-result",
+          requestId: "req-1",
+          result: null,
+        }),
+        "*",
+      );
+
+      await (component as any).handleStorageProxyRequest(
+        mockSource,
+        "req-2",
+        "clear",
+        {},
+      );
+      expect(mockSource.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "shadow-claw-storage-proxy-result",
+          requestId: "req-2",
+        }),
+        "*",
+      );
+
+      await (component as any).handleStorageProxyRequest(
+        mockSource,
+        "req-3",
+        "getAllItems",
+        {},
+      );
+      expect(mockSource.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "shadow-claw-storage-proxy-result",
+          requestId: "req-3",
+        }),
+        "*",
+      );
+
+      await (component as any).handleStorageProxyRequest(
+        mockSource,
+        "req-4",
+        "idb-put",
+        { dbName: "mydb", storeName: "mystore", key: "k1", value: "v1" },
+      );
+      expect(mockSource.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "shadow-claw-storage-proxy-result",
+          requestId: "req-4",
+          result: "k1",
+        }),
+        "*",
+      );
+
+      await (component as any).handleStorageProxyRequest(
+        mockSource,
+        "req-5",
+        "idb-get",
+        { dbName: "mydb", storeName: "mystore", key: "k1" },
+      );
+      expect(mockSource.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "shadow-claw-storage-proxy-result",
+          requestId: "req-5",
+        }),
+        "*",
+      );
+
+      await (component as any).handleStorageProxyRequest(
+        mockSource,
+        "req-6",
+        "idb-getAll",
+        { dbName: "mydb", storeName: "mystore" },
+      );
+      expect(mockSource.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "shadow-claw-storage-proxy-result",
+          requestId: "req-6",
+        }),
+        "*",
+      );
+
+      await (component as any).handleStorageProxyRequest(
+        mockSource,
+        "req-7",
+        "idb-delete",
+        { dbName: "mydb", storeName: "mystore", key: "k1" },
+      );
+      expect(mockSource.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "shadow-claw-storage-proxy-result",
+          requestId: "req-7",
+        }),
+        "*",
+      );
+
+      await (component as any).handleStorageProxyRequest(
+        mockSource,
+        "req-8",
+        "idb-clear",
+        { dbName: "mydb", storeName: "mystore" },
+      );
+      expect(mockSource.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "shadow-claw-storage-proxy-result",
+          requestId: "req-8",
+        }),
+        "*",
+      );
+
+      await (component as any).handleStorageProxyRequest(
+        mockSource,
+        "req-9",
+        "idb-deleteDatabase",
+        { dbName: "mydb" },
+      );
+      expect(mockSource.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "shadow-claw-storage-proxy-result",
+          requestId: "req-9",
+        }),
+        "*",
+      );
+
+      await (component as any).handleStorageProxyRequest(
+        mockSource,
+        "req-10",
+        "unknown-op",
+        {},
+      );
+      expect(mockSource.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "shadow-claw-storage-proxy-result",
+          requestId: "req-10",
+          error: expect.stringContaining("Unknown storage proxy method"),
+        }),
+        "*",
+      );
+
+      document.body.removeChild(component);
+    });
+
+    it("handles link click navigation in content", async () => {
+      const component = new ShadowClawFileViewer();
+      document.body.appendChild(component);
+      await component.render();
+      component.db = {} as any;
+
+      const openSpy = jest.spyOn(window, "open").mockImplementation(() => null);
+
+      const anchorEl = document.createElement("a");
+      anchorEl.setAttribute("href", "https://example.com/external");
+      anchorEl.setAttribute("target", "_blank");
+
+      const fakeEvent = {
+        defaultPrevented: false,
+        button: 0,
+        metaKey: false,
+        ctrlKey: false,
+        shiftKey: false,
+        altKey: false,
+        target: anchorEl,
+        preventDefault: jest.fn(),
+      } as any;
+
+      await component.handlePreviewLinkClick(fakeEvent);
+      expect(fakeEvent.preventDefault).toHaveBeenCalled();
+      expect(openSpy).toHaveBeenCalledWith(
+        "https://example.com/external",
+        "_blank",
+        "noopener,noreferrer",
+      );
+
+      openSpy.mockRestore();
+      document.body.removeChild(component);
+    });
+
+    it("handles isFileEditMode rendering in updateView", async () => {
+      const component = new ShadowClawFileViewer();
+      document.body.appendChild(component);
+      await component.render();
+
+      (fileViewerStore as any).file = {
+        name: "index.ts",
+        path: "src/index.ts",
+        content: "const a = 10;",
+        mimeType: "text/typescript",
+        kind: "text",
+      };
+
+      component.isFileEditMode = true;
+      component.isFilePreviewMode = false;
+      component.isEditorDirty = false;
+      await component.updateView();
+
+      const root = component.shadowRoot!;
+      const editor = root.querySelector(".file-editor") as HTMLTextAreaElement;
+      expect(editor).toBeDefined();
+      expect(editor.value).toBe("const a = 10;");
+      expect(editor.getAttribute("language")).toBe("typescript");
+
+      // Dirty mode
+      component.isEditorDirty = true;
+      component.editorDraftContent = "const a = 20;";
+      await component.updateView();
+      expect(editor.value).toBe("const a = 20;");
+
+      document.body.removeChild(component);
+    });
+
+    it("handles reloadPreviewWithSearchParams", async () => {
+      const component = new ShadowClawFileViewer();
+      document.body.appendChild(component);
+      await component.render();
+
+      (fileViewerStore as any).file = {
+        name: "page.html",
+        path: "page.html",
+        content: "<h1>Test</h1>",
+        mimeType: "text/html",
+        kind: "html",
+      };
+
+      const root = component.shadowRoot!;
+      const iframe = document.createElement("iframe");
+      iframe.className = "file-viewer__iframe";
+      root.appendChild(iframe);
+
+      await (component as any).reloadPreviewWithSearchParams("?color=blue");
+      expect(iframe.srcdoc).toBeDefined();
+
+      document.body.removeChild(component);
+    });
+
+    it("handles reactive modal open and close via effect callback", async () => {
+      const { effect } = await import("../../core/effect.js");
+      const component = new ShadowClawFileViewer();
+      document.body.appendChild(component);
+      await component.render();
+
+      const calls = (effect as any).mock.calls;
+      const effectCallback = calls[calls.length - 1][0];
+      expect(typeof effectCallback).toBe("function");
+
+      (fileViewerStore as any).file = {
+        name: "note.txt",
+        path: "note.txt",
+        content: "hello world",
+      };
+      effectCallback();
+      expect(component.lastOpenedFileName).toBe("note.txt");
+
+      (fileViewerStore as any).file = null;
+      effectCallback();
+      expect(component.lastOpenedFileName).toBe("");
+
+      document.body.removeChild(component);
+    });
   });
 });

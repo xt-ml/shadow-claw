@@ -222,4 +222,108 @@ describe("shadow-claw-webvm", () => {
 
     document.body.removeChild(el);
   });
+
+  it("handles validation warnings for invalid inputs", async () => {
+    const { showWarning } = await import("../../../ui/toast.js");
+    const orch = createOrchestratorStub();
+    (orchestratorStore as any).orchestrator = orch;
+    (orchestratorStore as any).ready = true;
+
+    const el = new ShadowClawWebvm();
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 50));
+    await el.render();
+
+    // 1. Invalid bash timeout
+    const timeoutInput = el.shadowRoot?.querySelector(
+      '[data-setting="vm-bash-timeout-input"]',
+    ) as HTMLInputElement;
+    if (timeoutInput) {
+      Object.defineProperty(timeoutInput, "value", {
+        value: "invalid",
+        configurable: true,
+      });
+    }
+    await el.saveVMBashTimeout();
+    expect(showWarning).toHaveBeenCalledWith(
+      "Please enter a valid timeout in seconds",
+      3000,
+    );
+
+    // 2. Invalid boot host
+    const bootHostInput = el.shadowRoot?.querySelector(
+      '[data-setting="vm-boot-host-input"]',
+    ) as HTMLInputElement;
+    if (bootHostInput) bootHostInput.value = "ftp://invalid-protocol";
+    await el.saveVMBootHost();
+    expect(showWarning).toHaveBeenCalledWith(
+      "Please enter a valid HTTP(S) boot host URL",
+      3500,
+    );
+
+    // 3. Invalid relay URL
+    const relayInput = el.shadowRoot?.querySelector(
+      '[data-setting="vm-network-relay-url-input"]',
+    ) as HTMLInputElement;
+    if (relayInput) relayInput.value = "ftp://invalid-relay";
+    await el.saveVMNetworkRelayURL();
+    expect(showWarning).toHaveBeenCalledWith(
+      "Please enter a valid ws:// or wss:// relay URL",
+      3500,
+    );
+
+    document.body.removeChild(el);
+  });
+
+  it("handles errors during saving", async () => {
+    const { showError } = await import("../../../ui/toast.js");
+    const orch = createOrchestratorStub();
+    (orchestratorStore as any).orchestrator = orch;
+    (orchestratorStore as any).ready = true;
+
+    const el = new ShadowClawWebvm();
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 50));
+    await el.render();
+
+    mockSetVMBashTimeout.mockRejectedValueOnce(
+      new Error("Timeout save failed"),
+    );
+    const timeoutInput = el.shadowRoot?.querySelector(
+      '[data-setting="vm-bash-timeout-input"]',
+    ) as HTMLInputElement;
+    if (timeoutInput) timeoutInput.value = "30";
+    await el.saveVMBashTimeout();
+    expect(showError).toHaveBeenCalledWith(
+      expect.stringContaining("Timeout save failed"),
+      6000,
+    );
+
+    mockSetVMBootHost.mockRejectedValueOnce(new Error("Boot host save failed"));
+    await el.saveVMBootHost();
+    expect(showError).toHaveBeenCalledWith(
+      expect.stringContaining("Boot host save failed"),
+      6000,
+    );
+
+    mockSetVMNetworkRelayURL.mockRejectedValueOnce(
+      new Error("Relay URL save failed"),
+    );
+    await el.saveVMNetworkRelayURL();
+    expect(showError).toHaveBeenCalledWith(
+      expect.stringContaining("Relay URL save failed"),
+      6000,
+    );
+
+    document.body.removeChild(el);
+  });
+
+  it("handles missing orchestrator early returns", async () => {
+    const el = new ShadowClawWebvm();
+    el.orchestrator = null;
+    await el.saveVMBashTimeout();
+    await el.saveVMBootHost();
+    await el.saveVMBootMode();
+    await el.saveVMNetworkRelayURL();
+  });
 });

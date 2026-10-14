@@ -400,5 +400,79 @@ describe("webrtc-listen command", () => {
       expect(res1.path.includes("shadow-claw")).toBe(true);
       expect(res1.path.includes("workspace-")).toBe(true);
     });
+
+    it("handles error during runWebRtcListenCommand startup", async () => {
+      const { CliWebRtcListener } =
+        await import("../utils/webrtc-control-client.js");
+      jest
+        .spyOn(CliWebRtcListener.prototype, "start")
+        .mockRejectedValueOnce(new Error("Signaling fail"));
+      const errorSpy = jest
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+      await runWebRtcListenCommand({ cacheDir: tmpDir });
+      expect(errorSpy).toHaveBeenCalledWith(
+        "Error starting WebRTC listener: Signaling fail",
+      );
+      expect(process.exitCode).toBe(1);
+      errorSpy.mockRestore();
+    });
+
+    it("wires up IPC command result handler in _setupConnection during runWebRtcListenCommand", async () => {
+      const { CliWebRtcListener } =
+        await import("../utils/webrtc-control-client.js");
+      jest
+        .spyOn(CliWebRtcListener.prototype, "start")
+        .mockImplementation(async function (this: any) {
+          const listeners: Record<string, Function> = {};
+          const mockConn = {
+            on: (ev: string, cb: any) => {
+              listeners[ev] = cb;
+            },
+          };
+          let receivedPayload: any = null;
+          this._pendingIpc.set("cmd-1", (payload: any) => {
+            receivedPayload = payload;
+          });
+
+          this._setupConnection(mockConn, "remote-peer-1");
+
+          // Test non-object/null
+          listeners["data"]?.(null);
+          // Test invalid JSON string
+          listeners["data"]?.("invalid-json");
+          // Test valid command result
+          listeners["data"]?.(
+            JSON.stringify({
+              type: "command:result",
+              payload: { commandId: "cmd-1", success: true },
+            }),
+          );
+
+          expect(receivedPayload).toEqual({
+            commandId: "cmd-1",
+            success: true,
+          });
+          throw new Error("Simulated stop");
+        });
+
+      const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+      const errorSpy = jest
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+
+      await runWebRtcListenCommand({
+        cacheDir: tmpDir,
+        secure: true,
+        insecure: true,
+        trustedPeer: ["peer-a", "peer-b"],
+      });
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        "Error starting WebRTC listener: Simulated stop",
+      );
+      logSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
   });
 });

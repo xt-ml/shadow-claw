@@ -1,4 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  jest,
+} from "@jest/globals";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -125,16 +132,113 @@ describe("src/cli/tools/version.ts", () => {
       expect(result.versions["shadow-claw"]).toBeDefined();
     });
 
-    it("returns help action when --help flag is provided", async () => {
-      const result = await runVersion(["--help"], { stdio: "pipe" });
-      expect(result.action).toBe("help");
-      expect(result.message).toContain(USAGE_NOTICE);
+    it("logs version map when stdio is inherit and no arguments provided", async () => {
+      const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        const result = await runVersion([], { stdio: "inherit" });
+        expect(result.action).toBe("list");
+        expect(logSpy).toHaveBeenCalled();
+      } finally {
+        logSpy.mockRestore();
+      }
+    });
+
+    it("returns help action and logs USAGE_NOTICE when stdio is inherit", async () => {
+      const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        const result = await runVersion(["--help"], { stdio: "inherit" });
+        expect(result.action).toBe("help");
+        expect(result.message).toContain(USAGE_NOTICE);
+        expect(logSpy).toHaveBeenCalledWith(USAGE_NOTICE);
+      } finally {
+        logSpy.mockRestore();
+      }
     });
 
     it("throws error when disallowed keyword is provided", async () => {
       await expect(runVersion(["minor"], { stdio: "pipe" })).rejects.toThrow(
         'Keyword command "minor" is not supported',
       );
+    });
+
+    it("handles isLifecycle mode with git directory", async () => {
+      const tempDir = await mkdtemp(path.join(os.tmpdir(), "lifecycle-test-"));
+      try {
+        await writeFile(
+          path.join(tempDir, "package.json"),
+          JSON.stringify({ name: "test-pkg", version: "2.0.0" }),
+          "utf8",
+        );
+        await mkdir(path.join(tempDir, ".well-known/mcp"), { recursive: true });
+        await writeFile(
+          path.join(tempDir, ".well-known/mcp.json"),
+          JSON.stringify({ version: "1.0.0" }),
+          "utf8",
+        );
+        await mkdir(path.join(tempDir, ".git"), { recursive: true });
+
+        const result = await runVersion([], {
+          isLifecycle: true,
+          rootDir: tempDir,
+        });
+
+        expect(result.version).toBe("2.0.0");
+        expect(result.updated).toContain(".well-known/mcp.json");
+      } finally {
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it("handles syncWellKnownVersions JSON parse error gracefully", async () => {
+      const tempDir = await mkdtemp(path.join(os.tmpdir(), "corrupt-test-"));
+      const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        await mkdir(path.join(tempDir, ".well-known"), { recursive: true });
+        await writeFile(
+          path.join(tempDir, ".well-known/mcp.json"),
+          "invalid-json",
+          "utf8",
+        );
+
+        const updated = await syncWellKnownVersions("1.2.3", tempDir);
+        expect(updated).toEqual([]);
+        expect(warnSpy).toHaveBeenCalled();
+      } finally {
+        warnSpy.mockRestore();
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it("executes npm version and syncs well-known when valid semver given", async () => {
+      const tempDir = await mkdtemp(
+        path.join(os.tmpdir(), "npm-version-test-"),
+      );
+      const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        await writeFile(
+          path.join(tempDir, "package.json"),
+          JSON.stringify({ name: "version-bump-test", version: "1.0.0" }),
+          "utf8",
+        );
+        await mkdir(path.join(tempDir, ".well-known/mcp"), { recursive: true });
+        await writeFile(
+          path.join(tempDir, ".well-known/mcp.json"),
+          JSON.stringify({ version: "1.0.0" }),
+          "utf8",
+        );
+
+        const result = await runVersion(["1.0.1"], {
+          rootDir: tempDir,
+          stdio: "inherit",
+          execOptions: { cwd: tempDir, stdio: "pipe" },
+        });
+
+        expect(result.version).toBe("1.0.1");
+        expect(result.updated).toContain(".well-known/mcp.json");
+      } finally {
+        logSpy.mockRestore();
+        await rm(tempDir, { recursive: true, force: true });
+      }
     });
   });
 });

@@ -32,6 +32,10 @@ jest.unstable_mockModule(
   }),
 );
 
+jest.unstable_mockModule("../../../storage/selectStorageDirectory.js", () => ({
+  selectStorageDirectory: jest.fn<any>().mockResolvedValue(true),
+}));
+
 jest.unstable_mockModule("../../../db/db.js", () => ({
   getDb: jest.fn<any>().mockResolvedValue({
     transaction: jest.fn(() => ({
@@ -70,6 +74,7 @@ jest.unstable_mockModule("../../../stores/orchestrator.js", () => ({
     storageStatus: { type: "opfs", permission: "granted" },
     resetSiteConfigSeed: jest.fn<any>().mockResolvedValue(undefined),
     loadFiles: jest.fn<any>().mockResolvedValue(undefined),
+    grantStorageAccess: jest.fn<any>().mockResolvedValue(undefined),
   },
 }));
 
@@ -190,5 +195,173 @@ describe("shadow-claw-storage", () => {
       "Reverted to browser-internal storage",
       3500,
     );
+  });
+
+  it("handles handleChangeStorageDir success and errors", async () => {
+    const { selectStorageDirectory } =
+      await import("../../../storage/selectStorageDirectory.js");
+    const { showError } = await import("../../../ui/toast.js");
+
+    const el = new ShadowClawStorage() as any;
+    el.db = {};
+    el.updateStorageInfo = jest.fn();
+
+    (selectStorageDirectory as jest.Mock<any>).mockResolvedValueOnce(true);
+    await el.handleChangeStorageDir();
+    expect(showSuccess).toHaveBeenCalledWith(
+      "Storage location changed. Existing OPFS files were not moved.",
+      4500,
+    );
+
+    (selectStorageDirectory as jest.Mock<any>).mockRejectedValueOnce(
+      new Error("Directory pick error"),
+    );
+    await el.handleChangeStorageDir();
+    expect(showError).toHaveBeenCalledWith(
+      expect.stringContaining("Directory pick error"),
+      6000,
+    );
+  });
+
+  it("handles errors during storage operations", async () => {
+    const { showError } = await import("../../../ui/toast.js");
+    const { requestPersistentStorage } =
+      await import("../../../storage/requestPersistentStorage.js");
+    const { resetStorageDirectory } =
+      await import("../../../storage/storage.js");
+    const { orchestratorStore } =
+      await import("../../../stores/orchestrator.js");
+
+    const el = new ShadowClawStorage() as any;
+    el.db = {};
+    el.updateStorageInfo = jest.fn();
+    el.requestConfirmation = jest.fn().mockResolvedValue(true);
+
+    // 1. handleRequestPersistent error
+    (requestPersistentStorage as jest.Mock<any>).mockRejectedValueOnce(
+      new Error("Persistent error"),
+    );
+    await el.handleRequestPersistent();
+    expect(showError).toHaveBeenCalledWith(
+      expect.stringContaining("Persistent error"),
+      6000,
+    );
+
+    // 2. handleResetSiteConfig error
+    (
+      orchestratorStore.resetSiteConfigSeed as jest.Mock<any>
+    ).mockRejectedValueOnce(new Error("Site config error"));
+    await el.handleResetSiteConfig();
+    expect(showError).toHaveBeenCalledWith(
+      expect.stringContaining("Site config error"),
+      6000,
+    );
+
+    // 3. handleResetStorageDir error
+    (resetStorageDirectory as jest.Mock<any>).mockRejectedValueOnce(
+      new Error("Reset storage error"),
+    );
+    await el.handleResetStorageDir();
+    expect(showError).toHaveBeenCalledWith(
+      expect.stringContaining("Reset storage error"),
+      6000,
+    );
+
+    // 4. onUploadAppendUlidToggle error
+    (setConfig as jest.Mock<any>).mockRejectedValueOnce(
+      new Error("ULID toggle error"),
+    );
+    await el.onUploadAppendUlidToggle(true);
+    expect(showError).toHaveBeenCalledWith(
+      expect.stringContaining("ULID toggle error"),
+      6000,
+    );
+  });
+
+  it("handles requestConfirmation via appShell and fallback warning", async () => {
+    const { showWarning } = await import("../../../ui/toast.js");
+    const el = new ShadowClawStorage();
+
+    // 1. Fallback when shadow-claw element does not exist
+    const res1 = await el.requestConfirmation({
+      title: "Test",
+      message: "Confirm action?",
+    });
+    expect(res1).toBe(false);
+    expect(showWarning).toHaveBeenCalledWith("Confirm action?", 4500);
+
+    // 2. With appShell requestDialog
+    const appShell = document.createElement("shadow-claw") as any;
+    appShell.requestDialog = jest.fn().mockResolvedValue(true);
+    document.body.appendChild(appShell);
+
+    const res2 = await el.requestConfirmation({
+      title: "Test",
+      message: "Confirm action?",
+    });
+    expect(res2).toBe(true);
+    expect(appShell.requestDialog).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: "confirm", title: "Test" }),
+    );
+
+    document.body.removeChild(appShell);
+  });
+
+  it("handles button clicks in template and early returns when db is null", async () => {
+    const el = new ShadowClawStorage();
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 50));
+    el.db = {} as any;
+
+    const root = el.shadowRoot!;
+    const reqBtn = root.querySelector('[data-action="request-persistent"]');
+    const changeBtn = root.querySelector('[data-action="change-storage-dir"]');
+    const resetStorageBtn = root.querySelector(
+      '[data-action="reset-storage-dir"]',
+    );
+    const resetConfigBtn = root.querySelector(
+      '[data-action="reset-site-config"]',
+    );
+    const grantBtn = root.querySelector(
+      '[data-action="grant-storage-permission"]',
+    );
+
+    const handleReqSpy = jest
+      .spyOn(el, "handleRequestPersistent")
+      .mockImplementation(async () => {});
+    const handleChangeSpy = jest
+      .spyOn(el, "handleChangeStorageDir")
+      .mockImplementation(async () => {});
+    const handleResetStorageSpy = jest
+      .spyOn(el, "handleResetStorageDir")
+      .mockImplementation(async () => {});
+    const handleResetConfigSpy = jest
+      .spyOn(el, "handleResetSiteConfig")
+      .mockImplementation(async () => {});
+
+    reqBtn?.dispatchEvent(new Event("click"));
+    expect(handleReqSpy).toHaveBeenCalled();
+
+    changeBtn?.dispatchEvent(new Event("click"));
+    expect(handleChangeSpy).toHaveBeenCalled();
+
+    resetStorageBtn?.dispatchEvent(new Event("click"));
+    expect(handleResetStorageSpy).toHaveBeenCalled();
+
+    resetConfigBtn?.dispatchEvent(new Event("click"));
+    expect(handleResetConfigSpy).toHaveBeenCalled();
+
+    grantBtn?.dispatchEvent(new Event("click"));
+
+    // Early returns when db is null
+    el.db = null;
+    await el.handleChangeStorageDir();
+    await el.handleRequestPersistent();
+    await el.handleResetSiteConfig();
+    await el.handleResetStorageDir();
+    await el.onUploadAppendUlidToggle(true);
+    await el.updateStorageInfo();
+
+    document.body.removeChild(el);
   });
 });

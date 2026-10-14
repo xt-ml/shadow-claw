@@ -1,5 +1,16 @@
 import { jest } from "@jest/globals";
 
+jest.unstable_mockModule("../../storage/readGroupFileBytes.js", () => ({
+  readGroupFileBytes: jest.fn(
+    async (_db: any, _groupId: string, filePath: string) => {
+      if (filePath.includes("error")) {
+        throw new Error("File read error");
+      }
+      return new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    },
+  ),
+}));
+
 import { setDB } from "../../db/db.js";
 import { registerBasicFunctions } from "../../ui/a2ui/registries/basicFunctions.js";
 import { A2UI_BASIC_CATALOG_ID } from "../../ui/a2ui/types.js";
@@ -1788,6 +1799,104 @@ describe("Basic catalog components unit tests", () => {
       callId: "call-x",
       call: { call: "capitalize", args: {} },
     });
+
+    document.body.removeChild(el);
+  });
+
+  it("resolves workspace media and poster paths to blob URLs", async () => {
+    const el = document.createElement("shadow-claw-a2ui") as any;
+    el.groupId = "peer:media-group";
+    document.body.appendChild(el);
+
+    await (el as any).onTemplateReady;
+
+    el.applyEnvelope({
+      version: "v1.0" as const,
+      type: "createSurface",
+      surfaceId: "media-blob-surface",
+      catalogId: A2UI_BASIC_CATALOG_ID,
+      components: [
+        {
+          id: "root",
+          component: "Column",
+          children: ["img-png", "img-gif", "img-webp", "vid-mp4", "aud-mp3"],
+        },
+        {
+          id: "img-png",
+          component: "Image",
+          url: "sample.png",
+        },
+        {
+          id: "img-gif",
+          component: "Image",
+          url: "sample.gif",
+        },
+        {
+          id: "img-webp",
+          component: "Image",
+          url: "sample.webp",
+        },
+        {
+          id: "vid-mp4",
+          component: "Video",
+          url: "sample.mp4",
+          posterUrl: "poster.jpg",
+        },
+        {
+          id: "aud-mp3",
+          component: "AudioPlayer",
+          url: "sample.mp3",
+        },
+      ] as any,
+      dataModel: {},
+    });
+
+    // Wait for async media resolution
+    await new Promise((resolve) => setTimeout(resolve, 80));
+
+    const root = el.shadowRoot;
+    const imgs = root?.querySelectorAll("img");
+    const video = root?.querySelector("video");
+    const audio = root?.querySelector("audio");
+
+    expect(imgs?.length).toBeGreaterThanOrEqual(3);
+    imgs?.forEach((img: HTMLImageElement) => {
+      expect(img.src).toContain("mock-blob");
+      expect(img.hasAttribute("data-a2ui-workspace-src")).toBe(false);
+    });
+
+    expect(video?.src).toContain("mock-blob");
+    expect(video?.poster).toContain("mock-blob");
+    expect(audio?.src).toContain("mock-blob");
+
+    // Test error handling in resolveSingleMediaToBlobUrl and resolveVideoPosterToBlobUrl
+    el.applyEnvelope({
+      version: "v1.0" as const,
+      type: "createSurface",
+      surfaceId: "media-error-surface",
+      catalogId: A2UI_BASIC_CATALOG_ID,
+      components: [
+        {
+          id: "root",
+          component: "Column",
+          children: ["img-err", "vid-err"],
+        },
+        {
+          id: "img-err",
+          component: "Image",
+          url: "error.png",
+        },
+        {
+          id: "vid-err",
+          component: "Video",
+          url: "error.mp4",
+          posterUrl: "error-poster.jpg",
+        },
+      ] as any,
+      dataModel: {},
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 80));
 
     document.body.removeChild(el);
   });

@@ -38,7 +38,7 @@ For external AI hosts, ShadowClaw provides multiple ways to interact with the br
 npx shadow-claw dev --open
 ```
 
-Open Settings, configure your preferred provider (or run with the default OpenRouter or Prompt API), and start chatting.
+Open Settings, configure your preferred provider (or run with the default Transformers.js or OpenRouter), and start chatting.
 
 ### 2. Run Headless Server-Side Agent directly from Terminal
 
@@ -201,11 +201,11 @@ Last-active conversation persists across reloads. On first launch, a default "Ma
 
 ShadowClaw supports multiple LLM providers with a unified adapter pattern and configurable defaults:
 
-| Category    | Examples                                                             | Notes                                                                                                      |
-| :---------- | :------------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------- |
-| **Cloud**   | OpenRouter, OpenAI, Anthropic, Google Gemini, AWS Bedrock, Vertex AI | Defaults out-of-the-box to OpenRouter (`openrouter/free`); API key required                                |
-| **Local**   | Ollama, Llamafile, Agentfile, Mesh LLM, Transformers.js              | Runs on local server or in-process; automatic Hugging Face model downloading & LocalBinaryDriver execution |
-| **Browser** | Prompt API (`window.LanguageModel`), LiteRT                          | WebGPU in-browser inference with transparent CPU/WASM polyfills                                            |
+| Category    | Examples                                                               | Notes                                                                                                                                         |
+| :---------- | :--------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Cloud**   | OpenRouter, OpenAI, Anthropic, Google Gemini, AWS Bedrock, Vertex AI   | Defaults out-of-the-box to OpenRouter (`openrouter/free`); API key required                                                                   |
+| **Local**   | Ollama, Llamafile, Agentfile, Mesh LLM, Transformers.js                | Runs on local server or in-process; automatic Hugging Face model downloading & LocalBinaryDriver execution                                    |
+| **Browser** | Transformers.js (Browser), Prompt API (`window.LanguageModel`), LiteRT | Defaults out-of-the-box to Transformers.js (`onnx-community/Qwen3-0.6B-ONNX`); in-browser WebGPU inference with transparent CPU/WASM fallback |
 
 **Provider & Model Hierarchy:**
 
@@ -215,14 +215,14 @@ ShadowClaw resolves default LLM providers and models via a strict precedence cas
 2. **Environment Variable:** `SHADOW_CLAW_PROVIDER` / `SHADOW_CLAW_MODEL` (or provider-specific keys like `OPENROUTER_API_KEY`, `HUGGINGFACE_API_KEY`, `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`)
 3. **Database Configuration:** `CONFIG_KEYS.PROVIDER` / `CONFIG_KEYS.MODEL`
 4. **Declarative Workspace Config:** `settings.defaultProvider` and `settings.defaultModel` in `shadow-claw.config.json`
-5. **Default Fallback:** Defaults to Prompt API (`prompt_api`) in browser contexts (with onboarding dialog and task API polyfills), and OpenRouter (`openrouter` with model `openrouter/free`) for headless CLI agent execution.
+5. **Default Fallback:** Defaults to Transformers.js (`transformers_js_browser` with model `onnx-community/Qwen3-0.6B-ONNX`) in browser contexts (with guided onboarding), and OpenRouter (`openrouter` with model `openrouter/free`) for headless CLI agent execution.
 
 **Provider Highlights:**
 
-- **In-Browser Inference Default:** Defaults to Prompt API (`prompt_api`) with guided onboarding and task API polyfills, enabling local, private, and zero-configuration browser execution.
+- **In-Browser Inference Default:** Defaults to Transformers.js (`transformers_js_browser`) with model `onnx-community/Qwen3-0.6B-ONNX` and guided onboarding, enabling private, local, zero-configuration in-browser execution with WebGPU acceleration and transparent CPU/WASM fallback.
 - **OpenRouter Default for Headless CLI:** Headless execution via `shadow-claw agent` defaults out-of-the-box to `openrouter` with `openrouter/free`.
 - **Local Models & Hugging Face Hub:** Automatic on-demand downloading from Hugging Face Hub, disk caching under `assets/cache/transformers.js` (and `assets/cache/llamafile` for Llamafile/Agentfile binaries), interactive paginated and searchable model browsing during `agent init`, and pre-warming endpoints (`POST /transformers-js-proxy/prewarm`). Unified local model tool calling (`parseLocalModelToolCalls`) supports multi-tool calling, Gemma 4 syntax, streaming tool-call suppression, and defensive schema sanitization across in-process Node executors and server proxy routes using OpenAI function schemas formatted directly for tokenizer chat templates. The `LocalBinaryDriver` architecture supports `.llamafile` and `.agentfile` execution with built-in tool schema catalogs and proxy forwarding. See [Local Models Guide](docs/subsystems/local-models.md).
-- **Prompt API & Polyfill Fallbacks:** In the browser client, uses native `window.LanguageModel` when available, with automatic degradation to local Transformers.js via `prompt-api-polyfill` and `built-in-ai-task-apis-polyfills` when the native Prompt API is unavailable.
+- **Prompt API & Polyfill Fallbacks:** When Prompt API (`prompt_api`) is manually selected in the browser client, uses native `window.LanguageModel` when available, with automatic degradation to local Transformers.js via `prompt-api-polyfill` and `built-in-ai-task-apis-polyfills` when the native Prompt API is unavailable.
 - **Hardware Feature Probing & Fallbacks:** Probes WebGPU adapter capabilities (`shader-f16`), retries during downloads, and dynamically falls back to WebAssembly CPU (`device: "wasm"`, `dtype: "q4"`) if WebGPU initialization fails or software emulation is detected.
 - **Streaming & Resilience:** Streaming responses across OpenAI and Anthropic formats; adaptive rate limiting with `retry-after` handling and 30-second auto-closing, ARIA-accessible countdown dialogs for fatal errors and throttling.
 

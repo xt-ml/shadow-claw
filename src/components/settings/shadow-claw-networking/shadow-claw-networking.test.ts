@@ -141,4 +141,92 @@ describe("shadow-claw-networking", () => {
 
     document.body.removeChild(el);
   });
+
+  it("handles onProxyToggle success and error", async () => {
+    const { showError, showSuccess } = await import("../../../ui/toast.js");
+    const { setUseProxy } =
+      await import("../../../core/orchestrator/utils/settings.js");
+
+    const orch = createOrchestratorStub();
+    (orchestratorStore as any).orchestrator = orch;
+
+    const el = new ShadowClawNetworking();
+    document.body.appendChild(el);
+    await waitForNetworkingReady(el);
+
+    // Toggle enabled
+    await el.onProxyToggle(true);
+    expect(setUseProxy).toHaveBeenCalledWith(orch, expect.anything(), true);
+    expect(showSuccess).toHaveBeenCalledWith("CORS Proxy enabled", 2500);
+
+    // Toggle disabled
+    await el.onProxyToggle(false);
+    expect(setUseProxy).toHaveBeenCalledWith(orch, expect.anything(), false);
+    expect(showSuccess).toHaveBeenCalledWith("CORS Proxy disabled", 2500);
+
+    // Error
+    (setUseProxy as any).mockRejectedValueOnce(new Error("Failed to write DB"));
+    await el.onProxyToggle(true);
+    expect(showError).toHaveBeenCalledWith(
+      "Error saving proxy setting: Failed to write DB",
+      6000,
+    );
+
+    // Early return without orchestrator
+    el.orchestrator = null;
+    await el.onProxyToggle(true);
+
+    document.body.removeChild(el);
+  });
+
+  it("handles saveProxyUrl error, event listener click, and early returns", async () => {
+    const { showError } = await import("../../../ui/toast.js");
+    const { setProxyUrl } =
+      await import("../../../core/orchestrator/utils/settings.js");
+
+    const orch = createOrchestratorStub();
+    (orchestratorStore as any).orchestrator = orch;
+
+    const el = new ShadowClawNetworking();
+    document.body.appendChild(el);
+    await waitForNetworkingReady(el);
+
+    const input = el.shadowRoot?.querySelector(
+      '[data-setting="proxy-url-input"]',
+    ) as HTMLInputElement;
+    input.value = "https://proxy.example.com";
+
+    // Error saving
+    (setProxyUrl as any).mockRejectedValueOnce(
+      new Error("Network config error"),
+    );
+    await el.saveProxyUrl();
+    expect(showError).toHaveBeenCalledWith(
+      "Error saving proxy URL: Network config error",
+      6000,
+    );
+
+    // Trigger save via button click
+    const saveBtn = el.shadowRoot?.querySelector(
+      '[data-action="save-proxy-url"]',
+    ) as HTMLButtonElement;
+    input.value = "https://new-proxy.com";
+    saveBtn.click();
+
+    // Trigger toggle via checkbox change
+    const toggle = el.shadowRoot?.querySelector(
+      '[data-setting="proxy-toggle"]',
+    ) as HTMLInputElement;
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event("change"));
+
+    // Early returns in saveProxyUrl
+    el.orchestrator = null;
+    await el.saveProxyUrl();
+
+    // Render early return when orchestrator is null
+    await el.render();
+
+    document.body.removeChild(el);
+  });
 });

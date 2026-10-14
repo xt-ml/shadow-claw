@@ -8,7 +8,9 @@ jest.unstable_mockModule("../../db/saveTask.js", () => ({
   saveTask: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../core/effect.js", () => ({ effect: jest.fn() }));
+jest.unstable_mockModule("../../core/effect.js", () => ({
+  effect: jest.fn(() => () => {}),
+}));
 
 jest.unstable_mockModule("../../content/markdown.js", () => ({
   renderMarkdown: jest.fn((x) => x),
@@ -807,6 +809,226 @@ describe("shadow-claw-tasks", () => {
       await component.updateTaskList({} as any);
 
       expect(list.innerHTML).toContain("Push");
+    });
+
+    it("handles dialog close buttons and backdrop clicks", () => {
+      const component = new ShadowClawTasks();
+      document.body.appendChild(component);
+      const dialog = component.shadowRoot?.querySelector(
+        "dialog",
+      ) as HTMLDialogElement;
+      dialog.close = jest.fn();
+
+      const closeBtn = component.shadowRoot?.querySelector(
+        ".tasks__dialog-close",
+      ) as HTMLButtonElement;
+      closeBtn?.dispatchEvent(new Event("click"));
+      expect(dialog.close).toHaveBeenCalledTimes(1);
+
+      const cancelBtn = component.shadowRoot?.querySelector(
+        ".tasks__btn-cancel",
+      ) as HTMLButtonElement;
+      cancelBtn?.dispatchEvent(new Event("click"));
+      expect(dialog.close).toHaveBeenCalledTimes(2);
+
+      // Click on dialog backdrop
+      Object.defineProperty(dialog, "target", { value: dialog });
+      dialog.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      expect(dialog.close).toHaveBeenCalledTimes(3);
+
+      document.body.removeChild(component);
+    });
+
+    it("handles restore button triggering file input click", () => {
+      const component = new ShadowClawTasks();
+      document.body.appendChild(component);
+      const restoreBtn = component.shadowRoot?.querySelector(
+        ".tasks__restore-btn",
+      ) as HTMLButtonElement;
+      const restoreInput = component.shadowRoot?.querySelector(
+        ".tasks__hidden-restore",
+      ) as HTMLInputElement;
+
+      const clickSpy = jest
+        .spyOn(restoreInput, "click")
+        .mockImplementation(() => {});
+      restoreBtn?.dispatchEvent(new Event("click"));
+      expect(clickSpy).toHaveBeenCalled();
+      clickSpy.mockRestore();
+
+      document.body.removeChild(component);
+    });
+
+    it("handles task item action buttons and drag-and-drop lifecycle", async () => {
+      const component = new ShadowClawTasks();
+      document.body.appendChild(component);
+      const editSpy = jest
+        .spyOn(component, "handleEdit")
+        .mockImplementation(() => {});
+      const deleteSpy = jest
+        .spyOn(component, "handleDelete")
+        .mockImplementation(async () => {});
+      const runSpy = jest
+        .spyOn(component, "handleRun")
+        .mockImplementation(async () => {});
+      const reorderSpy = jest
+        .spyOn(component, "handleReorder")
+        .mockImplementation(async () => {});
+
+      (orchestratorStore as any).tasks = [
+        {
+          id: "task-1",
+          name: "Task 1",
+          schedule: "0 9 * * *",
+          prompt: "Echo 1",
+          enabled: true,
+        },
+        {
+          id: "task-2",
+          name: "Task 2",
+          schedule: "0 10 * * *",
+          prompt: "Echo 2",
+          enabled: true,
+        },
+      ];
+
+      await component.updateTaskList({} as any);
+
+      const items = component.shadowRoot?.querySelectorAll(".tasks__item");
+      expect(items?.length).toBe(2);
+
+      const firstItem = items![0] as HTMLElement;
+      const secondItem = items![1] as HTMLElement;
+
+      // Edit, delete, run clicks
+      const runBtn = firstItem.querySelector(".tasks__run-btn");
+      runBtn?.dispatchEvent(new Event("click"));
+      expect(runSpy).toHaveBeenCalled();
+
+      const editBtn = firstItem.querySelector(".tasks__edit-btn");
+      editBtn?.dispatchEvent(new Event("click"));
+      expect(editSpy).toHaveBeenCalled();
+
+      const deleteBtn = firstItem.querySelector(".tasks__delete-btn");
+      deleteBtn?.dispatchEvent(new Event("click"));
+      expect(deleteSpy).toHaveBeenCalled();
+
+      // Drag and drop events
+      const handleEl = firstItem.querySelector(
+        ".tasks__drag-handle",
+      ) as HTMLElement;
+      const dataTransfer = { setData: jest.fn() };
+      const dragStartEvent = new Event("dragstart");
+      Object.defineProperty(dragStartEvent, "dataTransfer", {
+        value: dataTransfer,
+      });
+      handleEl?.dispatchEvent(dragStartEvent);
+      expect(firstItem.classList.contains("dragging")).toBe(true);
+
+      // Dragover on second item
+      const dragOverEvent = new Event("dragover", { cancelable: true });
+      secondItem.dispatchEvent(dragOverEvent);
+      expect(secondItem.classList.contains("drag-over")).toBe(true);
+
+      // Dragleave on second item
+      secondItem.dispatchEvent(new Event("dragleave"));
+      expect(secondItem.classList.contains("drag-over")).toBe(false);
+
+      // Dragover again then drop
+      secondItem.dispatchEvent(dragOverEvent);
+      const dropEvent = new Event("drop", { cancelable: true });
+      secondItem.dispatchEvent(dropEvent);
+      expect(reorderSpy).toHaveBeenCalledWith("task-1", "task-2");
+
+      // Dragend
+      handleEl?.dispatchEvent(new Event("dragend"));
+      expect(firstItem.classList.contains("dragging")).toBe(false);
+
+      // Touch drag
+      const touchStartEvent = new CustomEvent("touchstart", {
+        cancelable: true,
+      });
+      Object.defineProperty(touchStartEvent, "touches", {
+        value: [{ identifier: 1, clientX: 10, clientY: 20 }],
+      });
+      handleEl?.dispatchEvent(touchStartEvent);
+      expect(firstItem.classList.contains("dragging")).toBe(true);
+
+      document.body.removeChild(component);
+    });
+
+    it("updates auto scroll speed correctly", () => {
+      const component = new ShadowClawTasks();
+      document.body.appendChild(component);
+      const content = component.shadowRoot?.querySelector(
+        ".tasks__content",
+      ) as HTMLElement;
+      if (content) {
+        jest.spyOn(content, "getBoundingClientRect").mockReturnValue({
+          top: 100,
+          bottom: 500,
+          left: 0,
+          right: 300,
+          height: 400,
+          width: 300,
+          x: 0,
+          y: 100,
+          toJSON: () => {},
+        });
+      }
+
+      // Near top (top is 100, clientY = 110)
+      (component as any)._updateAutoScrollSpeed(110);
+      expect((component as any)._autoScrollSpeed).toBeLessThan(0);
+
+      // Near bottom (bottom is 500, clientY = 490)
+      (component as any)._updateAutoScrollSpeed(490);
+      expect((component as any)._autoScrollSpeed).toBeGreaterThan(0);
+
+      // Middle (clientY = 300)
+      (component as any)._updateAutoScrollSpeed(300);
+      expect((component as any)._autoScrollSpeed).toBe(0);
+
+      // Stop auto scroll
+      (component as any)._stopAutoScroll();
+      expect((component as any)._autoScrollActive).toBe(false);
+      expect((component as any)._autoScrollSpeed).toBe(0);
+
+      document.body.removeChild(component);
+    });
+
+    it("handles switching task type radios between prompt and tools", async () => {
+      const component = new ShadowClawTasks();
+      document.body.appendChild(component);
+      const typeRadios = component.shadowRoot?.querySelectorAll(
+        "input[name='taskType']",
+      );
+      const toolsRadio = Array.from(typeRadios || []).find(
+        (r: any) => r.value === "tools",
+      ) as HTMLInputElement;
+      const promptRadio = Array.from(typeRadios || []).find(
+        (r: any) => r.value === "prompt",
+      ) as HTMLInputElement;
+
+      if (toolsRadio) {
+        toolsRadio.checked = true;
+        toolsRadio.dispatchEvent(new Event("change", { bubbles: true }));
+        const promptGroup = component.shadowRoot?.querySelector(
+          ".tasks__prompt-group",
+        );
+        expect(promptGroup?.getAttribute("style")).toContain("display: none");
+      }
+
+      if (promptRadio) {
+        promptRadio.checked = true;
+        promptRadio.dispatchEvent(new Event("change", { bubbles: true }));
+        const toolsGroup = component.shadowRoot?.querySelector(
+          ".tasks__tools-group",
+        );
+        expect(toolsGroup?.getAttribute("style")).toContain("display: none");
+      }
+
+      document.body.removeChild(component);
     });
   });
 });

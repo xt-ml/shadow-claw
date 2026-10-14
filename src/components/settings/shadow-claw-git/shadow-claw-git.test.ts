@@ -7,6 +7,9 @@ jest.unstable_mockModule("../../../config/config.js", () => ({
     GIT_CORS_PROXY: "git_cors_proxy",
     GIT_ACCOUNTS: "git_accounts",
     GIT_DEFAULT_ACCOUNT: "git_default_account",
+    GIT_TOKEN: "git_token",
+    GIT_USERNAME: "git_username",
+    GIT_PASSWORD: "git_password",
   },
   getProviderTokenAuthScheme: (
     providerId: string,
@@ -451,6 +454,133 @@ describe("shadow-claw-git", () => {
       "git_author_email",
       "author@example.com",
     );
+
+    document.body.removeChild(el);
+  });
+
+  it("handles saveAccountForm validation, edit existing account, and oauth missing token", async () => {
+    const el = new ShadowClawGit();
+    document.body.appendChild(el);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await el.render();
+    el.db = {} as any;
+
+    // 1. Missing label and hostPattern
+    el.showAccountForm("new");
+    const slot = el.shadowRoot?.querySelector(
+      '[data-region="account-form-slot"]',
+    ) as HTMLElement;
+    expect(slot).toBeDefined();
+
+    const labelInput = slot.querySelector(
+      '[data-field="acct-label"]',
+    ) as HTMLInputElement;
+    const hostInput = slot.querySelector(
+      '[data-field="acct-host"]',
+    ) as HTMLInputElement;
+    const authModeSelect = slot.querySelector(
+      '[data-field="acct-auth-mode"]',
+    ) as HTMLSelectElement;
+
+    labelInput.value = "";
+    hostInput.value = "";
+    await el.saveAccountForm();
+
+    // 2. OAuth mode with no token
+    labelInput.value = "OAuth Acc";
+    hostInput.value = "github.com";
+    authModeSelect.value = "oauth";
+    await el.saveAccountForm();
+
+    el.accounts = [
+      {
+        id: "acc-edit",
+        label: "Old Label",
+        hostPattern: "github.com",
+        authMode: "token",
+        token: "old-token",
+      } as any,
+    ];
+    el.showAccountForm("acc-edit");
+
+    const editLabelInput = slot.querySelector(
+      '[data-field="acct-label"]',
+    ) as HTMLInputElement;
+    const editHostInput = slot.querySelector(
+      '[data-field="acct-host"]',
+    ) as HTMLInputElement;
+    const editAuthModeSelect = slot.querySelector(
+      '[data-field="acct-auth-mode"]',
+    ) as HTMLSelectElement;
+    const editTokenInput = slot.querySelector(
+      '[data-field="acct-token"]',
+    ) as HTMLInputElement;
+    const editPassInput = slot.querySelector(
+      '[data-field="acct-password"]',
+    ) as HTMLInputElement;
+    const editUserInput = slot.querySelector(
+      '[data-field="acct-username"]',
+    ) as HTMLInputElement;
+
+    editLabelInput.value = "New Label";
+    editHostInput.value = "github.com/org";
+    editAuthModeSelect.value = "token";
+    editTokenInput.value = "new-token-raw";
+    editPassInput.value = "new-pass-raw";
+    editUserInput.value = "new-user";
+
+    await el.saveAccountForm();
+
+    const edited = el.accounts.find((a) => a.id === "acc-edit");
+    expect(edited).toBeDefined();
+    expect(edited?.label).toBe("New Label");
+    expect(edited?.hostPattern).toBe("github.com/org");
+    expect(edited?.username).toBe("new-user");
+
+    document.body.removeChild(el);
+  });
+
+  it("migrates legacy account configuration when accounts list is empty", async () => {
+    const { getConfig } = await import("../../../db/getConfig.js");
+    const { setConfig } = await import("../../../db/setConfig.js");
+
+    (getConfig as any).mockImplementation(async (_db: any, key: string) => {
+      if (key === "git_token") return "legacy-enc-token";
+      if (key === "git_username") return "legacy-user";
+      if (key === "git_password") return "legacy-enc-pass";
+      return undefined;
+    });
+
+    const el = new ShadowClawGit();
+    document.body.appendChild(el);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    el.db = {} as any;
+    el.accounts = [];
+
+    await el.migrateLegacyAccount();
+
+    expect(el.accounts).toHaveLength(1);
+    expect(el.accounts[0].token).toBe("legacy-enc-token");
+    expect(el.accounts[0].username).toBe("legacy-user");
+    expect(el.defaultAccountId).toBe("legacy-migrated");
+    expect(setConfig).toHaveBeenCalledWith(el.db, "git_accounts", el.accounts);
+
+    document.body.removeChild(el);
+  });
+
+  it("handles deleteAccount when removing the only account", async () => {
+    const el = new ShadowClawGit();
+    document.body.appendChild(el);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    el.db = {} as any;
+    el.accounts = [
+      { id: "single-acc", label: "Single", hostPattern: "gh.com" } as any,
+    ];
+    el.defaultAccountId = "single-acc";
+
+    await el.deleteAccount("single-acc");
+    expect(el.accounts).toHaveLength(0);
+    expect(el.defaultAccountId).toBe("");
 
     document.body.removeChild(el);
   });

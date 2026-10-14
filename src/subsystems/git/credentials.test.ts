@@ -233,5 +233,265 @@ describe("git credentials", () => {
       expect(creds.token).toBeUndefined();
       expect(creds.provider).toBe("generic");
     });
+
+    it("matches account by authMode when multiple accounts match host", async () => {
+      storedConfig["git_accounts"] = [
+        {
+          id: "pat-acct",
+          hostPattern: "github.com",
+          token: "enc:pat-tok",
+          authMode: "token",
+        },
+        {
+          id: "oauth-acct",
+          hostPattern: "github.com",
+          token: "enc:oauth-tok",
+          authMode: "oauth",
+        },
+      ];
+
+      const creds = await resolveGitCredentials(
+        mockDb,
+        "https://github.com/foo/bar",
+        { authMode: "oauth" },
+      );
+      expect(creds.accountId).toBe("oauth-acct");
+      expect(creds.token).toBe("oauth-tok");
+    });
+
+    it("matches legacy account without authMode when token mode requested", async () => {
+      storedConfig["git_accounts"] = [
+        {
+          id: "legacy-acct",
+          hostPattern: "github.com",
+          token: "enc:legacy-tok",
+        },
+      ];
+
+      const creds = await resolveGitCredentials(
+        mockDb,
+        "https://github.com/foo/bar",
+        { authMode: "token" },
+      );
+      expect(creds.accountId).toBe("legacy-acct");
+      expect(creds.token).toBe("legacy-tok");
+    });
+
+    it("falls back to default account matching url hostPattern when direct host match fails", async () => {
+      storedConfig["git_default_account"] = "default-match";
+      storedConfig["git_accounts"] = [
+        {
+          id: "default-match",
+          hostPattern: "ghe.internal.corp",
+          token: "enc:internal-tok",
+        },
+      ];
+
+      const creds = await resolveGitCredentials(
+        mockDb,
+        "https://ghe.internal.corp/org/repo",
+      );
+      expect(creds.accountId).toBe("default-match");
+      expect(creds.token).toBe("internal-tok");
+    });
+
+    it("falls back to first account matching authMode when no url provided", async () => {
+      storedConfig["git_accounts"] = [
+        {
+          id: "acct-pat",
+          hostPattern: "github.com",
+          token: "enc:pat-tok",
+          authMode: "token",
+        },
+        {
+          id: "acct-oauth",
+          hostPattern: "github.com",
+          token: "enc:oauth-tok",
+          authMode: "oauth",
+        },
+      ];
+
+      const creds = await resolveGitCredentials(mockDb, undefined, {
+        authMode: "oauth",
+      });
+      expect(creds.accountId).toBe("acct-oauth");
+    });
+
+    it("falls back to first account when no url and no default account", async () => {
+      storedConfig["git_accounts"] = [
+        {
+          id: "first-acct",
+          hostPattern: "github.com",
+          token: "enc:first-tok",
+        },
+      ];
+
+      const creds = await resolveGitCredentials(mockDb);
+      expect(creds.accountId).toBe("first-acct");
+    });
+
+    it("refreshes expired oauth token successfully", async () => {
+      const originalFetch = globalThis.fetch;
+      const mockFetch = jest.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          accessToken: "new-access-token",
+          refreshToken: "new-refresh-token",
+          expiresIn: 3600,
+          scope: "repo read:org",
+          tokenType: "Bearer",
+        }),
+      })) as any;
+      globalThis.fetch = mockFetch;
+
+      try {
+        storedConfig["git_accounts"] = [
+          {
+            id: "oauth-refresh-acct",
+            hostPattern: "github.com",
+            provider: "github",
+            authMode: "oauth",
+            token: "enc:old-access",
+            refreshToken: "enc:old-refresh",
+            oauthProviderId: "github",
+            oauthClientId: "client-id-123",
+            oauthClientSecret: "enc:secret-123",
+            accessTokenExpiresAt: Date.now() - 1000,
+          },
+        ];
+
+        const creds = await resolveGitCredentials(
+          mockDb,
+          "https://github.com/foo/bar",
+        );
+        expect(creds.token).toBe("new-access-token");
+        expect(mockFetch).toHaveBeenCalled();
+        const updated = storedConfig["git_accounts"][0];
+        expect(updated.token).toBe("enc:new-access-token");
+        expect(updated.refreshToken).toBe("enc:new-refresh-token");
+        expect(updated.scopes).toEqual(["repo", "read:org"]);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it("marks refresh failure and transitions to reauthRequired after threshold", async () => {
+      const originalFetch = globalThis.fetch;
+      const mockFetch = jest.fn(async () => ({
+        ok: false,
+        status: 400,
+      })) as any;
+      globalThis.fetch = mockFetch;
+
+      try {
+        storedConfig["git_accounts"] = [
+          {
+            id: "failing-oauth-acct",
+            hostPattern: "github.com",
+            provider: "github",
+            authMode: "oauth",
+            token: "enc:token",
+            refreshToken: "enc:refresh",
+            oauthProviderId: "github",
+            oauthClientId: "client-id-123",
+            oauthRefreshFailureCount: 2,
+            accessTokenExpiresAt: Date.now() - 1000,
+          },
+        ];
+
+        const creds = await resolveGitCredentials(
+          mockDb,
+          "https://github.com/foo/bar",
+          { forceRefresh: true },
+        );
+        expect(creds.reauthRequired).toBe(true);
+        expect(storedConfig["git_accounts"][0].oauthReauthRequired).toBe(true);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it("handles fetch exception during oauth refresh gracefully", async () => {
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = jest.fn(async () => {
+        throw new Error("Network offline");
+      }) as any;
+
+      try {
+        storedConfig["git_accounts"] = [
+          {
+            id: "network-fail-acct",
+            hostPattern: "github.com",
+            provider: "github",
+            authMode: "oauth",
+            token: "enc:token",
+            refreshToken: "enc:refresh",
+            oauthProviderId: "github",
+            oauthClientId: "client-id-123",
+            accessTokenExpiresAt: Date.now() - 1000,
+          },
+        ];
+
+        const creds = await resolveGitCredentials(
+          mockDb,
+          "https://github.com/foo/bar",
+        );
+        expect(creds.token).toBe("token");
+        expect(storedConfig["git_accounts"][0].oauthRefreshFailureCount).toBe(
+          1,
+        );
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it("handles oauth response missing accessToken", async () => {
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = jest.fn(async () => ({
+        ok: true,
+        json: async () => ({}),
+      })) as any;
+
+      try {
+        storedConfig["git_accounts"] = [
+          {
+            id: "missing-token-acct",
+            hostPattern: "github.com",
+            provider: "github",
+            authMode: "oauth",
+            token: "enc:token",
+            refreshToken: "enc:refresh",
+            oauthProviderId: "github",
+            oauthClientId: "client-id-123",
+            accessTokenExpiresAt: Date.now() - 1000,
+          },
+        ];
+
+        const creds = await resolveGitCredentials(
+          mockDb,
+          "https://github.com/foo/bar",
+        );
+        expect(creds.token).toBe("token");
+        expect(storedConfig["git_accounts"][0].oauthRefreshFailureCount).toBe(
+          1,
+        );
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it("resolves full legacy config with password and user metadata", async () => {
+      storedConfig["git_token"] = "enc:pat";
+      storedConfig["git_password"] = "enc:secret-pass";
+      storedConfig["git_username"] = "myuser";
+      storedConfig["git_author_name"] = "Full Name";
+      storedConfig["git_author_email"] = "me@example.com";
+
+      const creds = await resolveGitCredentials(mockDb);
+      expect(creds.password).toBe("secret-pass");
+      expect(creds.username).toBe("myuser");
+      expect(creds.authorName).toBe("Full Name");
+      expect(creds.authorEmail).toBe("me@example.com");
+    });
   });
 });

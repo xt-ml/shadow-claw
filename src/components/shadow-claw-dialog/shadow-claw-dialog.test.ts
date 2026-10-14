@@ -1,3 +1,4 @@
+import { jest } from "@jest/globals";
 import { ShadowClawDialog } from "./shadow-claw-dialog.js";
 
 describe("shadow-claw-dialog", () => {
@@ -30,6 +31,81 @@ describe("shadow-claw-dialog", () => {
     expect(dialog?.querySelector(".content")?.textContent).toBe(
       "From template",
     );
+
+    document.body.removeChild(el);
+  });
+
+  it("exposes observedAttributes and updates attributes dynamically", () => {
+    expect(ShadowClawDialog.observedAttributes).toEqual([
+      "dialog-class",
+      "dialog-aria-label",
+      "dialog-aria-labelledby",
+    ]);
+
+    const el = new ShadowClawDialog();
+    document.body.appendChild(el);
+
+    el.setAttribute("dialog-class", "custom-class");
+    el.setAttribute("dialog-aria-label", "Dynamic Label");
+    el.setAttribute("dialog-aria-labelledby", "heading-id");
+
+    const dialog = el.dialog!;
+    expect(dialog.className).toBe("custom-class");
+    expect(dialog.getAttribute("aria-label")).toBe("Dynamic Label");
+    expect(dialog.getAttribute("aria-labelledby")).toBe("heading-id");
+
+    // Remove aria attributes
+    el.removeAttribute("dialog-aria-label");
+    el.removeAttribute("dialog-aria-labelledby");
+    expect(dialog.hasAttribute("aria-label")).toBe(false);
+    expect(dialog.hasAttribute("aria-labelledby")).toBe(false);
+
+    document.body.removeChild(el);
+  });
+
+  it("supports showModal, open, close, and returnValue", () => {
+    const el = new ShadowClawDialog();
+    document.body.appendChild(el);
+
+    const dialog = el.dialog!;
+    dialog.showModal = jest.fn(() => {
+      dialog.setAttribute("open", "");
+    });
+    dialog.close = jest.fn((ret?: string) => {
+      dialog.removeAttribute("open");
+      if (ret !== undefined) dialog.returnValue = ret;
+    });
+
+    expect(el.open).toBe(false);
+    el.showModal();
+    expect(dialog.showModal).toHaveBeenCalled();
+    expect(el.open).toBe(true);
+
+    el.returnValue = "confirmed";
+    expect(el.returnValue).toBe("confirmed");
+
+    el.close("cancel");
+    expect(dialog.close).toHaveBeenCalledWith("cancel");
+    expect(el.returnValue).toBe("cancel");
+    expect(el.open).toBe(false);
+
+    document.body.removeChild(el);
+  });
+
+  it("handles fallback showModal and close when native methods are absent", () => {
+    const el = new ShadowClawDialog();
+    document.body.appendChild(el);
+
+    const dialog = el.dialog!;
+    (dialog as any).showModal = undefined;
+    (dialog as any).close = undefined;
+
+    el.showModal();
+    expect(dialog.hasAttribute("open")).toBe(true);
+
+    el.close("closed-val");
+    expect(dialog.hasAttribute("open")).toBe(false);
+    expect(dialog.returnValue).toBe("closed-val");
 
     document.body.removeChild(el);
   });

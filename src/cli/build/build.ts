@@ -341,7 +341,11 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
         src.includes("/assets/cache/") ||
         src.includes("\\assets\\cache\\") ||
         src.includes("/.cache/") ||
-        src.includes("\\.cache\\");
+        src.includes("\\.cache\\") ||
+        src.includes("/cache/") ||
+        src.includes("\\cache\\") ||
+        src.endsWith("/cache") ||
+        src.endsWith("\\cache");
       return !isCache;
     },
   });

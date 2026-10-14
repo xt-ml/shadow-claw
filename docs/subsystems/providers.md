@@ -29,9 +29,9 @@ All providers are declared in `src/config/config.ts` under `PROVIDERS`:
 
 | Provider ID               | Format            | Streaming | API Key Required |
 | ------------------------- | ----------------- | --------- | ---------------- |
-| `prompt_api`              | `prompt_api`      | ❌        | ❌ (Default)     |
+| `prompt_api`              | `prompt_api`      | ❌        | ❌               |
 | `litert_lm_browser`       | `litert_lm`       | ❌        | ❌               |
-| `transformers_js_browser` | `transformers_js` | ❌        | ❌               |
+| `transformers_js_browser` | `transformers_js` | ❌        | ❌ (Default)     |
 | `transformers_js_local`   | `openai`          | ✅        | ❌               |
 | `openrouter`              | `openai`          | ✅        | ✅               |
 | `huggingface`             | `openai`          | ✅        | ✅               |
@@ -119,11 +119,18 @@ Used by direct Google Gemini API integrations (`format: "google"`). Note that th
 - **Response parsing**:
   - Extracts text and `functionCall` blocks from the response candidates.
 
+### Transformers.js Browser format (`src/worker/worker.ts` & `src/worker/utils/handleInvoke.ts`)
+
+- **Default Provider**: `transformers_js_browser` ("Transformers.js (Browser)") is the default in-browser provider in ShadowClaw, pre-configured with model `onnx-community/Qwen3-0.6B-ONNX` and guided onboarding.
+- **Zero Configuration**: Keyless, private, zero-cost execution running entirely in-browser once models are cached.
+- **WebGPU Acceleration with CPU/WASM Fallback**: Probes WebGPU hardware capabilities (`shader-f16`) and transparently falls back to WebAssembly CPU (`device: "wasm"`, `dtype: "q4"`) if WebGPU initialization fails or software emulation is detected.
+- **Local Model Ranking & Catalog**: Dynamically ranks and sorts models for browser execution, prioritizing compact instruction-tuned models with tool-calling capabilities.
+
 ### Prompt API format (`src/subsystems/providers/prompt-api-provider.ts`)
 
-Backed by the `builtin-ai-tasks` subsystem with dynamic polyfill loading and a Main-Thread RPC bridge (`request-native-ai-task`) to execute native browser Task APIs (`window.ai.*` / `window.translation.*` and global constructors for Summarizer, Writer, Rewriter, Proofreader, Language Detector, and Translator) off the Web Worker thread. Polyfill fallback for `prompt_api` is transparently enabled for provider invocations and context compaction.
+Backed by the `builtin-ai-tasks` subsystem with dynamic polyfill loading and a Main-Thread RPC bridge (`request-native-ai-task`) to execute native browser Task APIs (`window.ai.*` / `window.translation.*` and global constructors for Summarizer, Writer, Rewriter, Proofreader, Language Detector, and Translator) off the Web Worker thread. When manually selected, polyfill fallback for `prompt_api` is transparently enabled for provider invocations and context compaction.
 
-- **Default Provider**: `prompt_api` ("Prompt API (Browser)") is the default provider in ShadowClaw.
+- **Manual Selection**: Available when selected in Settings or workspace configuration for native Chrome Built-in AI execution.
 - **Zero Configuration**: Keyless, zero-cost execution with zero network requirements once models are cached.
 - **Dynamic Fallback Architecture**:
   - Automatically probes hardware acceleration via **WebNN** (`navigator.ml`) and asynchronous WebGPU feature probing (`isWebGpuAdapterAvailable()`). Software-emulated WebGPU adapters and those lacking `shader-f16` support are rejected to ensure optimal performance.

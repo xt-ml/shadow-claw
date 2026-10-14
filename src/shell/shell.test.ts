@@ -62,4 +62,12 @@ describe("executeShell", () => {
       }),
     );
   });
+
+  it("handles errors during execution gracefully", async () => {
+    mockExec.mockRejectedValueOnce(new Error("Bash failed"));
+    const result = await executeShell({} as any, "bad command", "group1");
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toBe("Bash failed");
+  });
 });

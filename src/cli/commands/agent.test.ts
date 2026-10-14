@@ -3267,4 +3267,138 @@ Fetch today's weather.
     expect(calledOpts.model).toBe("test-model");
     expect(calledOpts.agent).toBe(true);
   });
+
+  it("prints usage when unknown subcommand passed to runAgentCommand", async () => {
+    const { runAgentCommand } = await import("./agent.js");
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+
+    await runAgentCommand("unknown-command", [], {});
+
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Usage: shadow-claw agent"),
+    );
+    logSpy.mockRestore();
+  });
+
+  it("handles skill subcommand without name", async () => {
+    const { runAgentCommand } = await import("./agent.js");
+    const errSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    await runAgentCommand("skill", [], {});
+
+    expect(errSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Skill name required"),
+    );
+    expect(process.exitCode).toBe(1);
+    errSpy.mockRestore();
+  });
+
+  it("executes default listenFn dynamically importing webrtc-listen", async () => {
+    const { runAgentCommand } = await import("./agent.js");
+    const { CliWebRtcListener } =
+      await import("../utils/webrtc-control-client.js");
+    jest
+      .spyOn(CliWebRtcListener.prototype, "start")
+      .mockRejectedValueOnce(new Error("Listen stop"));
+    const errSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    await runAgentCommand("listen", [], { workspace: tmpDir });
+
+    expect(errSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Error starting WebRTC listener: Listen stop"),
+    );
+    errSpy.mockRestore();
+  });
+
+  it("dispatches init, skills, tools, tool, clear, and models via runAgentCommand", async () => {
+    const { runAgentCommand } = await import("./agent.js");
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    const errSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    // init
+    const initRes = await runAgentCommand("init", [], { workspace: tmpDir });
+    expect(initRes.success).toBe(true);
+
+    // skills (with a skill present)
+    const dummySkillDir = path.join(tmpDir, ".agents/skills/dummy");
+    await mkdir(dummySkillDir, { recursive: true });
+    await writeFile(
+      path.join(dummySkillDir, "SKILL.md"),
+      "---\nname: dummy\ndescription: Test skill description\n---\nBody",
+      "utf8",
+    );
+    const skillsRes = await runAgentCommand("skills", [], {
+      workspace: tmpDir,
+    });
+    expect(skillsRes.skills.length).toBeGreaterThan(0);
+
+    // tools (list)
+    const toolsRes = await runAgentCommand("tools", [], { workspace: tmpDir });
+    expect(toolsRes.tools).toBeDefined();
+
+    // tool (missing name)
+    await runAgentCommand("tool", [], { workspace: tmpDir });
+    expect(errSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Tool name required"),
+    );
+
+    // clear
+    const clearRes = await runAgentCommand("clear", [], { workspace: tmpDir });
+    expect(clearRes.success).toBe(true);
+
+    // model list
+    const modelRes = await runAgentCommand("models", ["list"], {
+      workspace: tmpDir,
+      quiet: true,
+    });
+    expect(modelRes.success).toBe(true);
+
+    // tools with toolName
+    const toolCallRes = await runAgentCommand(
+      "tools",
+      ["bash", '{"command":"echo hi"}'],
+      { workspace: tmpDir, quiet: true },
+    );
+    expect(toolCallRes).toBeDefined();
+
+    // skill with skillName
+    await expect(
+      runAgentCommand("skill", ["non-existent-skill"], { workspace: tmpDir }),
+    ).rejects.toThrow("not found in workspace");
+
+    // run with prompt
+    const { getAgentCore } = await import("../utils/agent-core.js");
+    const core = await getAgentCore();
+    const runRes = await runAgentCommand("run", ["Hello agent"], {
+      workspace: tmpDir,
+      provider: "openrouter",
+      apiKey: "sk-test",
+      invokeHandler: async (_db, payload) => {
+        core.post({
+          type: "response",
+          payload: { groupId: payload.groupId, text: "Ready." },
+        });
+      },
+      quiet: true,
+    });
+    expect(runRes.success).toBe(true);
+
+    // run with empty prompt
+    const runEmptyRes = await runAgentCommand("run", [], {
+      workspace: tmpDir,
+      provider: "openrouter",
+      apiKey: "sk-test",
+      invokeHandler: async (_db, payload) => {
+        core.post({
+          type: "response",
+          payload: { groupId: payload.groupId, text: "Ready." },
+        });
+      },
+      quiet: true,
+    });
+    expect(runEmptyRes.success).toBe(false);
+
+    logSpy.mockRestore();
+    errSpy.mockRestore();
+  });
 });

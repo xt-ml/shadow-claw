@@ -138,4 +138,77 @@ describe("runSendFileCommand", () => {
       expect.stringContaining("The CSV has 2 columns and 1 row."),
     );
   });
+
+  it("fails when path is a directory", async () => {
+    await runSendFileCommand(tempDir, {});
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Cannot send directory"),
+    );
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("fails when no client specified and no clients connected", async () => {
+    const filePath = path.join(tempDir, "file.txt");
+    fs.writeFileSync(filePath, "data", "utf8");
+
+    jest
+      .spyOn(CliControlClient.prototype, "listClients")
+      .mockResolvedValueOnce([]);
+
+    await runSendFileCommand(filePath, {});
+
+    expect(errorSpy).toHaveBeenCalledWith("Error: No clients are connected.");
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("handles client transfer failure", async () => {
+    const filePath = path.join(tempDir, "fail.txt");
+    fs.writeFileSync(filePath, "data", "utf8");
+
+    jest
+      .spyOn(CliControlClient.prototype, "sendFile")
+      .mockResolvedValueOnce({ success: false, error: "Disk quota exceeded" });
+
+    await runSendFileCommand(filePath, { client: "client-1" });
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      "Error from client: Disk quota exceeded",
+    );
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("handles exception thrown during file send", async () => {
+    const filePath = path.join(tempDir, "err.txt");
+    fs.writeFileSync(filePath, "data", "utf8");
+
+    jest
+      .spyOn(CliControlClient.prototype, "sendFile")
+      .mockRejectedValueOnce(new Error("Pipe broken"));
+
+    await runSendFileCommand(filePath, { client: "client-1" });
+
+    expect(errorSpy).toHaveBeenCalledWith("Error sending file: Pipe broken");
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("outputs json when --json is passed and no reply text", async () => {
+    const filePath = path.join(tempDir, "json.txt");
+    fs.writeFileSync(filePath, "data", "utf8");
+
+    jest.spyOn(CliControlClient.prototype, "sendFile").mockResolvedValueOnce({
+      success: true,
+      data: { transferredBytes: 4 },
+    });
+
+    await runSendFileCommand(filePath, {
+      client: "client-1",
+      json: true,
+      name: "custom.txt",
+      timeout: 15,
+    });
+
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining('"transferredBytes": 4'),
+    );
+  });
 });

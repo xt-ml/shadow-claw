@@ -1103,4 +1103,237 @@ describe("shadow-claw-settings", () => {
     await el.confirmRestore();
     expect(el.replaceConfigEntries).toHaveBeenCalled();
   });
+
+  it("handles tab keyboard navigation (arrows, home, end)", async () => {
+    const el = new ShadowClawSettings();
+    document.body.appendChild(el);
+    await el.render();
+
+    const buttons = Array.from(
+      el.shadowRoot?.querySelectorAll<HTMLButtonElement>("[data-tab-target]") ||
+        [],
+    );
+    expect(buttons.length).toBeGreaterThan(1);
+
+    const firstBtn = buttons[0];
+    const lastBtn = buttons[buttons.length - 1];
+
+    // ArrowRight / ArrowDown from first button moves to second
+    const arrowRightEvt = new KeyboardEvent("keydown", {
+      key: "ArrowRight",
+      cancelable: true,
+    });
+    el.handleTabKeydown(arrowRightEvt, firstBtn);
+    expect(arrowRightEvt.defaultPrevented).toBe(true);
+
+    // ArrowLeft / ArrowUp from first button moves to last
+    const arrowLeftEvt = new KeyboardEvent("keydown", {
+      key: "ArrowLeft",
+      cancelable: true,
+    });
+    el.handleTabKeydown(arrowLeftEvt, firstBtn);
+    expect(arrowLeftEvt.defaultPrevented).toBe(true);
+
+    // End key moves to last button
+    const endEvt = new KeyboardEvent("keydown", {
+      key: "End",
+      cancelable: true,
+    });
+    el.handleTabKeydown(endEvt, firstBtn);
+    expect(endEvt.defaultPrevented).toBe(true);
+
+    // Home key moves to first button
+    const homeEvt = new KeyboardEvent("keydown", {
+      key: "Home",
+      cancelable: true,
+    });
+    el.handleTabKeydown(homeEvt, lastBtn);
+    expect(homeEvt.defaultPrevented).toBe(true);
+
+    // Non-navigation key is ignored
+    const tabEvt = new KeyboardEvent("keydown", {
+      key: "Tab",
+      cancelable: true,
+    });
+    el.handleTabKeydown(tabEvt, firstBtn);
+    expect(tabEvt.defaultPrevented).toBe(false);
+
+    document.body.removeChild(el);
+  });
+
+  it("handles settings UI action buttons and dialog cancellation", async () => {
+    const el = new ShadowClawSettings();
+    document.body.appendChild(el);
+    await el.render();
+
+    // Backup button opens backup dialog
+    const backupBtn = el.shadowRoot?.querySelector(
+      '[data-action="backup-settings"]',
+    ) as HTMLElement;
+    backupBtn?.click();
+    expect(
+      el.shadowRoot
+        ?.querySelector(".settings__backup-dialog")
+        ?.hasAttribute("open"),
+    ).toBe(true);
+
+    // Cancel backup dialog
+    const cancelBackupBtn = el.shadowRoot?.querySelector(
+      '[data-action="cancel-backup-settings"]',
+    ) as HTMLElement;
+    cancelBackupBtn?.click();
+
+    // Clear settings button opens clear dialog
+    const clearBtn = el.shadowRoot?.querySelector(
+      '[data-action="clear-settings"]',
+    ) as HTMLElement;
+    clearBtn?.click();
+    expect(
+      el.shadowRoot
+        ?.querySelector(".settings__clear-dialog")
+        ?.hasAttribute("open"),
+    ).toBe(true);
+
+    // Cancel clear dialog
+    const cancelClearBtn = el.shadowRoot?.querySelector(
+      '[data-action="cancel-clear-settings"]',
+    ) as HTMLElement;
+    cancelClearBtn?.click();
+
+    // Restore button triggers restoreInput.click()
+    const restoreBtn = el.shadowRoot?.querySelector(
+      '[data-action="restore-settings"]',
+    ) as HTMLElement;
+    const restoreInput = el.shadowRoot?.querySelector(
+      ".settings__restore-input",
+    ) as HTMLInputElement;
+    const inputClickSpy = jest.spyOn(restoreInput, "click");
+    restoreBtn?.click();
+    expect(inputClickSpy).toHaveBeenCalled();
+
+    // restoreInput change event opens restore dialog
+    const mockFile = new File(["{}"], "my-backup.json", {
+      type: "application/json",
+    });
+    Object.defineProperty(restoreInput, "files", {
+      value: [mockFile],
+      configurable: true,
+    });
+    restoreInput.dispatchEvent(new Event("change"));
+    expect(el.pendingRestoreFile).toBe(mockFile);
+
+    // Cancel restore dialog clears pendingRestoreFile
+    const cancelRestoreBtn = el.shadowRoot?.querySelector(
+      '[data-action="cancel-restore-settings"]',
+    ) as HTMLElement;
+    cancelRestoreBtn?.click();
+    expect(el.pendingRestoreFile).toBeNull();
+
+    // Check chat-split-view-toggle
+    const splitViewToggle = el.shadowRoot?.querySelector(
+      '[data-setting="chat-split-view-toggle"]',
+    ) as HTMLInputElement;
+    if (splitViewToggle) {
+      splitViewToggle.checked = true;
+      splitViewToggle.dispatchEvent(new Event("change"));
+    }
+
+    // Check pages-auto-refresh-input
+    const refreshInput = el.shadowRoot?.querySelector(
+      '[data-setting="pages-auto-refresh-input"]',
+    ) as HTMLInputElement;
+    if (refreshInput) {
+      refreshInput.value = "60";
+      refreshInput.dispatchEvent(new Event("change"));
+    }
+
+    // Save dom allowed iframe hosts
+    const saveHostsBtn = el.shadowRoot?.querySelector(
+      '[data-action="save-dom-allowed-iframe-hosts"]',
+    ) as HTMLElement;
+    saveHostsBtn?.click();
+
+    document.body.removeChild(el);
+  });
+
+  it("handles SQLite database operations for getAllConfigEntries and replaceConfigEntries", async () => {
+    const el = new ShadowClawSettings();
+    const mockAll = jest.fn(() => [
+      { key: "site_name", value: "My Site" },
+      { key: "count", value: 42 },
+      null,
+    ]);
+    const mockRun = jest.fn();
+    const mockPrepare = jest.fn((_sql: string) => ({
+      all: mockAll,
+      run: mockRun,
+    }));
+
+    el.db = {
+      __brand: "ShadowClawSqliteDatabase",
+      db: { prepare: mockPrepare },
+    } as any;
+
+    const entries = await el.getAllConfigEntries();
+    expect(entries).toEqual([
+      { key: "site_name", value: "My Site" },
+      { key: "count", value: 42 },
+    ]);
+
+    await el.replaceConfigEntries([
+      { key: "k1", value: "v1" },
+      { key: "k2", value: { obj: true } },
+    ]);
+    expect(mockPrepare).toHaveBeenCalledWith("DELETE FROM config");
+    expect(mockRun).toHaveBeenCalledWith("k1", "v1");
+    expect(mockRun).toHaveBeenCalledWith("k2", JSON.stringify({ obj: true }));
+  });
+
+  it("handles saveAssistantName edge cases", async () => {
+    const el = new ShadowClawSettings();
+    document.body.appendChild(el);
+    await el.render();
+
+    // Empty assistant name gives warning
+    const nameInput = el.shadowRoot?.querySelector(
+      '[data-setting="assistant-name-input"]',
+    ) as HTMLInputElement;
+    nameInput.value = "   ";
+    await el.saveAssistantName();
+
+    // Non-empty assistant name saves successfully
+    nameInput.value = "ShadowClaw Master";
+    await el.saveAssistantName();
+
+    document.body.removeChild(el);
+  });
+
+  it("handles null db and error edge cases in confirmBackup, confirmClear, confirmRestore", async () => {
+    const el = new ShadowClawSettings();
+    el.db = null;
+
+    // confirmBackup with null db
+    await el.confirmBackup();
+
+    // confirmClear with null db
+    await el.confirmClear();
+
+    // confirmRestore with null db
+    await el.confirmRestore();
+
+    // confirmRestore without file
+    el.db = {} as any;
+    el.pendingRestoreFile = null;
+    await el.confirmRestore();
+
+    // confirmRestore with invalid JSON file
+    el.pendingRestoreFile = {
+      name: "broken.json",
+      text: async () => "invalid-json{",
+    } as any;
+    await el.confirmRestore();
+
+    // activateTab for integrations
+    await el.activateTab("integrations");
+  });
 });

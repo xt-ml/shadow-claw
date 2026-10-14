@@ -489,5 +489,83 @@ describe("executeNativeAiTask", () => {
         setHeadlessMode(false);
       }
     });
+
+    it("handles detect-language via fetch with JSON and fallback", async () => {
+      mockGetProvider.mockReturnValue({
+        id: "custom",
+        name: "Custom",
+        baseUrl: "http://localhost:8080/v1/chat/completions",
+        format: "openai",
+        defaultModel: "model-1",
+        requiresApiKey: false,
+      });
+
+      mockFormatRequest.mockReturnValue({
+        messages: [{ role: "user", content: "Detect" }],
+      });
+
+      mockParseResponse.mockReturnValue({
+        content: [{ type: "text", text: "not-json" }],
+      });
+
+      globalThis.fetch = jest.fn<any>().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+
+      const resFallback = await executeNativeAiTask({
+        taskType: "detect-language",
+        input: { text: "Hello" },
+        providerId: "custom",
+      });
+      expect(resFallback).toEqual([
+        { detectedLanguage: "en", confidence: 0.8 },
+      ]);
+
+      // Now with valid JSON
+      mockParseResponse.mockReturnValue({
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify([
+              { detectedLanguage: "es", confidence: 0.99 },
+            ]),
+          },
+        ],
+      });
+      const resJson = await executeNativeAiTask({
+        taskType: "detect-language",
+        input: { text: "Hola" },
+        providerId: "custom",
+      });
+      expect(resJson).toEqual([{ detectedLanguage: "es", confidence: 0.99 }]);
+    });
+
+    it("throws error when provider fetch fails with non-ok status", async () => {
+      mockGetProvider.mockReturnValue({
+        id: "custom",
+        name: "Custom",
+        baseUrl: "http://localhost:8080/v1/chat/completions",
+        format: "openai",
+        defaultModel: "model-1",
+        requiresApiKey: false,
+      });
+
+      mockFormatRequest.mockReturnValue({ messages: [] });
+
+      globalThis.fetch = jest.fn<any>().mockResolvedValue({
+        ok: false,
+        status: 500,
+        text: () => Promise.resolve("Internal Error"),
+      });
+
+      await expect(
+        executeNativeAiTask({
+          taskType: "summarize",
+          input: { text: "Hello" },
+          providerId: "custom",
+        }),
+      ).rejects.toThrow("Active provider task API error 500: Internal Error");
+    });
   });
 });

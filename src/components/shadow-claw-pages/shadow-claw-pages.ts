@@ -1546,7 +1546,8 @@ export class ShadowClawPages extends ShadowClawElement {
     }
 
     const root = this.shadowRoot;
-    const rendered = root?.querySelector("#rendered") as HTMLElement;
+    const rendered = (root?.querySelector("[data-pages-rendered]") ||
+      root?.querySelector("#rendered")) as HTMLElement;
     if (!root || !rendered) {
       return;
     }

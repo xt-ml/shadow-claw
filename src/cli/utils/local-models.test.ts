@@ -1242,5 +1242,103 @@ describe("local-models", () => {
         globalThis.fetch = originalFetch;
       }
     });
+
+    it("allows selecting llamafile options 5 through 10", async () => {
+      for (const choice of ["5", "6", "7", "8", "9", "10"]) {
+        const mockStdin = new PassThrough();
+        const mockStdout = new Writable({
+          write(chunk, _encoding, callback) {
+            const str = chunk.toString();
+            if (str.includes("Enter choice [1-12]")) {
+              setImmediate(() => mockStdin.write(`${choice}\n`));
+            } else if (str.includes("Download model weights now?")) {
+              setImmediate(() => mockStdin.write("n\n"));
+            }
+            callback();
+          },
+        });
+        const result = await promptForAgentModel({
+          workspaceDir: tmpDir,
+          contentRoot: tmpDir,
+          cacheDir: tmpDir,
+          stdin: mockStdin,
+          stdout: mockStdout,
+          isTTY: true,
+        });
+        expect(result.providerId).toBe("llamafile");
+      }
+    });
+
+    it("allows direct entry of agentfile, llamafile, openrouter, and onnx models at the main prompt", async () => {
+      const inputs = [
+        { in: "helper.agentfile", p: "agentfile", m: "helper.agentfile" },
+        { in: "worker.llamafile", p: "llamafile", m: "worker.llamafile" },
+        { in: "meta-llama/llama-3", p: "openrouter", m: "meta-llama/llama-3" },
+        {
+          in: "custom-onnx-model",
+          p: "transformers_js_local",
+          m: "custom-onnx-model",
+        },
+      ];
+
+      for (const item of inputs) {
+        const mockStdin = new PassThrough();
+        const mockStdout = new Writable({
+          write(chunk, _encoding, callback) {
+            const str = chunk.toString();
+            if (str.includes("Enter choice [1-12]")) {
+              setImmediate(() => mockStdin.write(`${item.in}\n`));
+            } else if (str.includes("Download model weights now?")) {
+              setImmediate(() => mockStdin.write("n\n"));
+            }
+            callback();
+          },
+        });
+        const result = await promptForAgentModel({
+          workspaceDir: tmpDir,
+          contentRoot: tmpDir,
+          cacheDir: tmpDir,
+          stdin: mockStdin,
+          stdout: mockStdout,
+          isTTY: true,
+        });
+        expect(result.providerId).toBe(item.p);
+        expect(result.model).toBe(item.m);
+      }
+    });
+
+    it("tests isLlamafileLocallyCached and isAgentfileLocallyCached paths", () => {
+      const realFile = path.join(tmpDir, "model.llamafile");
+      fs.writeFileSync(realFile, "binary content", "utf8");
+
+      expect(isLlamafileLocallyCached(realFile)).toBe(true);
+      expect(isLlamafileLocallyCached(realFile, tmpDir)).toBe(true);
+
+      const agentFile = path.join(tmpDir, "model.agentfile");
+      fs.writeFileSync(agentFile, "agent content", "utf8");
+
+      expect(isAgentfileLocallyCached(agentFile)).toBe(true);
+      expect(isAgentfileLocallyCached(agentFile, tmpDir)).toBe(true);
+
+      // Part file returns false
+      const cacheDir = getLlamafileCacheDir(tmpDir);
+      fs.mkdirSync(cacheDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(cacheDir, "test.llamafile.part"),
+        "incomplete",
+        "utf8",
+      );
+      expect(isLlamafileLocallyCached("test.llamafile", tmpDir)).toBe(false);
+
+      // Cache dirs with and without custom dir
+      expect(getLlamafileCacheDir()).toContain("llamafile");
+      expect(getAgentfileCacheDir()).toContain("agentfile");
+      expect(getLlamafileCacheDir(tmpDir)).toBe(
+        path.resolve(tmpDir, "llamafile"),
+      );
+      expect(getAgentfileCacheDir(tmpDir)).toBe(
+        path.resolve(tmpDir, "agentfile"),
+      );
+    });
   });
 });

@@ -94,6 +94,44 @@ describe("src/cli/utils/stdin.ts - readStdin", () => {
     expect(result).toBe(json);
     expect(JSON.parse(result!)).toEqual({ text: "hello", tone: "happy" });
   });
+
+  it("resolves null on timeoutMs expiration and destroys stream", async () => {
+    const stream = new Readable({ read() {} });
+    const result = await readStdin({ stdin: stream, timeoutMs: 50 });
+    expect(result).toBeNull();
+  });
+
+  it("handles Buffer chunks, timer cleanup on end or error, and default process.stdin", async () => {
+    const stream = new Readable({
+      read() {
+        this.push(Buffer.from("buffer data"));
+        this.push(null);
+      },
+    });
+    (stream as any).setEncoding = null;
+    (stream as any).isTTY = false;
+    const res = await readStdin({ stdin: stream, timeoutMs: 5000 });
+    expect(res).toBe("buffer data");
+
+    const errStream = new Readable({
+      read() {
+        this.emit("error", new Error("with timer error"));
+      },
+    });
+    (errStream as any).isTTY = false;
+    await expect(
+      readStdin({ stdin: errStream, timeoutMs: 5000 }),
+    ).rejects.toThrow("with timer error");
+
+    const origIsTTY = process.stdin.isTTY;
+    try {
+      (process.stdin as any).isTTY = true;
+      const defRes = await readStdin();
+      expect(defRes).toBeNull();
+    } finally {
+      (process.stdin as any).isTTY = origIsTTY;
+    }
+  });
 });
 
 describe("src/cli/utils/stdin.ts - mapTextToToolInput", () => {

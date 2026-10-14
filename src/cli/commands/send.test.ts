@@ -89,4 +89,62 @@ describe("runSendCommand", () => {
       }),
     );
   });
+
+  it("auto-resolves client when client option omitted", async () => {
+    jest
+      .spyOn(CliControlClient.prototype, "listClients")
+      .mockResolvedValueOnce([
+        { clientId: "c-first", deviceLabel: "My Laptop" },
+      ]);
+    const sendSpy = jest
+      .spyOn(CliControlClient.prototype, "sendCommand")
+      .mockResolvedValueOnce({ success: true, data: { status: "ok" } });
+
+    await runSendCommand("Hello first", { timeout: 10, json: true });
+
+    expect(sendSpy).toHaveBeenCalledWith(
+      "c-first",
+      "send-message",
+      { text: "Hello first", groupId: undefined },
+      10000,
+    );
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Targeting client: My Laptop (c-first)"),
+    );
+  });
+
+  it("errors when client option omitted and no clients connected", async () => {
+    jest
+      .spyOn(CliControlClient.prototype, "listClients")
+      .mockResolvedValueOnce([]);
+
+    await runSendCommand("Hello nobody", {});
+
+    expect(errorSpy).toHaveBeenCalledWith("Error: No clients are connected.");
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("handles client error response", async () => {
+    jest
+      .spyOn(CliControlClient.prototype, "sendCommand")
+      .mockResolvedValueOnce({ success: false, error: "Model timeout" });
+
+    await runSendCommand("Hello failure", { client: "client-target" });
+
+    expect(errorSpy).toHaveBeenCalledWith("Error from client: Model timeout");
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("handles exception during sending", async () => {
+    jest
+      .spyOn(CliControlClient.prototype, "sendCommand")
+      .mockRejectedValueOnce(new Error("Socket closed"));
+
+    await runSendCommand("Hello exception", { client: "client-target" });
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      "Error sending message: Socket closed",
+    );
+    expect(process.exitCode).toBe(1);
+  });
 });

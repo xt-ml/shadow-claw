@@ -1,8 +1,9 @@
-import { describe, it, expect } from "@jest/globals";
+import { describe, it, expect, jest } from "@jest/globals";
 import {
   parseSemver,
   compareSemver,
   assertVersionBump,
+  main,
 } from "./assert-version-bump.js";
 
 describe("assert-version-bump", () => {
@@ -121,6 +122,34 @@ describe("assert-version-bump", () => {
           silent: true,
         }),
       ).resolves.toBeUndefined();
+    });
+
+    it("logs message when silent is false and versions pass", async () => {
+      const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        await assertVersionBump({
+          localPkgVersion: "1.23.4",
+          localLockVersion: "1.23.4",
+          wellKnownMcpVersion: "1.23.4",
+          wellKnownServerCardVersion: "1.23.4",
+          pkgName: "shadow-claw",
+          publishedVersion: "1.23.3",
+          silent: false,
+        });
+        expect(logSpy).toHaveBeenCalledWith(
+          expect.stringContaining("Version assertion passed"),
+        );
+      } finally {
+        logSpy.mockRestore();
+      }
+    });
+
+    it("runs main() and validates repository version against npm", async () => {
+      try {
+        await main();
+      } catch (err: any) {
+        expect(err.message).toMatch(/Version assertion failed/);
+      }
     });
   });
 

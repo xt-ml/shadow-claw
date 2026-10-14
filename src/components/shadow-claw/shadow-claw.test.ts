@@ -696,4 +696,116 @@ describe("shadow-claw", () => {
       globalThis.matchMedia = originalMatchMedia;
     }
   });
+
+  it("handles disconnectedCallback cleanups", async () => {
+    const component = new ShadowClaw();
+    component.orchestrator = createOrchestratorStub();
+    document.body.appendChild(component);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const vmStatusCleanup = jest.fn();
+    const appLifecycleCleanup = jest.fn();
+    const cancelAnimSpy = jest.spyOn(globalThis, "cancelAnimationFrame");
+
+    component.vmStatusCleanup = vmStatusCleanup;
+    component.appLifecycleCleanup = appLifecycleCleanup;
+    component.terminalPlacementFrame = 42;
+    component.popstateListener = jest.fn() as any;
+    component.fallbackClickListenerAttached = true;
+    component.navigationListenerAttached = true;
+
+    component.disconnectedCallback();
+
+    expect(vmStatusCleanup).toHaveBeenCalled();
+    expect(appLifecycleCleanup).toHaveBeenCalled();
+    expect(cancelAnimSpy).toHaveBeenCalledWith(42);
+    expect(component.vmStatusCleanup).toBeNull();
+    expect(component.appLifecycleCleanup).toBeNull();
+    expect(component.terminalPlacementFrame).toBeNull();
+    expect(component.popstateListener).toBeNull();
+    expect(component.fallbackClickListenerAttached).toBe(false);
+    expect(component.navigationListenerAttached).toBe(false);
+
+    document.body.removeChild(component);
+  });
+
+  it("handles navigation handlers, shadowClawNav, and requestDialog", async () => {
+    const component = new ShadowClaw();
+    component.orchestrator = createOrchestratorStub();
+    document.body.appendChild(component);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // fallbackClickListener with no targetPath
+    const mockClickEvent = new MouseEvent("click");
+    component.fallbackClickListener(mockClickEvent);
+
+    // handleNavigationApiNavigate
+    component.handleNavigationApiNavigate(new Event("navigate"));
+
+    // shadowClawNav
+    component.shadowClawNav(
+      new CustomEvent("shadow-claw-navigate", { detail: { page: "pages" } }),
+    );
+
+    // requestDialog
+    const promise = component.requestDialog({
+      title: "Test Dialog",
+      message: "Please confirm",
+    });
+    const appDialog = component.shadowRoot?.querySelector(
+      ".app-dialog",
+    ) as HTMLDialogElement;
+    if (appDialog) {
+      appDialog.returnValue = "confirm";
+      appDialog.dispatchEvent(new Event("close"));
+    }
+    const dialogResult = await promise;
+    expect(dialogResult).toBe(true);
+
+    document.body.removeChild(component);
+  });
+
+  it("handles orchestrator vm-status error and tools events", async () => {
+    const stub = createOrchestratorStub();
+    const component = new ShadowClaw();
+    component.orchestrator = stub;
+    document.body.appendChild(component);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // Emit vm-status with error when terminalVisible is true
+    component.terminalVisible = true;
+    const vmStatusCallbacks = stub.events.on.mock.calls.filter(
+      ([event]) => event === "vm-status",
+    );
+    for (const [, cb] of vmStatusCallbacks) {
+      cb({ ready: false, booting: false, error: "VM Crash", mode: "disabled" });
+    }
+    expect(component.terminalVisible).toBe(false);
+
+    // Emit provider-help
+    const providerHelpCallbacks = stub.events.on.mock.calls.filter(
+      ([event]) => event === "provider-help",
+    );
+    for (const [, cb] of providerHelpCallbacks) {
+      cb({ providerId: "test-prov", reason: "quota", helpType: "rate_limit" });
+    }
+
+    // Emit room-invite
+    const roomInviteCallbacks = stub.events.on.mock.calls.filter(
+      ([event]) => event === "room-invite",
+    );
+    for (const [, cb] of roomInviteCallbacks) {
+      cb({ roomId: "r1", hostPeerId: "p1" });
+    }
+
+    // Emit ask-user
+    const askUserCallbacks = stub.events.on.mock.calls.filter(
+      ([event]) => event === "ask-user",
+    );
+    for (const [, cb] of askUserCallbacks) {
+      cb({ id: "q1", groupId: "g1", question: "Continue?" });
+    }
+
+    document.body.removeChild(component);
+  });
 });

@@ -42,4 +42,16 @@ describe("resolveConnectionTestAuth", () => {
     });
     expect(result.error).toContain("Password/app password is missing");
   });
+
+  it("handles undefined pendingOauthAccessToken and passwordInput safely", () => {
+    const resOAuth: any = resolveConnectionTestAuth({
+      authMode: "oauth",
+    } as any);
+    expect(resOAuth.error).toContain("OAuth access token is missing");
+
+    const resPass: any = resolveConnectionTestAuth({
+      authMode: "password",
+    } as any);
+    expect(resPass.error).toContain("Password/app password is missing");
+  });
 });

@@ -143,7 +143,7 @@ The orchestrator dispatches all worker messages through `handleWorkerMessage(db,
 | `token-usage`             | Emit for UI stats                                                                                            |
 | `thinking-log`            | Emit for debug sidebar                                                                                       |
 | `compact-done`            | Clear messages, save summary, set state `idle`                                                               |
-| `model-download-progress` | Emit for Prompt API download UI                                                                              |
+| `model-download-progress` | Emit for Transformers.js / Prompt API model download UI                                                      |
 | `vm-status`               | Update `vmStatus`, emit event                                                                                |
 | `vm-terminal-*`           | Forward to terminal component via events                                                                     |
 | `vm-workspace-synced`     | Emit `file-change` event                                                                                     |
@@ -169,7 +169,7 @@ Simple event emitter for orchestrator-to-UI communication:
 | `file-change`                            | Workspace file system changed                                   |
 | `context-compacted`                      | Context summarized                                              |
 | `task-change`                            | Task created/updated/deleted                                    |
-| `model-download-progress`                | Prompt API model downloading                                    |
+| `model-download-progress`                | In-browser model downloading (Transformers.js / Prompt API)     |
 | `provider-help`                          | Provider-specific setup/help dialog hint (e.g., local runtimes) |
 
 ## Conversation Isolation

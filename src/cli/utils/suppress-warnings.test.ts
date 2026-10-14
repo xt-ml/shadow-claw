@@ -44,4 +44,13 @@ describe("suppressExperimentalWarnings", () => {
     expect(captured!.warning).toBe("Some other warning");
     expect(captured!.args[0]).toBe("UserWarning");
   });
+
+  it("is idempotent when called multiple times or when emitWarning is absent", () => {
+    suppressExperimentalWarnings();
+    // Second call should return early
+    expect(() => suppressExperimentalWarnings()).not.toThrow();
+
+    process.emitWarning = undefined as any;
+    expect(() => suppressExperimentalWarnings()).not.toThrow();
+  });
 });

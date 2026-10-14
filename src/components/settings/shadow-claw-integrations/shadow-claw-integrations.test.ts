@@ -500,4 +500,332 @@ describe("shadow-claw-integrations", () => {
 
     document.body.removeChild(el);
   });
+
+  it("connectOAuthFromForm handles successful OAuth flow through polling and token exchange", async () => {
+    const el = new ShadowClawIntegrations();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+
+    const oauthSlot = document.createElement("div");
+    oauthSlot.innerHTML = `
+      <select id="int-oauth-provider"><option value="google" selected>Google</option></select>
+      <input id="int-oauth-client-id" value="client-id-123" />
+      <input id="int-oauth-client-secret" value="secret-xyz" />
+      <input id="int-oauth-scope" value="https://mail.google.com/" />
+      <div data-region="oauth-status"></div>
+      <button data-action="connect-oauth"></button>
+    `;
+    el.shadowRoot?.appendChild(oauthSlot);
+
+    (global.fetch as any) = jest.fn((url: string) => {
+      if (url === "/oauth/authorize") {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            state: "state-123",
+            authorizeUrl:
+              "https://accounts.google.com/o/oauth2/auth?state=state-123",
+          }),
+        });
+      }
+      if (url.startsWith("/oauth/session/")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ status: "authorized" }),
+        });
+      }
+      if (url === "/oauth/token") {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            accessToken: "test-access-token",
+            refreshToken: "test-refresh-token",
+            expiresIn: 3600,
+            scope: "mail.read",
+            tokenType: "Bearer",
+          }),
+        });
+      }
+      return Promise.reject(new Error("Unknown URL: " + url));
+    });
+
+    const windowOpenSpy = jest
+      .spyOn(window, "open")
+      .mockImplementation(() => null);
+    await el.connectOAuthFromForm(oauthSlot);
+
+    expect(windowOpenSpy).toHaveBeenCalledWith(
+      "https://accounts.google.com/o/oauth2/auth?state=state-123",
+      expect.any(String),
+      expect.any(String),
+    );
+    expect(el.pendingOauthResult).toEqual(
+      expect.objectContaining({
+        providerId: "google",
+        accessToken: "test-access-token",
+        refreshToken: "test-refresh-token",
+      }),
+    );
+    expect(
+      oauthSlot.querySelector('[data-region="oauth-status"]')?.textContent,
+    ).toBe("OAuth connected");
+
+    // Also test missing client ID
+    (
+      oauthSlot.querySelector("#int-oauth-client-id") as HTMLInputElement
+    ).value = "";
+    await el.connectOAuthFromForm(oauthSlot);
+
+    windowOpenSpy.mockRestore();
+    document.body.removeChild(el);
+  });
+
+  it("upsertLinkedOAuthAccount handles full account linking and validation errors", async () => {
+    const el = new ShadowClawIntegrations();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    el.db = {} as any;
+
+    const savedConn = {
+      id: "conn-1",
+      label: "My IMAP",
+      pluginId: "imap",
+      enabled: true,
+      config: {},
+      credentialRef: null,
+      createdAt: 0,
+      updatedAt: 0,
+    } as any;
+
+    const slot = document.createElement("div");
+    slot.innerHTML = `
+      <select id="int-auth-mode"><option value="oauth" selected>OAuth</option></select>
+      <input id="int-username" value="user@gmail.com" />
+      <select id="int-oauth-provider"><option value="google" selected>Google</option></select>
+      <input id="int-oauth-client-id" value="client-id-123" />
+      <input id="int-oauth-client-secret" value="secret-xyz" />
+      <input id="int-oauth-scope" value="https://mail.google.com/" />
+    `;
+
+    // 1. Missing token without pendingOauthResult throws
+    el.pendingOauthResult = null;
+    await expect(el.upsertLinkedOAuthAccount(slot, savedConn)).rejects.toThrow(
+      "Connect OAuth first to obtain an access token.",
+    );
+
+    // 2. Missing username throws
+    (slot.querySelector("#int-username") as HTMLInputElement).value = "";
+    await expect(el.upsertLinkedOAuthAccount(slot, savedConn)).rejects.toThrow(
+      "Email login address is required for OAuth authentication.",
+    );
+    (slot.querySelector("#int-username") as HTMLInputElement).value =
+      "user@gmail.com";
+
+    // 3. Missing client ID throws
+    (slot.querySelector("#int-oauth-client-id") as HTMLInputElement).value = "";
+    await expect(el.upsertLinkedOAuthAccount(slot, savedConn)).rejects.toThrow(
+      "OAuth client ID is required for OAuth authentication.",
+    );
+    (slot.querySelector("#int-oauth-client-id") as HTMLInputElement).value =
+      "client-id-123";
+
+    // 4. Success path with pendingOauthResult
+    el.pendingOauthResult = {
+      providerId: "google",
+      accessToken: "plain-access-token",
+      refreshToken: "plain-refresh-token",
+      expiresAt: Date.now() + 3600000,
+      scope: "https://mail.google.com/",
+      tokenType: "Bearer",
+    };
+
+    const account = await el.upsertLinkedOAuthAccount(slot, savedConn);
+    expect(account).toBeDefined();
+    expect(account.authMode).toBe("oauth");
+    expect(account.oauthClientId).toBe("client-id-123");
+    expect(account.token).toBe("encrypted");
+
+    // 5. Calling buildCredentialRef with oauth returns correct structure
+    const credRef = await el.buildCredentialRef(slot, savedConn);
+    expect(credRef).toEqual({
+      serviceType: "http_api",
+      authType: "oauth",
+      providerId: "google",
+      accountId: account.id,
+      username: "user@gmail.com",
+    });
+
+    document.body.removeChild(el);
+  });
+
+  it("buildCredentialRef enforces username and password rules for basic_userpass", async () => {
+    const el = new ShadowClawIntegrations();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+
+    const savedConn = { id: "conn-1" } as any;
+    const slot = document.createElement("div");
+    slot.innerHTML = `
+      <select id="int-auth-mode"><option value="basic_userpass" selected>Password</option></select>
+      <input id="int-username" value="" />
+      <input id="int-password" value="" />
+    `;
+
+    // 1. Both empty -> returns null
+    const refNull = await el.buildCredentialRef(slot, savedConn);
+    expect(refNull).toBeNull();
+
+    // 2. Password without username -> throws
+    (slot.querySelector("#int-password") as HTMLInputElement).value = "pass123";
+    await expect(el.buildCredentialRef(slot, savedConn)).rejects.toThrow(
+      "Auth username is required when a password is configured.",
+    );
+
+    // 3. Username without password -> throws
+    (slot.querySelector("#int-password") as HTMLInputElement).value = "";
+    (slot.querySelector("#int-username") as HTMLInputElement).value =
+      "user@test.com";
+    await expect(el.buildCredentialRef(slot, savedConn)).rejects.toThrow(
+      "Auth password is required when username is configured.",
+    );
+
+    document.body.removeChild(el);
+  });
+
+  it("renderConnectionList handles card action button clicks and delete confirmation cancel", async () => {
+    const el = new ShadowClawIntegrations();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    el.db = {} as any;
+
+    el.connections = [
+      {
+        id: "conn-1",
+        label: "My IMAP",
+        pluginId: "imap",
+        enabled: true,
+        config: { executionMode: "auto", pollIntervalSec: 120 },
+        credentialRef: { encryptedSecret: "enc" },
+      },
+    ] as any;
+
+    el.renderConnectionList();
+
+    const list = el.shadowRoot?.querySelector(
+      '[data-region="connection-list"]',
+    );
+    const editBtn = list?.querySelector(
+      'button[data-action="edit"]',
+    ) as HTMLButtonElement;
+    const toggleBtn = list?.querySelector(
+      'button[data-action="toggle"]',
+    ) as HTMLButtonElement;
+    const deleteBtn = list?.querySelector(
+      'button[data-action="delete"]',
+    ) as HTMLButtonElement;
+
+    expect(editBtn).not.toBeNull();
+    expect(toggleBtn).not.toBeNull();
+    expect(deleteBtn).not.toBeNull();
+
+    // Click edit -> calls showForm
+    const showFormSpy = jest.spyOn(el, "showForm");
+    editBtn.click();
+    expect(showFormSpy).toHaveBeenCalledWith("conn-1");
+
+    // Click toggle
+    const toggleSpy = jest.spyOn(el, "toggleConnection");
+    toggleBtn.click();
+    expect(toggleSpy).toHaveBeenCalledWith("conn-1");
+
+    // Click delete with confirmation cancelled
+    el.requestConfirmation = jest.fn<any>().mockResolvedValue(false);
+    const { deleteEmailConnection } =
+      await import("../../../subsystems/email/connections.js");
+    (deleteEmailConnection as jest.Mock).mockClear();
+    await el.deleteConnection("conn-1");
+    expect(deleteEmailConnection).not.toHaveBeenCalled();
+
+    // toggleConnection with unknown id
+    await el.toggleConnection("non-existent-id");
+
+    document.body.removeChild(el);
+  });
+
+  it("saveForm parses form values, handles validation errors, extra config JSON, and cancel action", async () => {
+    const el = new ShadowClawIntegrations();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    el.db = {} as any;
+
+    el.manifests = [
+      {
+        id: "imap",
+        name: "IMAP",
+        configurableFields: ["port", "secure", "mailboxPath"],
+        description: "",
+      } as any,
+    ];
+    (getEmailPluginManifest as jest.Mock).mockReturnValue(el.manifests[0]);
+    el.showForm(null);
+
+    const slot = el.shadowRoot?.querySelector(
+      '[data-region="connection-form"]',
+    ) as HTMLElement;
+
+    // 1. Missing label shows error
+    (slot.querySelector("#int-label") as HTMLInputElement).value = "";
+    await el.saveForm();
+
+    // 2. Invalid extra config JSON shows error
+    (slot.querySelector("#int-label") as HTMLInputElement).value =
+      "Valid Label";
+    (slot.querySelector("#int-extra-config") as HTMLTextAreaElement).value =
+      "{ not-json";
+    await el.saveForm();
+
+    // 3. Valid config with data-config-fields and extra config JSON
+    (slot.querySelector("#int-extra-config") as HTMLTextAreaElement).value =
+      '{"customProp": true}';
+    const portInput = slot.querySelector("#cfg-port") as HTMLInputElement;
+    if (portInput) portInput.value = "993";
+    const secureInput = slot.querySelector("#cfg-secure") as HTMLInputElement;
+    if (secureInput) secureInput.value = "true";
+    const mailboxInput = slot.querySelector(
+      "#cfg-mailboxPath",
+    ) as HTMLInputElement;
+    if (mailboxInput) mailboxInput.value = "INBOX";
+
+    el.buildCredentialRef = jest.fn<any>().mockResolvedValue(null);
+    await el.saveForm();
+
+    const { upsertEmailConnection } =
+      await import("../../../subsystems/email/connections.js");
+    expect(upsertEmailConnection).toHaveBeenCalledWith(
+      el.db,
+      expect.objectContaining({
+        label: "Valid Label",
+        config: expect.objectContaining({
+          port: 993,
+          secure: true,
+          mailboxPath: "INBOX",
+          customProp: true,
+        }),
+      }),
+    );
+
+    // Cancel action hides form
+    el.showForm(null);
+    expect(slot.hidden).toBe(false);
+    const cancelBtn = slot.querySelector(
+      'button[data-action="cancel"]',
+    ) as HTMLButtonElement;
+    cancelBtn.click();
+    expect(slot.hidden).toBe(true);
+
+    document.body.removeChild(el);
+  });
 });

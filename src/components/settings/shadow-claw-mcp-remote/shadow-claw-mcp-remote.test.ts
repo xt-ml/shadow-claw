@@ -322,4 +322,463 @@ describe("shadow-claw-mcp-remote", () => {
 
     document.body.removeChild(el);
   });
+
+  it("covers describeCredentialRef and getAuthSelectionFromCredentialRef", () => {
+    const el = new ShadowClawMcpRemote();
+
+    expect(el.describeCredentialRef(null)).toBe("No auth");
+    expect(
+      el.describeCredentialRef({
+        serviceType: "mcp_remote",
+        authType: "none",
+        providerId: "test",
+      }),
+    ).toBe("No auth");
+    expect(
+      el.describeCredentialRef({
+        serviceType: "mcp_remote",
+        authType: "custom_header",
+        providerId: "test",
+        headerName: "X-Key",
+      }),
+    ).toBe("Custom header (X-Key)");
+    expect(
+      el.describeCredentialRef({
+        serviceType: "mcp_remote",
+        authType: "custom_header",
+        providerId: "test",
+      }),
+    ).toBe("Custom header");
+    expect(
+      el.describeCredentialRef({
+        serviceType: "mcp_remote",
+        authType: "oauth",
+        providerId: "test",
+        accountId: "acc-1",
+      }),
+    ).toBe("Service account (OAUTH)");
+    expect(
+      el.describeCredentialRef({
+        serviceType: "mcp_remote",
+        authType: "token",
+        providerId: "test",
+        gitAccountId: "git-1",
+      }),
+    ).toBe("Git account (TOKEN)");
+    expect(
+      el.describeCredentialRef({
+        serviceType: "mcp_remote",
+        authType: "basic" as any,
+        providerId: "test",
+      }),
+    ).toBe("BASIC");
+
+    expect(el.getAuthSelectionFromCredentialRef(null)).toBe("none");
+    expect(
+      el.getAuthSelectionFromCredentialRef({
+        serviceType: "mcp_remote",
+        authType: "custom_header",
+        providerId: "test",
+      }),
+    ).toBe("custom_header");
+    expect(
+      el.getAuthSelectionFromCredentialRef({
+        serviceType: "mcp_remote",
+        authType: "oauth",
+        accountId: "a1",
+        providerId: "test",
+      }),
+    ).toBe("service_oauth");
+    expect(
+      el.getAuthSelectionFromCredentialRef({
+        serviceType: "mcp_remote",
+        authType: "token",
+        accountId: "a1",
+        providerId: "test",
+      }),
+    ).toBe("service_pat");
+    expect(
+      el.getAuthSelectionFromCredentialRef({
+        serviceType: "mcp_remote",
+        authType: "oauth",
+        gitAccountId: "g1",
+        providerId: "test",
+      }),
+    ).toBe("git_oauth");
+    expect(
+      el.getAuthSelectionFromCredentialRef({
+        serviceType: "mcp_remote",
+        authType: "token",
+        gitAccountId: "g1",
+        providerId: "test",
+      }),
+    ).toBe("git_pat");
+    expect(
+      el.getAuthSelectionFromCredentialRef({
+        serviceType: "mcp_remote",
+        authType: "other" as any,
+        providerId: "test",
+      }),
+    ).toBe("none");
+  });
+
+  it("renders git and service account options", () => {
+    const el = new ShadowClawMcpRemote();
+    expect(el.renderGitAccountOptions()).toContain(
+      "No git accounts configured",
+    );
+    expect(el.renderServiceAccountOptions()).toContain(
+      "No service accounts configured",
+    );
+
+    el.gitAccounts = [
+      {
+        id: "git-1",
+        label: "GitHub Work",
+        hostPattern: "github.com",
+        username: "work",
+        createdAt: 1,
+        updatedAt: 1,
+      } as any,
+    ];
+    expect(el.renderGitAccountOptions("git-1")).toContain(
+      'value="git-1" selected',
+    );
+
+    el.serviceAccounts = [
+      {
+        id: "srv-1",
+        label: "Srv Acc",
+        hostPattern: "api.example.com",
+        createdAt: 1,
+        updatedAt: 1,
+      } as any,
+    ];
+    expect(el.renderServiceAccountOptions("srv-1")).toContain(
+      'value="srv-1" selected',
+    );
+  });
+
+  it("handles event listeners for adding, editing, reconnecting and closing", async () => {
+    mockListConnections.mockResolvedValue([
+      {
+        id: "conn-1",
+        label: "Remote 1",
+        serviceType: "mcp_remote",
+        serverUrl: "https://mcp1.com",
+        transport: "streamable_http",
+        enabled: true,
+        createdAt: 1,
+        updatedAt: 1,
+        credentialRef: {
+          serviceType: "mcp_remote",
+          authType: "oauth",
+          accountId: "acc-1",
+        },
+      },
+    ]);
+
+    const el = new ShadowClawMcpRemote();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+
+    // Click add-connection
+    const addBtn = el.shadowRoot?.querySelector(
+      '[data-action="add-connection"]',
+    ) as HTMLElement;
+    addBtn?.click();
+    expect(el.editingConnectionId).toBe("new");
+
+    // Click cancel-connection-form
+    const cancelBtn = el.shadowRoot?.querySelector(
+      '[data-action="cancel-connection-form"]',
+    ) as HTMLElement;
+    cancelBtn?.click();
+    expect(el.editingConnectionId).toBeNull();
+
+    // Trigger settings-action edit-connection
+    const listEl = el.shadowRoot?.querySelector(
+      '[data-region="connection-list"]',
+    );
+    listEl?.dispatchEvent(
+      new CustomEvent("settings-action", {
+        detail: { action: "edit-connection", id: "conn-1" },
+        bubbles: true,
+      }),
+    );
+    expect(el.editingConnectionId).toBe("conn-1");
+
+    // Trigger settings-action with empty id
+    listEl?.dispatchEvent(
+      new CustomEvent("settings-action", {
+        detail: { action: "edit-connection", id: "" },
+        bubbles: true,
+      }),
+    );
+
+    // Trigger reconnect click
+    const reconnectBtn = el.shadowRoot?.querySelector(
+      '[data-reconnect-connection="conn-1"]',
+    ) as HTMLElement;
+    reconnectBtn?.click();
+
+    // Click something other than HTMLButtonElement in connection-list
+    listEl?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    document.body.removeChild(el);
+  });
+
+  it("handles auth selection changes and visibility updates", async () => {
+    const el = new ShadowClawMcpRemote();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+
+    el.showConnectionForm("new");
+    const slot = el.shadowRoot?.querySelector(
+      '[data-region="connection-form-slot"]',
+    ) as HTMLElement;
+    const authSelect = slot.querySelector(
+      '[data-field="auth-selection"]',
+    ) as HTMLSelectElement;
+
+    authSelect.value = "service_pat";
+    authSelect.dispatchEvent(new Event("change"));
+    expect(
+      (
+        slot.querySelector(
+          '[data-region="service-account-region"]',
+        ) as HTMLElement
+      ).style.display,
+    ).toBe("block");
+
+    authSelect.value = "git_oauth";
+    authSelect.dispatchEvent(new Event("change"));
+    expect(
+      (slot.querySelector('[data-region="git-account-region"]') as HTMLElement)
+        .style.display,
+    ).toBe("block");
+
+    authSelect.value = "custom_header";
+    authSelect.dispatchEvent(new Event("change"));
+    expect(
+      (
+        slot.querySelector(
+          '[data-region="custom-header-region"]',
+        ) as HTMLElement
+      ).style.display,
+    ).toBe("block");
+
+    document.body.removeChild(el);
+  });
+
+  it("handles buildCredentialRef errors and variations", async () => {
+    const el = new ShadowClawMcpRemote();
+    const slot = document.createElement("div");
+    slot.innerHTML = `
+      <select data-field="service-account-id"><option value="">None</option></select>
+      <select data-field="git-account-id"><option value="">None</option></select>
+      <input data-field="custom-header-name" value="" />
+      <input data-field="custom-header-value" value="" />
+    `;
+
+    // None
+    expect(await el.buildCredentialRef(slot, "none", null)).toBeNull();
+
+    // Service PAT without account
+    await expect(
+      el.buildCredentialRef(slot, "service_pat", null),
+    ).rejects.toThrow("Select a service account");
+
+    // Service PAT with account
+    slot.querySelector("select")!.innerHTML =
+      '<option value="srv-1">Srv</option>';
+    slot.querySelector("select")!.value = "srv-1";
+    const ref1 = await el.buildCredentialRef(slot, "service_pat", null);
+    expect(ref1?.authType).toBe("token");
+    expect(ref1?.accountId).toBe("srv-1");
+
+    // Git PAT without account
+    await expect(el.buildCredentialRef(slot, "git_pat", null)).rejects.toThrow(
+      "Select a git account",
+    );
+
+    // Git OAuth with account
+    const gitSelect = slot.querySelector(
+      '[data-field="git-account-id"]',
+    ) as HTMLSelectElement;
+    gitSelect.innerHTML = '<option value="git-1">Git</option>';
+    gitSelect.value = "git-1";
+    const ref2 = await el.buildCredentialRef(slot, "git_oauth", null);
+    expect(ref2?.authType).toBe("oauth");
+    expect(ref2?.gitAccountId).toBe("git-1");
+
+    // Custom header missing name
+    await expect(
+      el.buildCredentialRef(slot, "custom_header", null),
+    ).rejects.toThrow("Header name is required");
+
+    // Custom header missing value
+    (
+      slot.querySelector(
+        '[data-field="custom-header-name"]',
+      ) as HTMLInputElement
+    ).value = "X-API-Key";
+    await expect(
+      el.buildCredentialRef(slot, "custom_header", null),
+    ).rejects.toThrow("Header value is required");
+
+    // Custom header reusing existing encrypted value
+    const existing = {
+      id: "c1",
+      label: "C1",
+      serviceType: "mcp_remote" as const,
+      serverUrl: "http://example.com",
+      transport: "streamable_http" as const,
+      enabled: true,
+      autoReconnectOAuth: false,
+      createdAt: 1,
+      updatedAt: 1,
+      credentialRef: {
+        serviceType: "mcp_remote" as const,
+        authType: "custom_header" as const,
+        providerId: "custom_mcp",
+        headerName: "X-API-Key",
+        encryptedValue: "existing-encrypted",
+      },
+    };
+    const ref3 = await el.buildCredentialRef(slot, "custom_header", existing);
+    expect(ref3?.encryptedValue).toBe("existing-encrypted");
+
+    // Custom header with new raw value
+    (
+      slot.querySelector(
+        '[data-field="custom-header-value"]',
+      ) as HTMLInputElement
+    ).value = "secret123";
+    const ref4 = await el.buildCredentialRef(slot, "custom_header", null);
+    expect(ref4?.encryptedValue).toBe("enc-secret");
+  });
+
+  it("handles form validation, save errors, and updating existing connection", async () => {
+    const el = new ShadowClawMcpRemote();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+
+    el.showConnectionForm("new");
+    // Missing label & URL
+    await el.saveConnectionForm();
+    expect(mockUpsertConnection).not.toHaveBeenCalled();
+
+    // Fill label & URL but mockUpsertConnection fails
+    const labelInput = el.shadowRoot?.querySelector(
+      '[data-field="connection-label"]',
+    ) as HTMLInputElement;
+    const urlInput = el.shadowRoot?.querySelector(
+      '[data-field="connection-url"]',
+    ) as HTMLInputElement;
+    labelInput.value = "Test MCP";
+    urlInput.value = "https://example.com";
+
+    mockUpsertConnection.mockRejectedValueOnce(new Error("Database error"));
+    await el.saveConnectionForm();
+
+    // Update existing connection
+    el.connections = [
+      {
+        id: "existing-1",
+        label: "Old",
+        serviceType: "mcp_remote",
+        serverUrl: "https://old.com",
+        transport: "streamable_http",
+        enabled: true,
+        autoReconnectOAuth: false,
+        createdAt: 1,
+        updatedAt: 1,
+        credentialRef: null,
+      },
+    ];
+    el.showConnectionForm("existing-1");
+    mockUpsertConnection.mockResolvedValueOnce({
+      id: "existing-1",
+      label: "New",
+      serviceType: "mcp_remote",
+      serverUrl: "https://new.com",
+      transport: "streamable_http",
+      enabled: true,
+      createdAt: 1,
+      updatedAt: 2,
+    });
+    await el.saveConnectionForm();
+    expect(mockUpsertConnection).toHaveBeenCalledWith(
+      {},
+      expect.objectContaining({ id: "existing-1" }),
+    );
+
+    document.body.removeChild(el);
+  });
+
+  it("handles failure branches in deleteConnection, reconnectOAuth, and testConnection", async () => {
+    const el = new ShadowClawMcpRemote() as any;
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    el.db = {} as any;
+    el.connections = [];
+
+    // Delete connection not found
+    mockDeleteConnection.mockResolvedValueOnce(false);
+    await el.deleteConnection("missing-id");
+
+    // Delete connection throws
+    mockDeleteConnection.mockRejectedValueOnce(new Error("Delete crash"));
+    await el.deleteConnection("err-id");
+
+    // Reconnect failure
+    mockReconnectMcpOAuth.mockResolvedValueOnce({
+      success: false,
+      error: "OAuth expired",
+    });
+    await el.reconnectOAuth("conn-fail");
+
+    // testConnection with existing diagnostic element & dismiss button
+    mockTestConnection.mockResolvedValueOnce({
+      success: false,
+      error: "Timeout",
+      toolCount: 0,
+      toolNames: [],
+      steps: [{ step: "Handshake", status: "error", detail: "Timeout" }],
+    });
+    const card = document.createElement("div");
+    card.className = "connection-card";
+    card.setAttribute("data-connection-id", "conn-test");
+    const existingDiag = document.createElement("div");
+    existingDiag.className = "connection-diagnostic";
+    card.appendChild(existingDiag);
+    el.shadowRoot.appendChild(card);
+
+    await el.testConnection("conn-test");
+    expect(card.querySelector(".diagnostic-header")?.textContent).toContain(
+      "Connection Failed",
+    );
+
+    const closeBtn = card.querySelector(
+      '[data-action="close-diagnostic"]',
+    ) as HTMLElement;
+    closeBtn?.click();
+    expect(card.querySelector(".connection-diagnostic")).toBeNull();
+
+    document.body.removeChild(el);
+  });
+
+  it("catches render errors gracefully", async () => {
+    const spy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    mockListConnections.mockRejectedValueOnce(new Error("DB locked"));
+
+    const el = new ShadowClawMcpRemote();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+    document.body.removeChild(el);
+  });
 });

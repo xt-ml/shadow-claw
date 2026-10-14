@@ -384,4 +384,131 @@ describe("shadow-claw-peerjs", () => {
 
     document.body.removeChild(el);
   });
+
+  it("handles room card button actions: invite, link/qr, and disband/leave", async () => {
+    const el = new ShadowClawPeerJs() as any;
+    document.body.appendChild(el);
+    await el.connectedCallback();
+
+    const { listRooms, inviteToRoom, leaveRoom } =
+      await import("../../../core/orchestrator/utils/operations/room.js");
+
+    const testRooms = [
+      {
+        roomId: "room-host-1",
+        name: "My Host Room",
+        hostPeerId: "test-peer-id",
+        members: [{ peerId: "test-peer-id", alias: "Host Me", kind: "human" }],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      },
+    ];
+    (listRooms as jest.Mock<any>).mockReturnValue(testRooms);
+
+    el.renderRooms();
+
+    const card = el.shadowRoot?.querySelector(".peerjs-room-card");
+    expect(card).not.toBeNull();
+
+    // Invite button without selected peer (shows error)
+    const buttons = Array.from(card?.querySelectorAll("button") || []) as any[];
+    const inviteBtn = buttons.find((b: any) => b.textContent === "Invite");
+    const linkBtn = buttons.find((b: any) => b.textContent?.includes("Link"));
+    const disbandBtn = buttons.find((b: any) => b.textContent === "Disband");
+    const select = card?.querySelector("select");
+
+    // 1. Invite without peer
+    if (select) select.value = "";
+    inviteBtn?.dispatchEvent(new Event("click"));
+
+    // 2. Invite with peer
+    if (select) {
+      const opt = document.createElement("option");
+      opt.value = "trusted-1";
+      select.appendChild(opt);
+      select.value = "trusted-1";
+    }
+    inviteBtn?.dispatchEvent(new Event("click"));
+    expect(inviteToRoom).toHaveBeenCalledWith(
+      expect.anything(),
+      "room-host-1",
+      "trusted-1",
+    );
+
+    // 3. Link/QR
+    linkBtn?.dispatchEvent(new Event("click"));
+
+    // 4. Disband
+    disbandBtn?.dispatchEvent(new Event("click"));
+    expect(leaveRoom).toHaveBeenCalledWith(expect.anything(), "room-host-1");
+
+    document.body.removeChild(el);
+  });
+
+  it("handles adding trusted peers and auto-generating Peer ID on save", async () => {
+    const el = new ShadowClawPeerJs() as any;
+    document.body.appendChild(el);
+    await el.connectedCallback();
+
+    const root = el.shadowRoot!;
+    const idInput = root.querySelector(
+      '[data-setting="peerjs-new-trusted-id-input"]',
+    ) as HTMLInputElement;
+    const aliasInput = root.querySelector(
+      '[data-setting="peerjs-new-trusted-alias-input"]',
+    ) as HTMLInputElement;
+    const addBtn = root.querySelector('[data-action="add-trusted-peer"]');
+
+    if (idInput && aliasInput && addBtn) {
+      idInput.value = "peer-abc";
+      aliasInput.value = "Alice";
+      addBtn.dispatchEvent(new Event("click"));
+
+      expect(idInput.value).toBe("");
+      expect(aliasInput.value).toBe("");
+
+      const rows = root.querySelectorAll(".peerjs-trusted-peer-row");
+      expect(rows.length).toBeGreaterThan(0);
+    }
+
+    // Clear myPeerIdInput to test auto-generation
+    const myPeerIdInput = root.querySelector(
+      '[data-setting="peerjs-my-peer-id-input"]',
+    ) as HTMLInputElement;
+    if (myPeerIdInput) {
+      myPeerIdInput.value = "";
+    }
+
+    await el.savePeerJsConfig();
+    expect(mockConfigurePeerJs).toHaveBeenCalled();
+
+    document.body.removeChild(el);
+  });
+
+  it("handles peerAliases in render", async () => {
+    const el = new ShadowClawPeerJs() as any;
+    document.body.appendChild(el);
+    await el.connectedCallback();
+
+    mockGetPeerJsConfig.mockReturnValueOnce({
+      enabled: true,
+      myPeerId: "peer-1",
+      myAlias: "Me",
+      trustedPeerIds: ["peer-2"],
+      peerAliases: { Bob: "peer-2" },
+      serverHost: "localhost",
+      serverPort: 9000,
+      serverPath: "/",
+      serverSecure: false,
+    });
+
+    await el.render();
+
+    const status = el.shadowRoot?.querySelector(
+      '[data-info="peerjs-trusted-ids-status"]',
+    );
+    expect(status?.textContent).toContain("Bob");
+
+    document.body.removeChild(el);
+  });
 });

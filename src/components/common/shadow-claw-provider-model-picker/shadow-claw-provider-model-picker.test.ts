@@ -158,4 +158,125 @@ describe("shadow-claw-provider-model-picker", () => {
 
     el.remove();
   });
+
+  it("handles getValue, setLabels, and invalidateProviderModels", async () => {
+    const el = new ShadowClawProviderModelPicker();
+    document.body.appendChild(el);
+
+    el.setValue({ providerId: "prov-1", modelId: "mod-1" });
+    expect(el.getValue()).toEqual({ providerId: "prov-1", modelId: "mod-1" });
+
+    el.setLabels({
+      providerLabel: "Custom Provider Label",
+      modelLabel: "Custom Model Label",
+    });
+    const root = el.shadowRoot;
+    expect(root?.textContent).toContain("Custom Provider Label");
+
+    el.invalidateProviderModels("prov-1");
+    el.invalidateProviderModels();
+
+    el.remove();
+  });
+
+  it("handles various model tool badges and context window structures", async () => {
+    const el = new ShadowClawProviderModelPicker();
+    document.body.appendChild(el);
+
+    el.setProviders([
+      {
+        id: "multi-models",
+        name: "Multi Models",
+        models: [
+          {
+            id: "no-tools",
+            name: "No Tools",
+            supports_tools: false,
+            context_window: 4096,
+          },
+          {
+            id: "supported-params",
+            name: "Params",
+            supported_parameters: ["tools"],
+            context_length: 8192,
+          },
+          {
+            id: "no-params",
+            name: "No Params",
+            supported_parameters: ["temperature"],
+          },
+          {
+            id: "provider-list",
+            name: "With Provider List",
+            providers: [{ supports_tools: false, context_length: 16384 }],
+          },
+          {
+            id: "provider-tools",
+            name: "With Provider Tools",
+            providers: [{ supports_tools: true, context_length: 32768 }],
+          },
+          { name: "Only Name" },
+        ],
+      } as any,
+    ]);
+
+    el.setValue({ providerId: "multi-models", modelId: "no-tools" });
+    await el.render();
+
+    const root = el.shadowRoot;
+    const modelSelect = root?.querySelector(
+      '[data-role="model-select"]',
+    ) as HTMLSelectElement;
+    expect(modelSelect).not.toBeNull();
+    const options = Array.from(modelSelect.options).map((o) => o.textContent);
+    expect(options.some((t) => t?.includes("🚫🛠️"))).toBe(true);
+    expect(options.some((t) => t?.includes("🛠️"))).toBe(true);
+
+    el.remove();
+  });
+
+  it("handles loader failure and custom model input events", async () => {
+    const el = new ShadowClawProviderModelPicker();
+    document.body.appendChild(el);
+
+    const failingLoader = jest
+      .fn<() => Promise<any[]>>()
+      .mockRejectedValue(new Error("Network fail"));
+    el.setModelLoader(failingLoader as any);
+    el.setProviders([
+      { id: "dynamic", name: "Dynamic", modelsUrl: "https://fail.test" } as any,
+    ]);
+
+    el.setValue({ providerId: "dynamic", modelId: null });
+    await el.render();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const root = el.shadowRoot;
+    const modelSelect = root?.querySelector(
+      '[data-role="model-select"]',
+    ) as HTMLSelectElement;
+    if (modelSelect) {
+      modelSelect.value = "__custom__";
+      modelSelect.dispatchEvent(new Event("change"));
+    }
+
+    const customInput = root?.querySelector(
+      '[data-role="custom-model-input"]',
+    ) as HTMLInputElement;
+    const listener = jest.fn();
+    el.addEventListener("provider-model-change", listener as EventListener);
+
+    if (customInput) {
+      customInput.value = "typed-model";
+      customInput.dispatchEvent(new Event("input"));
+      expect(listener).toHaveBeenCalledWith(
+        expect.objectContaining({
+          detail: { providerId: "dynamic", modelId: "typed-model" },
+        }),
+      );
+    }
+
+    el.remove();
+  });
 });

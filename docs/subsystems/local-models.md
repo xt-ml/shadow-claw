@@ -30,7 +30,7 @@ To configure the CLI agent defaults without affecting browser client settings, u
 ```
 
 > [!NOTE]
-> The browser client remains defaulted to the Chrome Prompt API (`prompt_api`) with its onboarding setup dialog. Setting `"agent"` configures headless CLI executions while keeping browser state pristine.
+> The browser client defaults out-of-the-box to Transformers.js (`transformers_js_browser` with `onnx-community/Qwen3-0.6B-ONNX`) with guided onboarding. Setting `"agent"` configures headless CLI executions while keeping browser state pristine.
 
 ### CLI-Curated ONNX Models
 

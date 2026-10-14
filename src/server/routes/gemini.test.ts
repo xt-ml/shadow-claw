@@ -339,4 +339,248 @@ describe("Gemini proxy", () => {
       }),
     );
   });
+
+  it("returns 401 when API key is missing", async () => {
+    const oldKey = process.env.GEMINI_API_KEY;
+    delete process.env.GEMINI_API_KEY;
+    try {
+      const handler = routes.get("POST /gemini-proxy/chat/completions");
+      const req = { body: {}, headers: {} } as any;
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn(),
+      } as any;
+
+      await handler(req, res);
+      expect(res.status).toHaveBeenCalledWith(401);
+
+      const modelsHandler = routes.get("GET /gemini-proxy/models");
+      await modelsHandler(req, res);
+      expect(res.status).toHaveBeenCalledWith(401);
+    } finally {
+      if (oldKey) process.env.GEMINI_API_KEY = oldKey;
+    }
+  });
+
+  it("handles multimodal content and tools in non-streaming completions", async () => {
+    const handler = routes.get("POST /gemini-proxy/chat/completions");
+
+    mockGenerateContent.mockResolvedValue({
+      get text() {
+        return "";
+      },
+      candidates: [
+        {
+          content: {
+            parts: [
+              {
+                functionCall: {
+                  name: "fetch_url",
+                  args: { url: "https://example.com" },
+                },
+              },
+            ],
+          },
+        },
+      ],
+      usageMetadata: {
+        promptTokenCount: 5,
+        candidatesTokenCount: 10,
+        totalTokenCount: 15,
+      },
+    });
+
+    const req = {
+      body: {
+        model: "gemini-2.0-flash",
+        messages: [
+          { role: "system", content: "You are helpful" },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Look at this" },
+              {
+                type: "image_url",
+                image_url: { url: "data:image/png;base64,iVBORw0KGgo=" },
+              },
+              { type: "tool_use", name: "calculator", input: { a: 1 } },
+              { type: "tool_result", name: "calculator", content: "2" },
+              { type: "unknown" },
+            ],
+          },
+          { role: "assistant", content: "working" },
+          { role: "tool", content: "result" },
+        ],
+        tools: [
+          {
+            function: {
+              name: "fetch_url",
+              description: "Fetch URL",
+              parameters: { type: "object" },
+            },
+          },
+        ],
+      },
+      headers: { "x-goog-api-key": "test-key" },
+    } as any;
+
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    } as any;
+
+    await handler(req, res);
+
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        choices: [
+          expect.objectContaining({
+            finish_reason: "tool_calls",
+            message: expect.objectContaining({
+              role: "assistant",
+              tool_calls: [
+                expect.objectContaining({
+                  function: expect.objectContaining({
+                    name: "fetch_url",
+                  }),
+                }),
+              ],
+            }),
+          }),
+        ],
+      }),
+    );
+  });
+
+  it("handles streaming chunks with reasoning and function calls", async () => {
+    const handler = routes.get("POST /gemini-proxy/chat/completions");
+
+    const asyncIterable = (async function* () {
+      yield {
+        text: "Thinking...",
+        candidates: [
+          {
+            content: {
+              parts: [
+                { thought: true, text: "Let me check..." },
+                {
+                  functionCall: {
+                    name: "test_tool",
+                    args: { x: 1 },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      };
+      yield {
+        text: "Done!",
+      };
+    })();
+
+    mockGenerateContentStream.mockResolvedValue(asyncIterable);
+
+    const written: string[] = [];
+    const req = {
+      body: {
+        stream: true,
+        messages: [{ role: "user", content: "run test" }],
+      },
+      headers: { "x-goog-api-key": "test-key" },
+    } as any;
+
+    const res = {
+      setHeader: jest.fn(),
+      flushHeaders: jest.fn(),
+      write: jest.fn((chunk: string) => written.push(chunk)),
+      end: jest.fn(),
+    } as any;
+
+    await handler(req, res);
+
+    expect(res.setHeader).toHaveBeenCalledWith(
+      "Content-Type",
+      "text/event-stream",
+    );
+    expect(res.end).toHaveBeenCalled();
+    expect(written.length).toBeGreaterThan(0);
+  });
+
+  it("handles errors during completion with JSON error payload", async () => {
+    const handler = routes.get("POST /gemini-proxy/chat/completions");
+
+    mockGenerateContent.mockRejectedValue(
+      new Error(
+        JSON.stringify({ error: { code: 429, message: "Resource exhausted" } }),
+      ),
+    );
+
+    const req = {
+      body: { messages: [{ role: "user", content: "hi" }] },
+      headers: { "x-goog-api-key": "test-key" },
+    } as any;
+
+    const res = {
+      headersSent: false,
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    } as any;
+
+    await handler(req, res);
+    expect(res.status).toHaveBeenCalledWith(429);
+  });
+
+  it("provides fallback models when listing fails during iteration or yields empty list", async () => {
+    const handler = routes.get("GET /gemini-proxy/models");
+
+    const throwingIterable = (async function* () {
+      throw new Error("Quota exceeded during iteration");
+    })();
+    mockListModels.mockResolvedValue(throwingIterable);
+
+    const req = {
+      headers: { "x-goog-api-key": "test-key" },
+    } as any;
+
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    } as any;
+
+    await handler(req, res);
+
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.arrayContaining([
+          expect.objectContaining({ id: "gemini-2.0-flash" }),
+          expect.objectContaining({ id: "gemini-1.5-flash" }),
+        ]),
+      }),
+    );
+  });
+
+  it("returns 502 when models.list() itself throws", async () => {
+    const handler = routes.get("GET /gemini-proxy/models");
+
+    mockListModels.mockRejectedValue(new Error("Network failure"));
+
+    const req = {
+      headers: { "x-goog-api-key": "test-key" },
+    } as any;
+
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    } as any;
+
+    await handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(502);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: expect.stringContaining("Network failure"),
+      }),
+    );
+  });
 });

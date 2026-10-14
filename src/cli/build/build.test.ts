@@ -361,4 +361,99 @@ describe("build without and with pages", () => {
       await rm(tempConsumerRoot, { recursive: true, force: true });
     }
   });
+
+  it("builds an external consumer with copyAllAssets, pagesOrigin, scripts, and service worker", async () => {
+    const tempConsumerRoot = await mkdtemp(
+      path.join(os.tmpdir(), "shadow-claw-consumer-prod-"),
+    );
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      await mkdir(path.join(tempConsumerRoot, "assets/icons"), {
+        recursive: true,
+      });
+      await mkdir(path.join(tempConsumerRoot, "assets/fonts"), {
+        recursive: true,
+      });
+      await writeFile(
+        path.join(tempConsumerRoot, "assets/icons/icon.png"),
+        "icon",
+      );
+      await writeFile(
+        path.join(tempConsumerRoot, "assets/fonts/font.woff2"),
+        "font",
+      );
+      await mkdir(path.join(tempConsumerRoot, ".agents/scripts"), {
+        recursive: true,
+      });
+      await writeFile(
+        path.join(tempConsumerRoot, ".agents/scripts/run.sh"),
+        "echo hi",
+      );
+      await writeFile(
+        path.join(tempConsumerRoot, "manifest.json"),
+        JSON.stringify({ start_url: "/initial" }),
+      );
+
+      // Create a dummy service-worker.js in tempProjectRoot/dist/public if missing
+      const swPath = path.join(
+        tempProjectRoot,
+        "dist/public/service-worker.js",
+      );
+      if (!fs.existsSync(swPath)) {
+        await writeFile(swPath, "// sw dummy\nimportScripts();");
+      }
+
+      await runConsumerBuild({
+        contentRoot: tempConsumerRoot,
+        toolchainRoot: tempProjectRoot,
+        isProduction: true,
+        copyAllAssets: true,
+        pagesOrigin: "https://consumer.example.com",
+        quiet: false,
+        stdio: "pipe",
+      });
+
+      const distDir = path.join(tempConsumerRoot, "dist/public");
+      expect(fs.existsSync(path.join(distDir, ".nojekyll"))).toBe(true);
+      expect(fs.existsSync(path.join(distDir, ".agents/scripts/run.sh"))).toBe(
+        true,
+      );
+
+      const manifest = JSON.parse(
+        await readFile(path.join(distDir, "manifest.json"), "utf8"),
+      );
+      expect(manifest.start_url).toBe("https://consumer.example.com");
+    } finally {
+      logSpy.mockRestore();
+      await rm(tempConsumerRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("builds in-repo with isProduction, copyAllAssets, and prerenderMainMemory false", async () => {
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      await runConsumerBuild({
+        contentRoot: projectRoot,
+        toolchainRoot: projectRoot,
+        isProduction: true,
+        copyAllAssets: true,
+        prerenderMainMemory: false,
+        pagesOrigin: "https://shadow-claw.example.com/",
+        basePath: "/shadow-claw/",
+        quiet: false,
+        stdio: "pipe",
+      });
+
+      const indexHtml = await readFile(
+        path.join(projectRoot, "dist/public/index.html"),
+        "utf8",
+      );
+      expect(indexHtml).toContain('<base href="/shadow-claw/"');
+      expect(
+        fs.existsSync(path.join(projectRoot, "dist/public/.nojekyll")),
+      ).toBe(true);
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
 });

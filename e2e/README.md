@@ -330,8 +330,8 @@ Behavior notes:
 
 - Chat can show a transient model download progress panel when using Prompt API or Transformers.js Browser providers.
 - Assertions around that panel should be state-based (present/hidden) and not rely on fixed timing.
-- **Prompt API Testing**: When testing the native browser Prompt API, ensure the onboarding dialog bypass logic works and fallback model selection UI is properly hidden when the native hardware API is available, with graceful degradation to local Transformers.js when the native API is unavailable.
-- **Transformers.js Testing**: Verify chunked model download progress estimation (via Hugging Face tree API), local inference (defaulting to `q4f16`), and dynamic Jinja chat-template parsing when using local models.
+- **Transformers.js Testing**: ShadowClaw defaults out-of-the-box in the browser to Transformers.js (`transformers_js_browser` with `onnx-community/Qwen3-0.6B-ONNX`). Verify onboarding dialog interactions, chunked model download progress estimation (via Hugging Face tree API), local inference (defaulting to `q4f16`), and dynamic Jinja chat-template parsing when using local models.
+- **Prompt API Testing**: When testing the optional native browser Prompt API (`prompt_api`), ensure the onboarding dialog bypass logic works and fallback model selection UI is properly hidden when the native hardware API is available, with graceful degradation to local Transformers.js when the native API is unavailable.
 - **Provider Help Dialogs**: When a provider request fails, the application may display a contextual help dialog. Use `app.navigateToWithOpenDialog()` to test flows that interrupt navigation with dialogs, or verify dialog content via standard locators on the `.app-dialog` component.
 - **Attachment Capabilities**: When testing file attachments, keep in mind that the application dynamically selects native vs. fallback delivery based on model capabilities (`src/content/attachment-capabilities.ts`).
 - **Confirmation Flows**: Destructive chat actions (for example message delete and compact) use app-level dialogs, so tests should assert dialog behavior rather than native `window.confirm()`.

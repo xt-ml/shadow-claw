@@ -463,6 +463,364 @@ describe("worker/tools/email", () => {
     expect(deleteMsgResult).toContain('"deleted": [');
   });
 
+  it("send_message handles missing SMTP host, attachment read failure, and oauth 401 retry", async () => {
+    // Missing SMTP host
+    mockGetEmailConnection.mockResolvedValueOnce({
+      id: "conn-no-smtp",
+      pluginId: "imap",
+      enabled: true,
+      config: {},
+      credentialRef: {
+        authType: "basic_userpass",
+        encryptedSecret: "enc:pw",
+        username: "user@example.com",
+      },
+    });
+
+    const noSmtpResult = await executeManageEmailTool(
+      {} as any,
+      {
+        action: "send_message",
+        connection_id: "conn-no-smtp",
+        to: ["a@b.com"],
+        subject: "Test",
+        body: "Hello",
+      },
+      "group-1",
+    );
+    expect(noSmtpResult).toContain("missing SMTP host");
+
+    // Attachment read error
+    mockGetEmailConnection.mockResolvedValueOnce({
+      id: "conn-att-fail",
+      pluginId: "imap",
+      enabled: true,
+      config: { smtpHost: "smtp.example.com" },
+      credentialRef: {
+        authType: "basic_userpass",
+        encryptedSecret: "enc:pw",
+        username: "user@example.com",
+      },
+    });
+    mockReadGroupFileBytes.mockRejectedValueOnce(new Error("File not found"));
+
+    const attFailResult = await executeManageEmailTool(
+      {} as any,
+      {
+        action: "send_message",
+        connection_id: "conn-att-fail",
+        to: ["a@b.com"],
+        subject: "Test",
+        body: "Hello",
+        attachments: ["missing.txt"],
+      },
+      "group-1",
+    );
+    expect(attFailResult).toContain(
+      "Attachment file not found or unreadable: missing.txt",
+    );
+
+    // OAuth 401 retry
+    mockGetEmailConnection.mockResolvedValueOnce({
+      id: "conn-oauth-send",
+      pluginId: "imap",
+      enabled: true,
+      config: { smtpHost: "smtp.example.com" },
+      credentialRef: {
+        authType: "oauth",
+        accountId: "acct-send",
+        providerId: "google",
+        username: "user@example.com",
+      },
+    });
+    mockResolveServiceCredentials
+      .mockResolvedValueOnce({ token: "token-s1" })
+      .mockResolvedValueOnce({ token: "token-s2" });
+
+    (global.fetch as any)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        statusText: "Unauthorized",
+        json: async () => ({ error: "unauthorized" }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ sent: true, refreshed: true }),
+      });
+
+    const retrySendResult = await executeManageEmailTool(
+      {} as any,
+      {
+        action: "send_message",
+        connection_id: "conn-oauth-send",
+        to: ["target@example.com"],
+        subject: "Test",
+        body: "Hello",
+      },
+      "group-1",
+    );
+    expect(retrySendResult).toContain('"refreshed": true');
+  });
+
+  it("download_attachments handles missing IMAP host, oauth 401 retry, and failed response", async () => {
+    // Missing IMAP host
+    mockGetEmailConnection.mockResolvedValueOnce({
+      id: "conn-no-imap",
+      pluginId: "imap",
+      enabled: true,
+      config: {},
+      credentialRef: {
+        authType: "basic_userpass",
+        encryptedSecret: "enc:pw",
+        username: "user@example.com",
+      },
+    });
+
+    const noImapResult = await executeManageEmailTool(
+      {} as any,
+      {
+        action: "download_attachments",
+        connection_id: "conn-no-imap",
+        message_uid: 10,
+      },
+      "group-1",
+    );
+    expect(noImapResult).toContain("missing IMAP host");
+
+    // OAuth 401 retry & download failure response
+    mockGetEmailConnection.mockResolvedValue({
+      id: "conn-oauth-dl",
+      pluginId: "imap",
+      enabled: true,
+      config: { host: "imap.example.com" },
+      credentialRef: {
+        authType: "oauth",
+        accountId: "acct-dl",
+        providerId: "google",
+        username: "user@example.com",
+      },
+    });
+    mockResolveServiceCredentials
+      .mockResolvedValueOnce({ token: "token-dl1" })
+      .mockResolvedValueOnce({ token: "token-dl2" });
+
+    (global.fetch as any)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        statusText: "Unauthorized",
+        json: async () => ({ error: "unauthorized" }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: "Server Error",
+        json: async () => ({ error: "disk error" }),
+      });
+
+    const failDlResult = await executeManageEmailTool(
+      {} as any,
+      {
+        action: "download_attachments",
+        connection_id: "conn-oauth-dl",
+        message_uid: 10,
+      },
+      "group-1",
+    );
+    expect(failDlResult).toContain(
+      "IMAP attachment download failed (500): disk error",
+    );
+  });
+
+  it("mark_as_read handles oauth 401 retry and failed response", async () => {
+    mockGetEmailConnection.mockResolvedValue({
+      id: "conn-oauth-mark",
+      pluginId: "imap",
+      enabled: true,
+      config: { host: "imap.example.com" },
+      credentialRef: {
+        authType: "oauth",
+        accountId: "acct-mark",
+        providerId: "google",
+        username: "user@example.com",
+      },
+    });
+    mockResolveServiceCredentials
+      .mockResolvedValueOnce({ token: "token-m1" })
+      .mockResolvedValueOnce({ token: "token-m2" });
+
+    (global.fetch as any)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        statusText: "Unauthorized",
+        json: async () => ({ error: "unauthorized" }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        statusText: "Bad Request",
+        json: async () => ({ error: "invalid uids" }),
+      });
+
+    const failMarkResult = await executeManageEmailTool(
+      {} as any,
+      {
+        action: "mark_as_read",
+        connection_id: "conn-oauth-mark",
+        message_uids: [999],
+      },
+      "group-1",
+    );
+    expect(failMarkResult).toContain("IMAP modify failed (400): invalid uids");
+
+    // Plugin doesn't support messages.read
+    mockGetEmailPluginManifest.mockReturnValueOnce({
+      id: "imap",
+      name: "IMAP",
+      actions: ["messages.send"],
+    });
+    mockGetEmailConnection.mockResolvedValueOnce({
+      id: "conn-unsupported",
+      pluginId: "imap",
+      enabled: true,
+      config: { host: "imap.example.com" },
+      credentialRef: {
+        authType: "basic_userpass",
+        username: "u",
+        encryptedSecret: "enc:pw",
+      },
+    });
+    const unsuppResult = await executeManageEmailTool(
+      {} as any,
+      {
+        action: "mark_as_read",
+        connection_id: "conn-unsupported",
+        message_uids: [1],
+      },
+      "group-1",
+    );
+    expect(unsuppResult).toContain("does not support inbox message updates");
+
+    // Missing IMAP host in mark_as_read
+    mockGetEmailConnection.mockResolvedValueOnce({
+      id: "conn-no-host",
+      pluginId: "imap",
+      enabled: true,
+      config: {},
+      credentialRef: {
+        authType: "basic_userpass",
+        username: "u",
+        encryptedSecret: "enc:pw",
+      },
+    });
+    const noHostResult = await executeManageEmailTool(
+      {} as any,
+      {
+        action: "mark_as_read",
+        connection_id: "conn-no-host",
+        message_uids: [1],
+      },
+      "group-1",
+    );
+    expect(noHostResult).toContain("missing IMAP host");
+
+    // OAuth 401 retry where refreshedAuth returns an error string
+    mockGetEmailConnection.mockResolvedValueOnce({
+      id: "conn-oauth-fail-refresh",
+      pluginId: "imap",
+      enabled: true,
+      config: { host: "imap.example.com" },
+      credentialRef: {
+        authType: "oauth",
+        accountId: "acc-refresh",
+        username: "u",
+      },
+    });
+    mockResolveServiceCredentials
+      .mockResolvedValueOnce({ token: "initial-token" })
+      .mockResolvedValueOnce(null); // Second resolve fails
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      statusText: "Unauthorized",
+      json: async () => ({}),
+    });
+    const refreshFailResult = await executeManageEmailTool(
+      {} as any,
+      {
+        action: "mark_as_read",
+        connection_id: "conn-oauth-fail-refresh",
+        message_uids: [1],
+      },
+      "group-1",
+    );
+    expect(refreshFailResult).toContain("OAuth account reconnect required");
+  });
+
+  it("download_attachments validates missing uid, disabled connection, and not found", async () => {
+    // Missing uid
+    mockGetEmailConnection.mockResolvedValueOnce({
+      id: "conn-uid",
+      pluginId: "imap",
+      enabled: true,
+      config: {},
+    });
+    const noUid = await executeManageEmailTool(
+      {} as any,
+      { action: "download_attachments", connection_id: "conn-uid" },
+      "group-1",
+    );
+    expect(noUid).toContain("requires message_uid");
+
+    // Disabled connection
+    mockGetEmailConnection.mockResolvedValueOnce({
+      id: "conn-disabled",
+      pluginId: "imap",
+      enabled: false,
+      config: {},
+    });
+    const disabledRes = await executeManageEmailTool(
+      {} as any,
+      {
+        action: "download_attachments",
+        connection_id: "conn-disabled",
+        message_uid: 1,
+      },
+      "group-1",
+    );
+    expect(disabledRes).toContain("is disabled");
+
+    // Not found
+    mockGetEmailConnection.mockResolvedValueOnce(null);
+    mockListEmailConnections.mockResolvedValueOnce([]);
+    const notFoundRes = await executeManageEmailTool(
+      {} as any,
+      {
+        action: "download_attachments",
+        connection_id: "conn-missing",
+        message_uid: 1,
+      },
+      "group-1",
+    );
+    expect(notFoundRes).toContain(
+      "Integration connection not found: conn-missing",
+    );
+  });
+
+  it("returns error on unsupported manage_email action", async () => {
+    const result = await executeManageEmailTool(
+      {} as any,
+      { action: "unknown_action" },
+      "group-1",
+    );
+    expect(result).toBe(
+      "Error: Unsupported manage_email action: unknown_action",
+    );
+  });
+
   it("parses email attachment inputs and guesses mime types correctly", async () => {
     const { asEmailAttachmentInputs } =
       await import("./utils/asEmailAttachmentInputs.js");

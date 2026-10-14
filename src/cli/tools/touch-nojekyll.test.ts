@@ -15,4 +15,16 @@ describe("touchNoJekyll", () => {
       "utf-8",
     );
   });
+
+  it("uses default project root dist/public when targetDir is omitted", async () => {
+    const writeFileImpl = jest.fn<any>().mockResolvedValue(undefined);
+
+    await touchNoJekyll(undefined, { writeFileImpl });
+
+    expect(writeFileImpl).toHaveBeenCalledWith(
+      expect.stringMatching(/dist\/public\/\.nojekyll$/),
+      "",
+      "utf-8",
+    );
+  });
 });

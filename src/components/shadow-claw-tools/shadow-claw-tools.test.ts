@@ -120,7 +120,8 @@ const { ShadowClawTools } = await import("./shadow-claw-tools.js");
 const { toolsStore } = (await import("../../stores/tools.js")) as any;
 const { orchestratorStore } =
   (await import("../../stores/orchestrator.js")) as any;
-const { showSuccess } = (await import("../../ui/toast.js")) as any;
+const { showSuccess, showInfo, showError } =
+  (await import("../../ui/toast.js")) as any;
 
 describe("shadow-claw-tools", () => {
   beforeEach(() => {
@@ -633,6 +634,233 @@ describe("shadow-claw-tools", () => {
     expect(showSuccess).toHaveBeenCalledWith(
       expect.stringContaining("Successfully imported 3 items"),
     );
+
+    document.body.removeChild(el);
+  });
+
+  it("handles back button, add button, restore button, and select all/none", async () => {
+    const el = new ShadowClawTools();
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 50));
+    await el.render();
+
+    const root = el.shadowRoot!;
+
+    // 1. Back button
+    let backNavigated = false;
+    el.addEventListener("navigate-back", () => {
+      backNavigated = true;
+    });
+    const backBtn = root.querySelector(".tools__back-btn") as HTMLButtonElement;
+    backBtn?.dispatchEvent(new Event("click"));
+    expect(backNavigated).toBe(true);
+
+    // 2. Add button
+    const dialog = root.querySelector("dialog") as HTMLDialogElement;
+    dialog.showModal = jest.fn();
+    const addBtn = root.querySelector(".tools__add-btn") as HTMLButtonElement;
+    addBtn?.dispatchEvent(new Event("click"));
+    expect(dialog.showModal).toHaveBeenCalled();
+
+    // 3. Restore button
+    const restoreBtn = root.querySelector(
+      ".tools__restore-btn",
+    ) as HTMLButtonElement;
+    const restoreInput = root.querySelector(
+      ".tools__hidden-restore",
+    ) as HTMLInputElement;
+    const clickSpy = jest
+      .spyOn(restoreInput, "click")
+      .mockImplementation(() => {});
+    restoreBtn?.dispatchEvent(new Event("click"));
+    expect(clickSpy).toHaveBeenCalled();
+    clickSpy.mockRestore();
+
+    // 4. Select all / none
+    const selectAllBtn = root.querySelector(
+      ".tools__select-all-btn",
+    ) as HTMLButtonElement;
+    selectAllBtn?.dispatchEvent(new Event("click"));
+    expect(toolsStore.setAllEnabled).toHaveBeenCalled();
+    expect(showInfo).toHaveBeenCalledWith("All tools enabled");
+
+    const selectNoneBtn = root.querySelector(
+      ".tools__select-none-btn",
+    ) as HTMLButtonElement;
+    selectNoneBtn?.dispatchEvent(new Event("click"));
+    expect(showInfo).toHaveBeenCalledWith("All tools disabled");
+
+    document.body.removeChild(el);
+  });
+
+  it("handles WebMCP, internet access, and Web Search toggles", async () => {
+    const el = new ShadowClawTools();
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 50));
+    await el.render();
+
+    const root = el.shadowRoot!;
+
+    // 1. WebMCP toggle
+    const webMcpToggle = root.querySelector(
+      ".tools__webmcp-toggle",
+    ) as HTMLInputElement;
+    if (webMcpToggle) {
+      webMcpToggle.checked = true;
+      webMcpToggle.dispatchEvent(new Event("change"));
+      await new Promise((r) => setTimeout(r, 20));
+      expect(showInfo).toHaveBeenCalledWith("WebMCP tool registration enabled");
+
+      // Without orchestrator
+      el.orchestrator = null;
+      (orchestratorStore as any).orchestrator = null;
+      webMcpToggle.checked = true;
+      webMcpToggle.dispatchEvent(new Event("change"));
+      await new Promise((r) => setTimeout(r, 20));
+      expect(showError).toHaveBeenCalledWith("Orchestrator is not ready");
+
+      // Restore orchestrator
+      (orchestratorStore as any).orchestrator = {
+        getWebMcpToolsEnabled: jest.fn(() => true),
+        getWebMcpMode: jest.fn(() => "native"),
+        setWebMcpToolsEnabled: jest.fn(),
+        setWebMcpMode: jest.fn(),
+      };
+    }
+
+    // 2. Internet access toggle
+    const internetToggle = root.querySelector(
+      ".tools__internet-access-toggle",
+    ) as HTMLInputElement;
+    if (internetToggle) {
+      internetToggle.checked = true;
+      internetToggle.dispatchEvent(new Event("change"));
+      await new Promise((r) => setTimeout(r, 20));
+      expect(orchestratorStore.setVMBashFullInternetAccess).toHaveBeenCalled();
+      expect(showInfo).toHaveBeenCalledWith(
+        "Full internet access enabled for Bash and JavaScript tools",
+      );
+    }
+
+    // 3. Web Search proxy toggle
+    const proxyToggle = root.querySelector(
+      ".tools__websearch-proxy-toggle",
+    ) as HTMLInputElement;
+    if (proxyToggle) {
+      proxyToggle.checked = true;
+      proxyToggle.dispatchEvent(new Event("change"));
+      await new Promise((r) => setTimeout(r, 20));
+      expect(toolsStore.setWebSearchUseProxy).toHaveBeenCalled();
+      expect(showInfo).toHaveBeenCalledWith("Web Search local proxy enabled");
+    }
+
+    document.body.removeChild(el);
+  });
+
+  it("handles prompt override save, clear, and dialog controls", async () => {
+    const el = new ShadowClawTools();
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 50));
+    await el.render();
+
+    const root = el.shadowRoot!;
+
+    // 1. Save and Clear prompt
+    const textarea = root.querySelector(
+      ".tools__prompt-area",
+    ) as HTMLTextAreaElement;
+    if (textarea) textarea.value = "Custom system instructions";
+
+    const savePromptBtn = root.querySelector(
+      ".tools__save-prompt-btn",
+    ) as HTMLButtonElement;
+    savePromptBtn?.dispatchEvent(new Event("click"));
+    expect(toolsStore.setSystemPromptOverride).toHaveBeenCalled();
+    expect(showSuccess).toHaveBeenCalledWith("System prompt override saved");
+
+    const clearPromptBtn = root.querySelector(
+      ".tools__clear-prompt-btn",
+    ) as HTMLButtonElement;
+    clearPromptBtn?.dispatchEvent(new Event("click"));
+    expect(showSuccess).toHaveBeenCalledWith("System prompt override cleared");
+
+    // 2. Dialog controls (close, cancel, backdrop)
+    const dialog = root.querySelector(".tools__dialog") as HTMLDialogElement;
+    if (dialog) {
+      dialog.close = jest.fn();
+      const closeBtn = dialog.querySelector(
+        ".tools__dialog-close",
+      ) as HTMLButtonElement;
+      closeBtn?.dispatchEvent(new Event("click"));
+      expect(dialog.close).toHaveBeenCalledTimes(1);
+
+      const cancelBtn = dialog.querySelector(
+        ".tools__btn-cancel",
+      ) as HTMLButtonElement;
+      cancelBtn?.dispatchEvent(new Event("click"));
+      expect(dialog.close).toHaveBeenCalledTimes(2);
+
+      Object.defineProperty(dialog, "target", { value: dialog });
+      dialog.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      expect(dialog.close).toHaveBeenCalledTimes(3);
+    }
+
+    // 3. Clone dialog controls
+    const cloneDialog = root.querySelector(
+      ".tools__clone-dialog",
+    ) as HTMLDialogElement;
+    if (cloneDialog) {
+      cloneDialog.close = jest.fn();
+      const cloneCloseBtn = root.querySelector(
+        ".tools__clone-dialog-close",
+      ) as HTMLButtonElement;
+      cloneCloseBtn?.dispatchEvent(new Event("click"));
+      expect(cloneDialog.close).toHaveBeenCalledTimes(1);
+
+      const cloneCancelBtn = root.querySelector(
+        ".tools__clone-cancel-btn",
+      ) as HTMLButtonElement;
+      cloneCancelBtn?.dispatchEvent(new Event("click"));
+      expect(cloneDialog.close).toHaveBeenCalledTimes(2);
+    }
+
+    // 4. Profile dialog controls and Profile select
+    const profileDialog = root.querySelector(
+      ".tools__profile-dialog",
+    ) as HTMLDialogElement;
+    if (profileDialog) {
+      profileDialog.close = jest.fn();
+      const profileCloseBtn = root.querySelector(
+        ".tools__profile-dialog-close",
+      ) as HTMLButtonElement;
+      profileCloseBtn?.dispatchEvent(new Event("click"));
+      expect(profileDialog.close).toHaveBeenCalledTimes(1);
+
+      const profileCancelBtn = root.querySelector(
+        ".tools__profile-cancel-btn",
+      ) as HTMLButtonElement;
+      profileCancelBtn?.dispatchEvent(new Event("click"));
+      expect(profileDialog.close).toHaveBeenCalledTimes(2);
+
+      Object.defineProperty(profileDialog, "target", { value: profileDialog });
+      profileDialog.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      expect(profileDialog.close).toHaveBeenCalledTimes(3);
+    }
+
+    const profileSelect = root.querySelector(
+      ".tools__profile-select",
+    ) as HTMLSelectElement;
+    if (profileSelect) {
+      profileSelect.value = "custom_profile";
+      profileSelect.dispatchEvent(new Event("change"));
+      expect(toolsStore.activateProfile).toHaveBeenCalled();
+      expect(showInfo).toHaveBeenCalledWith("Profile activated");
+
+      profileSelect.value = "";
+      profileSelect.dispatchEvent(new Event("change"));
+      expect(toolsStore.deactivateProfile).toHaveBeenCalled();
+      expect(showInfo).toHaveBeenCalledWith("Profile deactivated");
+    }
 
     document.body.removeChild(el);
   });

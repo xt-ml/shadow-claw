@@ -186,7 +186,7 @@ export async function waitForMessageCount(
         .querySelector("shadow-claw")
         ?.shadowRoot?.querySelector("shadow-claw-chat");
 
-      const messages = chat?.shadowRoot?.querySelectorAll(".message");
+      const messages = chat?.shadowRoot?.querySelectorAll(".chat__message");
 
       return messages?.length || 0;
     });

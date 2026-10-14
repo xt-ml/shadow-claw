@@ -108,6 +108,9 @@ jest.unstable_mockModule("../../utils/utils.js", () => ({
   formatTimestamp: jest.fn(() => "now"),
   handleSpecialLinkNavigation: jest.fn(() => false),
   computeSha256: jest.fn(async (_: ArrayBuffer) => "mock-hash"),
+  escapeHtml: jest.fn((text: string) => text.replace(/</g, "&lt;")),
+  sanitizeGroupId: jest.fn((id: string) => id.replace(/[^a-zA-Z0-9-]/g, "-")),
+  sanitizeHtml: jest.fn((html: string) => html),
 }));
 
 jest.unstable_mockModule(

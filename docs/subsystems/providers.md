@@ -43,7 +43,7 @@ All providers are declared in `src/config/config.ts` under `PROVIDERS`:
 | `agentfile`               | `openai`          | ✅        | ❌               |
 | `mesh-llm`                | `mesh-llm`        | ✅        | ❌               |
 
-> **Default Provider Strategy:** In the browser client, ShadowClaw defaults out-of-the-box to **Prompt API** (`prompt_api`) with guided onboarding and built-in task API polyfills. For headless CLI agent execution (`shadow-claw agent`), it defaults out-of-the-box to **OpenRouter** (`openrouter` with default model `openrouter/free`). Projects can also declaratively configure a default provider and model in `shadow-claw.config.json` under `settings.defaultProvider` and `settings.defaultModel`.
+> **Default Provider Strategy:** In the browser client, ShadowClaw defaults out-of-the-box to **Transformers.js (Browser)** (`transformers_js_browser`) with guided onboarding. For headless CLI agent execution (`shadow-claw agent`), it defaults out-of-the-box to **OpenRouter** (`openrouter` with default model `openrouter/free`). Prompt API (`prompt_api`) and its polyfills remain fully supported when manually selected. Projects can also declaratively configure a default provider and model in `shadow-claw.config.json` under `settings.defaultProvider` and `settings.defaultModel`.
 >
 > **Local Models & Hugging Face:** For offline or local model execution, configure `defaultProvider: "transformers_js_local"`, `defaultProvider: "llamafile"`, or `defaultProvider: "agentfile"`. See [`local-models.md`](./local-models.md) for architecture details on downloading model weights and dependencies from Hugging Face.
 >

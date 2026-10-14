@@ -415,6 +415,15 @@ describe("shadow-claw-chat UX enhancements (issue #10)", () => {
         'value="onnx-community/gemma-4-E4B-it-ONNX"',
       );
     });
+
+    it("should reword onboarding dialog to Transformers.js and local AI", () => {
+      expect(templateHtml).toContain("Welcome to Local AI (Transformers.js)");
+      expect(templateHtml).toContain("Continue with Transformers.js");
+      expect(templateHtml).toContain("ShadowClaw defaults to");
+      expect(templateHtml).toContain("Transformers.js");
+      expect(templateHtml).not.toContain("Welcome to Local AI (Prompt API)");
+      expect(templateHtml).not.toContain("Continue with Prompt API");
+    });
   });
 
   describe("AUTO_SCROLL_THRESHOLD constant", () => {
@@ -1355,6 +1364,9 @@ describe("shadow-claw-chat prompt api onboarding", () => {
     expect(storedConfig["prompt_api_fallback_model"]).toBe(
       "onnx-community/Qwen3-0.6B-ONNX",
     );
+    expect(storedConfig["provider"]).toBe("transformers_js_browser");
+    expect(storedConfig["model"]).toBe("onnx-community/Qwen3-0.6B-ONNX");
+    expect(storedConfig["transformers_js_onboarding_seen"]).toBe("true");
     expect(storedConfig["prompt_api_onboarding_seen"]).toBe("true");
     expect(mockDialog.close).toHaveBeenCalledTimes(1);
   });
@@ -1431,6 +1443,67 @@ describe("shadow-claw-chat prompt api onboarding", () => {
     } finally {
       document.removeEventListener("shadow-claw-navigate", navListener);
     }
+  });
+
+  it("should populate onboarding model select with top 4 prompt api models and alphabetized remainder", () => {
+    const instance = Object.create(ShadowClawChat.prototype);
+    const mockSelectEl: any = {
+      innerHTML: "",
+      value: "",
+    };
+
+    instance.populateOnboardingModelSelect(
+      mockSelectEl,
+      "onnx-community/Qwen3-0.6B-ONNX",
+    );
+
+    expect(mockSelectEl.value).toBe("onnx-community/Qwen3-0.6B-ONNX");
+    // Ensure top 4 models are rendered
+    expect(mockSelectEl.innerHTML).toContain(
+      'value="onnx-community/Qwen3-0.6B-ONNX"',
+    );
+    expect(mockSelectEl.innerHTML).toContain(
+      'value="onnx-community/gemma-3-1b-it-ONNX-GQA"',
+    );
+    expect(mockSelectEl.innerHTML).toContain(
+      'value="onnx-community/gemma-4-E2B-it-ONNX"',
+    );
+    expect(mockSelectEl.innerHTML).toContain(
+      'value="onnx-community/gemma-4-E4B-it-ONNX"',
+    );
+    // Ensure remainder models are present
+    expect(mockSelectEl.innerHTML).toContain(
+      'value="HuggingFaceTB/SmolLM3-3B-ONNX"',
+    );
+    expect(mockSelectEl.innerHTML).toContain('value="webgpu/Qwen3-4B-ONNX"');
+
+    // Verify ordering in rendered HTML
+    const idxQwen3 = mockSelectEl.innerHTML.indexOf(
+      'value="onnx-community/Qwen3-0.6B-ONNX"',
+    );
+    const idxGemma3 = mockSelectEl.innerHTML.indexOf(
+      'value="onnx-community/gemma-3-1b-it-ONNX-GQA"',
+    );
+    const idxGemma4E2B = mockSelectEl.innerHTML.indexOf(
+      'value="onnx-community/gemma-4-E2B-it-ONNX"',
+    );
+    const idxGemma4E4B = mockSelectEl.innerHTML.indexOf(
+      'value="onnx-community/gemma-4-E4B-it-ONNX"',
+    );
+    const idxSmol = mockSelectEl.innerHTML.indexOf(
+      'value="HuggingFaceTB/SmolLM3-3B-ONNX"',
+    );
+    const idxWebgpu = mockSelectEl.innerHTML.indexOf(
+      'value="webgpu/Qwen3-4B-ONNX"',
+    );
+
+    expect(idxQwen3).toBeLessThan(idxGemma3);
+    expect(idxGemma3).toBeLessThan(idxGemma4E2B);
+    expect(idxGemma4E2B).toBeLessThan(idxGemma4E4B);
+    const idxHr = mockSelectEl.innerHTML.indexOf("<hr>");
+    expect(idxHr).toBeGreaterThan(idxGemma4E4B);
+    expect(idxHr).toBeLessThan(idxSmol);
+    expect(idxSmol).toBeLessThan(idxWebgpu);
   });
 
   describe("ShadowClawChat helper methods", () => {

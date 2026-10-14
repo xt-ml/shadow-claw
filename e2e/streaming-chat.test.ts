@@ -92,7 +92,7 @@ test.describe("Chat Flow with Streaming", () => {
     await chat.expectCoreUi();
 
     // Count initial messages
-    const initialCount = await chat.host.locator(".chat__message").count();
+    const initialCount = await chat.messages().count();
 
     // Send a message
     await chat.sendMessage("Hello, test!");
@@ -102,19 +102,30 @@ test.describe("Chat Flow with Streaming", () => {
     await expect(userMsg).toBeVisible({ timeout: 10000 });
     await expect(userMsg).toContainText("Hello, test!");
 
-    // Wait for the assistant's final response to appear
-    await expect(
-      chat.host.locator(".chat__message--assistant").last(),
-    ).toBeVisible({ timeout: 15000 });
-
-    // Verify the assistant response contains expected text
+    // Streaming response should appear with expected content
     await expect(
       chat.host.locator(".chat__message--assistant").last(),
     ).toContainText("Hello from ShadowClaw", { timeout: 15000 });
 
+    // Wait for streaming to finish and the temporary streaming bubble to be removed
+    await expect(chat.host.locator(".chat__message--streaming")).toHaveCount(
+      0,
+      { timeout: 15000 },
+    );
+
+    // Wait for the assistant's final persisted response to appear
+    const finalAssistantMsg = chat.host
+      .locator(".chat__message--assistant:not(.chat__message--streaming)")
+      .last();
+    await expect(finalAssistantMsg).toBeVisible({ timeout: 15000 });
+    await expect(finalAssistantMsg).toContainText("Hello from ShadowClaw", {
+      timeout: 15000,
+    });
+
     // At least 2 new messages (user + assistant)
-    const finalCount = await chat.host.locator(".chat__message").count();
-    expect(finalCount).toBeGreaterThanOrEqual(initialCount + 2);
+    await expect
+      .poll(async () => chat.messages().count())
+      .toBeGreaterThanOrEqual(initialCount + 2);
   });
 
   test("should send a message and get non-streaming response", async ({
@@ -159,5 +170,10 @@ test.describe("Chat Flow with Streaming", () => {
     await expect(
       chat.host.locator(".chat__message--user").last(),
     ).toContainText("My test message", { timeout: 10000 });
+
+    // Wait for assistant response to settle
+    await expect(
+      chat.host.locator(".chat__message--assistant").last(),
+    ).toContainText("Hello from ShadowClaw", { timeout: 15000 });
   });
 });

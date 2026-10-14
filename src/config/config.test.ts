@@ -67,7 +67,7 @@ describe("config.js", () => {
     });
 
     it("should have valid DEFAULT_PROVIDER", () => {
-      expect(DEFAULT_PROVIDER).toBe("prompt_api");
+      expect(DEFAULT_PROVIDER).toBe("transformers_js_browser");
     });
 
     it("should have valid SCHEDULER_INTERVAL", () => {
@@ -561,10 +561,10 @@ describe("config.js", () => {
       expect(provider.id).toBe(DEFAULT_PROVIDER);
     });
 
-    it("default provider should be valid prompt_api config", () => {
+    it("default provider should be valid transformers_js_browser config", () => {
       const provider = getDefaultProvider();
-      expect(provider.name).toBe("Prompt API (Browser)");
-      expect(provider.format).toBe("prompt_api");
+      expect(provider.name).toBe("Transformers.js (Browser)");
+      expect(provider.format).toBe("transformers_js");
     });
   });
 

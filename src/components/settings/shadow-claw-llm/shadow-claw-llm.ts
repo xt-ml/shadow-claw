@@ -28,7 +28,9 @@ import {
 
 import {
   compareLocalModelCandidates,
+  getSortedTransformersJsBrowserModelIds,
   isLikelyInstructionModelId,
+  renderTransformersJsBrowserModelOptions,
 } from "./model-ranking.js";
 
 import {
@@ -921,7 +923,13 @@ export class ShadowClawLlm extends ShadowClawElement {
       };
 
       let html = "";
-      if (localOnlyProviderIds.has(currentProvider)) {
+      if (currentProvider === "transformers_js_browser") {
+        html = renderTransformersJsBrowserModelOptions(
+          currentModel,
+          modelItems,
+          { includeCustom: true },
+        );
+      } else if (localOnlyProviderIds.has(currentProvider)) {
         const localModels = [...freeModels, ...paidModels].sort(
           modelComparator,
         );
@@ -934,6 +942,7 @@ export class ShadowClawLlm extends ShadowClawElement {
           html += localModels.map(toOption).join("");
           html += `</optgroup>`;
         }
+        html += `<option value="__custom__">-- Custom Model ID --</option>`;
       } else {
         if (freeModels.length > 0) {
           html += `<optgroup label="Free / Included">`;
@@ -946,15 +955,16 @@ export class ShadowClawLlm extends ShadowClawElement {
           html += paidModels.map(toOption).join("");
           html += `</optgroup>`;
         }
+        html += `<option value="__custom__">-- Custom Model ID --</option>`;
       }
 
-      html += `<option value="__custom__">-- Custom Model ID --</option>`;
       setSanitizedHtml(modelSelect, html);
 
       // Check if current model exists in the list
-      const allModelIds = modelItems.map((m) =>
-        typeof m === "string" ? m : m.id || m.name,
-      );
+      const allModelIds =
+        currentProvider === "transformers_js_browser"
+          ? getSortedTransformersJsBrowserModelIds(modelItems)
+          : modelItems.map((m) => (typeof m === "string" ? m : m.id || m.name));
 
       if (allModelIds.includes(currentModel)) {
         modelSelect.value = currentModel;

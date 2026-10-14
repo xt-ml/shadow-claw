@@ -191,7 +191,7 @@ export function getModelMaxTokens(modelId: string): number {
 }
 
 /** Default provider */
-export const DEFAULT_PROVIDER = "prompt_api";
+export const DEFAULT_PROVIDER = "transformers_js_browser";
 
 /** Task scheduler check interval (ms) */
 export const SCHEDULER_INTERVAL = 60_000;
@@ -1129,6 +1129,7 @@ export const CONFIG_KEYS = {
   PROMPT_API_DTYPE_STRATEGY: "prompt_api_dtype_strategy",
   PROMPT_API_FALLBACK_MODEL: "prompt_api_fallback_model",
   PROMPT_API_ONBOARDING_SEEN: "prompt_api_onboarding_seen",
+  TRANSFORMERS_JS_ONBOARDING_SEEN: "transformers_js_onboarding_seen",
   PEERJS_MY_ALIAS: "peerjs_my_alias",
   PEERJS_MY_PEER_ID: "peerjs_my_peer_id",
   PEERJS_PEER_ALIASES: "peerjs_peer_aliases",

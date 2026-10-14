@@ -1554,7 +1554,7 @@ describe("Orchestrator", () => {
         trustedPeerIds: [],
       });
 
-      expect(o.provider).toBe("prompt_api");
+      expect(o.provider).toBe("transformers_js_browser");
       expect(o.proxyUrl).toBe("/proxy");
 
       expect(o.rateLimitAutoAdapt).toBe(true);
@@ -2424,6 +2424,7 @@ describe("Orchestrator", () => {
 
       // Active request restarted
       o.state = "thinking";
+      o.provider = "prompt_api";
       o.inFlightTriggerByGroup.set("g-restart", "Original prompt");
       o.agentWorker = {
         postMessage: jest.fn(),

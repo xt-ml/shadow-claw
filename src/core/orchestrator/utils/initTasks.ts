@@ -291,11 +291,12 @@ export async function initProviderAndModel(
     getConfig(db, CONFIG_KEYS.RATE_LIMIT_AUTO_ADAPT),
   ]);
 
-  const matchedProvider = storedProvider
-    ? getProvider(storedProvider)
+  const effectiveProvider = storedProvider || orchestrator.provider;
+  const matchedProvider = effectiveProvider
+    ? getProvider(effectiveProvider)
     : undefined;
-  if (storedProvider && matchedProvider) {
-    orchestrator.provider = storedProvider;
+  if (matchedProvider) {
+    orchestrator.provider = effectiveProvider;
     orchestrator.providerConfig = matchedProvider;
   }
 

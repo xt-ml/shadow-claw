@@ -5,6 +5,7 @@ import {
   CONFIG_KEYS,
   DEFAULT_PROMPT_API_FALLBACK_MODEL,
   DEFAULT_PROVIDER,
+  PROVIDERS,
 } from "../../config/config.js";
 import { decodePathSegment } from "../../core/app-routes.js";
 
@@ -64,10 +65,7 @@ import {
   handleSpecialLinkNavigation,
 } from "../../utils/utils.js";
 import { isTruthyConfigValue } from "../../utils/parseBooleanConfig.js";
-import {
-  isNativePromptApiAvailable,
-  renderPromptApiStatusHtml,
-} from "../common/help/prompt-api.js";
+import { renderTransformersJsBrowserModelOptions } from "../settings/shadow-claw-llm/model-ranking.js";
 
 import { computeTokenDisplayValues } from "./utils/computeTokenDisplayValues.js";
 import { escapeHtml } from "./utils/escapeHtml.js";
@@ -1981,6 +1979,11 @@ export class ShadowClawChat extends ShadowClawElement {
       try {
         await setConfig(
           this.db,
+          CONFIG_KEYS.TRANSFORMERS_JS_ONBOARDING_SEEN,
+          "true",
+        );
+        await setConfig(
+          this.db,
           CONFIG_KEYS.PROMPT_API_ONBOARDING_SEEN,
           "true",
         );
@@ -2031,14 +2034,16 @@ export class ShadowClawChat extends ShadowClawElement {
         typeof provider === "string" && provider.trim()
           ? provider.trim()
           : DEFAULT_PROVIDER;
-      if (effectiveProvider !== "prompt_api") {
+      if (effectiveProvider !== "transformers_js_browser") {
         return;
       }
 
-      const seen = await getConfig(
-        this.db,
-        CONFIG_KEYS.PROMPT_API_ONBOARDING_SEEN,
-      );
+      const seen =
+        (await getConfig(
+          this.db,
+          CONFIG_KEYS.TRANSFORMERS_JS_ONBOARDING_SEEN,
+        )) ||
+        (await getConfig(this.db, CONFIG_KEYS.PROMPT_API_ONBOARDING_SEEN));
       if (isTruthyConfigValue(seen, false)) {
         return;
       }
@@ -2050,42 +2055,53 @@ export class ShadowClawChat extends ShadowClawElement {
 
       this.ensureShadowDialogs();
 
-      const isNativeSupported = await isNativePromptApiAvailable();
-      const isAvailable = isNativeSupported;
-
       const statusCard = root.querySelector(".chat__prompt-api-status-card");
       if (statusCard) {
-        (statusCard as HTMLElement).hidden = !isAvailable;
-      }
-
-      const statusEl = root.querySelector('[data-info="prompt-api-status"]');
-      if (statusEl) {
-        setSanitizedHtml(
-          statusEl as HTMLElement,
-          renderPromptApiStatusHtml(isNativeSupported),
-        );
+        (statusCard as HTMLElement).hidden = true;
       }
 
       const fallbackCard = root.querySelector(
         ".chat__prompt-api-fallback-card",
       );
       if (fallbackCard) {
-        (fallbackCard as HTMLElement).hidden = isAvailable;
+        (fallbackCard as HTMLElement).hidden = false;
       }
 
       const modelSelect = root.querySelector(
         '[data-setting="prompt-api-onboarding-fallback-model"]',
       ) as HTMLSelectElement | null;
       if (modelSelect) {
-        const storedFallbackModel = await getConfig(
-          this.db,
-          CONFIG_KEYS.PROMPT_API_FALLBACK_MODEL,
-        );
+        const storedModel =
+          (await getConfig(this.db, CONFIG_KEYS.MODEL)) ||
+          (await getConfig(this.db, CONFIG_KEYS.PROMPT_API_FALLBACK_MODEL));
         const currentModel =
-          typeof storedFallbackModel === "string" && storedFallbackModel.trim()
-            ? storedFallbackModel.trim()
-            : DEFAULT_PROMPT_API_FALLBACK_MODEL;
-        modelSelect.value = currentModel;
+          typeof storedModel === "string" && storedModel.trim()
+            ? storedModel.trim()
+            : PROVIDERS.transformers_js_browser?.defaultModel ||
+              "onnx-community/Qwen3-0.6B-ONNX";
+
+        this.populateOnboardingModelSelect(modelSelect, currentModel);
+
+        const modelsUrl = PROVIDERS.transformers_js_browser?.modelsUrl;
+        if (modelsUrl && typeof fetch === "function") {
+          fetch(modelsUrl)
+            .then((r) => (r.ok ? r.json() : null))
+            .then((data) => {
+              if (!data) return;
+              const items = Array.isArray(data)
+                ? data
+                : data.models || data.data || [];
+              if (Array.isArray(items) && items.length > 0) {
+                const currentSelected = modelSelect.value || currentModel;
+                this.populateOnboardingModelSelect(
+                  modelSelect,
+                  currentSelected,
+                  items,
+                );
+              }
+            })
+            .catch(() => {});
+        }
       }
 
       const shadowDialog = root.querySelector(
@@ -2111,6 +2127,19 @@ export class ShadowClawChat extends ShadowClawElement {
     }
   }
 
+  populateOnboardingModelSelect(
+    modelSelect: HTMLSelectElement,
+    selectedModel: string,
+    modelItems?: any[],
+  ): void {
+    const html = renderTransformersJsBrowserModelOptions(
+      selectedModel,
+      modelItems,
+    );
+    setSanitizedHtml(modelSelect, html);
+    modelSelect.value = selectedModel;
+  }
+
   async confirmPromptApiOnboarding(): Promise<void> {
     const root = this.shadowRoot;
     if (!root) {
@@ -2125,14 +2154,27 @@ export class ShadowClawChat extends ShadowClawElement {
       '[data-setting="prompt-api-onboarding-fallback-model"]',
     ) as HTMLSelectElement | null;
     const selectedModel =
-      modelSelect?.value?.trim() || DEFAULT_PROMPT_API_FALLBACK_MODEL;
+      modelSelect?.value?.trim() ||
+      PROVIDERS.transformers_js_browser?.defaultModel ||
+      DEFAULT_PROMPT_API_FALLBACK_MODEL;
 
     if (this.db) {
       try {
         await setConfig(
           this.db,
+          CONFIG_KEYS.PROVIDER,
+          "transformers_js_browser",
+        );
+        await setConfig(this.db, CONFIG_KEYS.MODEL, selectedModel);
+        await setConfig(
+          this.db,
           CONFIG_KEYS.PROMPT_API_FALLBACK_MODEL,
           selectedModel,
+        );
+        await setConfig(
+          this.db,
+          CONFIG_KEYS.TRANSFORMERS_JS_ONBOARDING_SEEN,
+          "true",
         );
         await setConfig(
           this.db,
@@ -2142,6 +2184,11 @@ export class ShadowClawChat extends ShadowClawElement {
       } catch (err) {
         console.warn("Failed to persist Prompt API onboarding settings:", err);
       }
+    }
+
+    if (orchestratorStore.orchestrator) {
+      orchestratorStore.orchestrator.provider = "transformers_js_browser";
+      orchestratorStore.orchestrator.model = selectedModel;
     }
 
     const shadowDialog = root.querySelector(
@@ -2156,7 +2203,7 @@ export class ShadowClawChat extends ShadowClawElement {
       }
     }
 
-    showSuccess("Prompt API configured", 2500);
+    showSuccess("Transformers.js configured", 2500);
   }
 
   async downloadAttachment(groupId: string, attachment: MessageAttachment) {

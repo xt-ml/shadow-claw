@@ -30,7 +30,7 @@ export class ChatPage {
   }
 
   messages() {
-    return this.host.locator(".message");
+    return this.host.locator(".chat__message");
   }
 
   sendButton() {

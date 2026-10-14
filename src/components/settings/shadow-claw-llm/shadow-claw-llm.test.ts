@@ -320,6 +320,41 @@ describe("shadow-claw-llm", () => {
     document.body.removeChild(el);
   });
 
+  it("renders identical top 4 models, hr divider, and alphabetized remainder for transformers_js_browser", async () => {
+    const orch = createOrchestratorStub();
+    orch.getProvider.mockReturnValue("transformers_js_browser");
+    orch.getModel.mockReturnValue("onnx-community/Qwen3-0.6B-ONNX");
+    (orchestratorStore as any).orchestrator = orch;
+
+    const el = new ShadowClawLlm();
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 100));
+    await el.render();
+
+    const modelSelect = el.shadowRoot?.querySelector(
+      '[data-setting="model-select"]',
+    ) as HTMLSelectElement | null;
+    expect(modelSelect).not.toBeNull();
+
+    const html = modelSelect?.innerHTML || "";
+    expect(html).toContain('value="onnx-community/Qwen3-0.6B-ONNX"');
+    expect(html).toContain('value="onnx-community/gemma-3-1b-it-ONNX-GQA"');
+    expect(html).toContain('value="onnx-community/gemma-4-E2B-it-ONNX"');
+    expect(html).toContain('value="onnx-community/gemma-4-E4B-it-ONNX"');
+
+    const idxGemma4E4B = html.indexOf(
+      'value="onnx-community/gemma-4-E4B-it-ONNX"',
+    );
+    const idxHr = html.indexOf("<hr>");
+    const idxXenova = html.indexOf('value="Xenova/distilgpt2"');
+
+    expect(idxHr).toBeGreaterThan(idxGemma4E4B);
+    expect(idxHr).toBeLessThan(idxXenova);
+    expect(html).toContain('value="__custom__"');
+
+    document.body.removeChild(el);
+  });
+
   it("saves max tokens from settings", async () => {
     const orch = createOrchestratorStub();
     (orchestratorStore as any).orchestrator = orch;

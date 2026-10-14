@@ -153,14 +153,14 @@
 
     <shadow-claw-dialog
       dialog-class="chat__prompt-api-dialog"
-      dialog-aria-label="Prompt API Onboarding"
+      dialog-aria-label="Local AI Onboarding"
     >
       <form class="chat__prompt-api-form" method="dialog">
         <div class="chat__prompt-api-header">
           <div class="chat__prompt-api-icon" aria-hidden="true">&#10024;</div>
           <div>
             <h3 class="chat__prompt-api-title">
-              Welcome to Local AI (Prompt API)
+              Welcome to Local AI (Transformers.js)
             </h3>
             <p class="chat__prompt-api-subtitle">
               On-device intelligence built directly into your browser.
@@ -172,13 +172,16 @@
           <section class="chat__prompt-api-card">
             <h4>&#128274; 100% On-Device</h4>
             <p>
-              ShadowClaw defaults to the browser-native
-              <strong>Prompt API</strong>. Models execute directly on your
+              ShadowClaw defaults to
+              <strong>Transformers.js</strong>. Models execute directly on your
               hardware with no API keys and no subscription costs.
             </p>
           </section>
 
-          <section class="chat__prompt-api-card chat__prompt-api-status-card">
+          <section
+            class="chat__prompt-api-card chat__prompt-api-status-card"
+            hidden
+          >
             <h4>&#127760; Browser Capabilities</h4>
             <div
               class="chat__prompt-api-status-content"
@@ -199,11 +202,10 @@
           </section>
 
           <section class="chat__prompt-api-card chat__prompt-api-fallback-card">
-            <h4>&#9881;&#65039; Default Prompt API Model</h4>
+            <h4>&#9881;&#65039; Default Transformers.js Model</h4>
             <p class="chat__prompt-api-model-desc">
-              Choose your default Prompt API fallback model. If native browser
-              Prompt API is not enabled, ShadowClaw will run this local model
-              directly in the browser:
+              Choose your default Transformers.js model. ShadowClaw will run
+              this local model directly in the browser:
             </p>
             <div class="chat__prompt-api-select-group">
               <label class="form-label" for="prompt-api-fallback-model-select"
@@ -230,6 +232,71 @@
                   onnx-community/gemma-4-E4B-it-ONNX &mdash; Alternative (4B
                   Parameters, 128k Context)
                 </option>
+                <hr />
+                <option value="HuggingFaceTB/SmolLM3-3B-ONNX">
+                  HuggingFaceTB/SmolLM3-3B-ONNX
+                </option>
+                <option value="LiquidAI/LFM2.5-1.2B-Thinking-ONNX">
+                  LiquidAI/LFM2.5-1.2B-Thinking-ONNX &#128736;&#65039;
+                </option>
+                <option
+                  value="onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX"
+                >
+                  onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX
+                  &#128736;&#65039;
+                </option>
+                <option value="onnx-community/LFM2-1.2B-ONNX">
+                  onnx-community/LFM2-1.2B-ONNX
+                </option>
+                <option value="onnx-community/Llama-3.2-1B-Instruct-ONNX">
+                  onnx-community/Llama-3.2-1B-Instruct-ONNX &#128736;&#65039;
+                </option>
+                <option value="onnx-community/Llama-3.2-3B-Instruct-ONNX">
+                  onnx-community/Llama-3.2-3B-Instruct-ONNX &#128736;&#65039;
+                </option>
+                <option value="onnx-community/Phi-3.5-mini-instruct-onnx-web">
+                  onnx-community/Phi-3.5-mini-instruct-onnx-web
+                  &#128736;&#65039;
+                </option>
+                <option value="onnx-community/Phi-4-mini-instruct-ONNX">
+                  onnx-community/Phi-4-mini-instruct-ONNX &#128736;&#65039;
+                </option>
+                <option value="onnx-community/Qwen3.5-0.8B-ONNX-OPT">
+                  onnx-community/Qwen3.5-0.8B-ONNX-OPT
+                </option>
+                <option value="onnx-community/Qwen3.5-4B-ONNX-OPT">
+                  onnx-community/Qwen3.5-4B-ONNX-OPT
+                </option>
+                <option value="onnx-community/gemma-3-1b-it-ONNX">
+                  onnx-community/gemma-3-1b-it-ONNX &#128736;&#65039;
+                </option>
+                <option value="onnx-community/gemma-4-12B-it-ONNX">
+                  onnx-community/gemma-4-12B-it-ONNX &#128736;&#65039;
+                </option>
+                <option value="onnx-community/gemma-4-12B-it-qat-mobile-ONNX">
+                  onnx-community/gemma-4-12B-it-qat-mobile-ONNX
+                  &#128736;&#65039;
+                </option>
+                <option value="onnx-community/gemma-4-E27B-it-ONNX">
+                  onnx-community/gemma-4-E27B-it-ONNX &#128736;&#65039;
+                </option>
+                <option value="onnx-community/gemma-4-E2B-it-qat-mobile-ONNX">
+                  onnx-community/gemma-4-E2B-it-qat-mobile-ONNX
+                  &#128736;&#65039;
+                </option>
+                <option value="onnx-community/gemma-4-E4B-it-qat-mobile-ONNX">
+                  onnx-community/gemma-4-E4B-it-qat-mobile-ONNX
+                  &#128736;&#65039;
+                </option>
+                <option value="onnx-community/gemma-4-E9B-it-ONNX">
+                  onnx-community/gemma-4-E9B-it-ONNX &#128736;&#65039;
+                </option>
+                <option value="onnx-community/gpt-oss-20b-ONNX">
+                  onnx-community/gpt-oss-20b-ONNX
+                </option>
+                <option value="webgpu/Qwen3-4B-ONNX">
+                  webgpu/Qwen3-4B-ONNX
+                </option>
               </select>
             </div>
           </section>
@@ -237,10 +304,10 @@
           <section class="chat__prompt-api-card">
             <h4>&#127760; Prefer Cloud AI or Another Provider?</h4>
             <p>
-              Local AI with Prompt API is free and private, but not your only
-              option. ShadowClaw also supports OpenRouter, Anthropic, OpenAI,
-              Google Gemini, and AWS Bedrock. You can configure any provider at
-              any time in Settings.
+              Local AI with Transformers.js is free and private, but not your
+              only option. ShadowClaw also supports OpenRouter, Anthropic,
+              OpenAI, Google Gemini, and AWS Bedrock. You can configure any
+              provider at any time in Settings.
             </p>
           </section>
         </div>
@@ -258,7 +325,7 @@
             class="chat__prompt-api-confirm-btn"
             data-action="confirm-prompt-api-onboarding"
           >
-            Continue with Prompt API
+            Continue with Transformers.js
           </button>
         </div>
       </form>

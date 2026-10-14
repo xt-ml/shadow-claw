@@ -1,4 +1,6 @@
 import type { LocalModelRankCandidate } from "../../types.js";
+import { PROVIDERS } from "../../../config/config.js";
+import { escapeHtml } from "../../../utils/utils.js";
 
 function parseModelBillionsFromId(modelId: string): number | null {
   const normalized = modelId.toLowerCase();
@@ -109,11 +111,46 @@ function getLocalModelSortScore(
   return score;
 }
 
+export const ORIGINAL_PROMPT_API_MODELS: readonly string[] = [
+  "onnx-community/Qwen3-0.6B-ONNX",
+  "onnx-community/gemma-3-1b-it-ONNX-GQA",
+  "onnx-community/gemma-4-E2B-it-ONNX",
+  "onnx-community/gemma-4-E4B-it-ONNX",
+];
+
+export const CURATED_PROMPT_API_MODEL_LABELS: Record<string, string> = {
+  "onnx-community/Qwen3-0.6B-ONNX":
+    "onnx-community/Qwen3-0.6B-ONNX — Recommended (Fast, Compact & Tool Calling)",
+  "onnx-community/gemma-3-1b-it-ONNX-GQA":
+    "onnx-community/gemma-3-1b-it-ONNX-GQA — Alternative (1B Parameters)",
+  "onnx-community/gemma-4-E2B-it-ONNX":
+    "onnx-community/gemma-4-E2B-it-ONNX — Alternative (2B Parameters, 128k Context)",
+  "onnx-community/gemma-4-E4B-it-ONNX":
+    "onnx-community/gemma-4-E4B-it-ONNX — Alternative (4B Parameters, 128k Context)",
+};
+
 export function compareLocalModelCandidates(
   a: LocalModelRankCandidate,
   b: LocalModelRankCandidate,
   providerId: string,
 ): number {
+  if (providerId === "transformers_js_browser") {
+    const idxA = ORIGINAL_PROMPT_API_MODELS.indexOf(a.id);
+    const idxB = ORIGINAL_PROMPT_API_MODELS.indexOf(b.id);
+
+    if (idxA !== -1 && idxB !== -1) {
+      return idxA - idxB;
+    }
+    if (idxA !== -1) {
+      return -1;
+    }
+    if (idxB !== -1) {
+      return 1;
+    }
+
+    return a.id.localeCompare(b.id);
+  }
+
   const scoreA = getLocalModelSortScore(a, providerId);
   const scoreB = getLocalModelSortScore(b, providerId);
 
@@ -126,4 +163,64 @@ export function compareLocalModelCandidates(
   }
 
   return a.id.localeCompare(b.id);
+}
+
+export function getSortedTransformersJsBrowserModelIds(
+  modelItems?: Array<string | { id?: string; name?: string }>,
+): string[] {
+  const staticModels = PROVIDERS.transformers_js_browser?.models || [];
+  const rawItems =
+    modelItems && modelItems.length > 0 ? modelItems : staticModels;
+
+  const idSet = new Set<string>();
+  for (const item of rawItems) {
+    const id = typeof item === "string" ? item : item?.id || item?.name;
+    if (id && typeof id === "string" && id.trim()) {
+      idSet.add(id.trim());
+    }
+  }
+  for (const id of ORIGINAL_PROMPT_API_MODELS) {
+    idSet.add(id);
+  }
+  for (const id of staticModels) {
+    idSet.add(id);
+  }
+
+  const allIds = Array.from(idSet);
+  return allIds.sort((a, b) =>
+    compareLocalModelCandidates(
+      { id: a, supportsTools: isLikelyInstructionModelId(a), contextLength: 0 },
+      { id: b, supportsTools: isLikelyInstructionModelId(b), contextLength: 0 },
+      "transformers_js_browser",
+    ),
+  );
+}
+
+export function renderTransformersJsBrowserModelOptions(
+  selectedModel: string,
+  modelItems?: Array<string | { id?: string; name?: string }>,
+  options?: { includeCustom?: boolean },
+): string {
+  const sortedModelIds = getSortedTransformersJsBrowserModelIds(modelItems);
+  let html = "";
+  for (let i = 0; i < sortedModelIds.length; i++) {
+    const id = sortedModelIds[i];
+    const isSelected = id === selectedModel ? " selected" : "";
+    const label =
+      CURATED_PROMPT_API_MODEL_LABELS[id] ||
+      `${id}${isLikelyInstructionModelId(id) ? " 🛠️" : ""}`;
+    html += `<option value="${escapeHtml(id)}"${isSelected}>${escapeHtml(label)}</option>`;
+    if (i === 3 && sortedModelIds.length > 4) {
+      html += "<hr>";
+    }
+  }
+  if (options?.includeCustom) {
+    const isCustomSelected =
+      selectedModel === "__custom__" ||
+      (selectedModel !== "" && !sortedModelIds.includes(selectedModel))
+        ? " selected"
+        : "";
+    html += `<option value="__custom__"${isCustomSelected}>-- Custom Model ID --</option>`;
+  }
+  return html;
 }

@@ -4,7 +4,7 @@ import { effect } from "../../core/effect.js";
 import { decodePathSegment } from "../../core/app-routes.js";
 
 import { getDb, ShadowClawDatabase } from "../../db/db.js";
-import { getConfig } from "../../db/getConfig.js";
+import { getConfig } from "../../db/get-config.js";
 import { Task } from "../../db/types.js";
 
 import { setSanitizedHtml } from "../../security/trusted-types.js";
@@ -13,8 +13,8 @@ import { orchestratorStore } from "../../stores/orchestrator.js";
 import { getCurrentSubscription } from "../../subsystems/notifications/push-client.js";
 
 import { showError, showInfo, showSuccess } from "../../ui/toast.js";
-import { isTruthyConfigValue } from "../../utils/parseBooleanConfig.js";
-import { escapeHtml } from "../../utils/utils.js";
+import { isTruthyConfigValue } from "../../utils/parse-boolean-config.js";
+import { escapeHtml } from "../../utils/html.js";
 
 import "../common/shadow-claw-empty-state/shadow-claw-empty-state.js";
 import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";

@@ -1,6 +1,6 @@
 import { jest } from "@jest/globals";
 
-import { toggleTerminalVisibility } from "./utils/toggleTerminalVisibility.js";
+import { toggleTerminalVisibility } from "./utils/toggle-terminal-visibility.js";
 
 jest.unstable_mockModule("../../core/orchestrator/orchestrator.js", () => ({
   Orchestrator: class {
@@ -33,7 +33,7 @@ jest.unstable_mockModule("../../core/effect.js", () => ({
 
 const mockGetConfigByKey = new Map<string, unknown>();
 
-jest.unstable_mockModule("../../db/getConfig.js", () => ({
+jest.unstable_mockModule("../../db/get-config.js", () => ({
   getConfig: jest.fn(async (_db: unknown, key: string) => {
     if (mockGetConfigByKey.has(key)) {
       return mockGetConfigByKey.get(key);
@@ -667,7 +667,7 @@ describe("shadow-claw", () => {
 
   it("displays warning toast when memory storage fallback is active", async () => {
     const { getMemoryOpfsRoot, resetMemoryOpfsRoot } =
-      await import("../../storage/memoryStorage.js");
+      await import("../../storage/memory-storage.js");
     const { showWarning } = await import("../../ui/toast.js");
 
     getMemoryOpfsRoot(); // Activate memory fallback
@@ -807,5 +807,65 @@ describe("shadow-claw", () => {
     }
 
     document.body.removeChild(component);
+  });
+
+  it("handles branch coverage for initialization, navigation api, and cleanup", async () => {
+    // 1. Initialization when orchestrator is not preset and hadPersistedActivePage is true
+    (orchestratorStore as any).hadPersistedActivePage = true;
+    (orchestratorStore as any).activePage = "chat";
+    const comp1 = new ShadowClaw();
+    comp1.chatSidebarHidden = false;
+    document.body.appendChild(comp1);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(comp1.orchestrator).toBeDefined();
+
+    // 2. Disconnect with navigationListenerAttached and mock navigation
+    const mockRemoveNav = jest.fn();
+    Object.defineProperty(window, "navigation", {
+      configurable: true,
+      writable: true,
+      value: { removeEventListener: mockRemoveNav },
+    });
+    comp1.navigationListenerAttached = true;
+    document.body.removeChild(comp1);
+    expect(mockRemoveNav).toHaveBeenCalledWith(
+      "navigate",
+      comp1.handleNavigationApiNavigate,
+    );
+    delete (window as any).navigation;
+
+    // 3. handleNavigationApiNavigate branches
+    const comp2 = new ShadowClaw();
+    comp2.db = {} as any;
+    // without event match
+    comp2.handleNavigationApiNavigate(new Event("navigate"));
+
+    // with intercept function
+    const mockIntercept = jest.fn();
+    const navEvent = {
+      intercept: mockIntercept,
+      destination: { url: "http://localhost/chat" },
+    } as any;
+    comp2.handleNavigationApiNavigate(navEvent);
+    if (mockIntercept.mock.calls.length > 0) {
+      const handlerObj = mockIntercept.mock.calls[0][0] as any;
+      if (typeof handlerObj?.handler === "function") {
+        await handlerObj.handler();
+      }
+    }
+
+    // 4. shadowClawNav guard when db or shadowRoot is null
+    comp2.db = null;
+    comp2.shadowClawNav(new Event("shadow-claw-navigate"));
+
+    // 5. fallbackClickListener without valid target path
+    comp2.fallbackClickListener(new MouseEvent("click"));
+
+    // 6. hadPersistedActivePage hidden branches
+    (orchestratorStore as any).hadPersistedActivePage = false;
+    const comp3 = new ShadowClaw();
+    comp3.tasksSidebarHidden = true;
+    comp3.filesSidebarHidden = true;
+    (orchestratorStore as any).activePage = "tasks";
   });
 });

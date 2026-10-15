@@ -1,0 +1,10 @@
+{
+  "extends": "./base.json",
+  "compilerOptions": {
+    "outDir": "../../out/service-worker",
+    "rootDir": "../../src",
+    "lib": ["ESNext", "WebWorker"]
+  },
+  "include": ["../../src/service-worker/*.ts"],
+  "exclude": ["../../src/service-worker/init.ts"]
+}

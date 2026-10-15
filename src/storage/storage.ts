@@ -1,8 +1,8 @@
 import { CONFIG_KEYS, OPFS_ROOT } from "../config/config.js";
 import { getDeploymentNamespace } from "../core/app-routes.js";
-import { deleteConfig } from "../db/deleteConfig.js";
-import { getConfig } from "../db/getConfig.js";
-import { getMemoryOpfsRoot } from "./memoryStorage.js";
+import { deleteConfig } from "../db/delete-config.js";
+import { getConfig } from "../db/get-config.js";
+import { getMemoryOpfsRoot } from "./memory-storage.js";
 import type { ShadowClawDatabase } from "../db/types.js";
 
 export interface StorageStatus {

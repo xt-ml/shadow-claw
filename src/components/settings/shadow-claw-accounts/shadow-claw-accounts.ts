@@ -4,11 +4,11 @@ import {
 } from "../../../config/config.js";
 
 import { getDb, type ShadowClawDatabase } from "../../../db/db.js";
-import { getConfig } from "../../../db/getConfig.js";
+import { getConfig } from "../../../db/get-config.js";
 import { setSanitizedHtml } from "../../../security/trusted-types.js";
 import { showError, showSuccess } from "../../../ui/toast.js";
-import { escapeHtml } from "../../../utils/utils.js";
-import { resolveAccountAuthMode } from "./utils/resolveAccountAuthMode.js";
+import { escapeHtml } from "../../../utils/html.js";
+import { resolveAccountAuthMode } from "./utils/resolve-account-auth-mode.js";
 
 import type { ServiceAccount } from "../../../subsystems/accounts/service-accounts.js";
 
@@ -623,7 +623,7 @@ export class ShadowClawAccounts extends ShadowClawElement {
     }
 
     try {
-      const { setConfig } = await import("../../../db/setConfig.js");
+      const { setConfig } = await import("../../../db/set-config.js");
       await setConfig(this.db, CONFIG_KEYS.SERVICE_ACCOUNTS, this.accounts);
       await setConfig(
         this.db,
@@ -698,7 +698,7 @@ export class ShadowClawAccounts extends ShadowClawElement {
 
     try {
       const { encryptValue } = await import("../../../security/crypto.js");
-      const { setConfig } = await import("../../../db/setConfig.js");
+      const { setConfig } = await import("../../../db/set-config.js");
 
       const tokenRaw = (
         slot.querySelector('[data-field="acct-token"]') as HTMLInputElement
@@ -950,7 +950,7 @@ export class ShadowClawAccounts extends ShadowClawElement {
     this.defaultAccountId = id;
 
     try {
-      const { setConfig } = await import("../../../db/setConfig.js");
+      const { setConfig } = await import("../../../db/set-config.js");
       await setConfig(this.db, CONFIG_KEYS.SERVICE_DEFAULT_ACCOUNT, id);
     } catch (err) {
       console.warn("Error setting default account:", err);

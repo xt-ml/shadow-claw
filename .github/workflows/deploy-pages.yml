@@ -44,7 +44,7 @@ jobs:
         run: npm run build:prod
 
       - name: Run Lighthouse Audits
-        run: npx @lhci/cli autorun
+        run: npx @lhci/cli autorun --config=configs/lighthouse/lighthouserc.json
 
       - name: Upload Lighthouse Reports
         uses: actions/upload-artifact@v4

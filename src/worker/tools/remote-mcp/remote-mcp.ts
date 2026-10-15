@@ -1,7 +1,7 @@
-import { wrapUntrustedContent } from "../../utils/wrapUntrustedContent.js";
-import { formatListToolsOutput } from "./utils/formatListToolsOutput.js";
-import { isMcpReauthError } from "./utils/isMcpReauthError.js";
-import { requestMcpReauthAndWait } from "./utils/requestMcpReauthAndWait.js";
+import { wrapUntrustedContent } from "../../utils/wrap-untrusted-content.js";
+import { formatListToolsOutput } from "./utils/format-list-tools-output.js";
+import { isMcpReauthError } from "./utils/is-mcp-reauth-error.js";
+import { requestMcpReauthAndWait } from "./utils/request-mcp-reauth-and-wait.js";
 
 import type { ShadowClawDatabase } from "../../../db/types.js";
 

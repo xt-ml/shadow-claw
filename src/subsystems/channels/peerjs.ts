@@ -8,9 +8,9 @@ import {
 } from "../../config/config.js";
 
 import { getDb } from "../../db/db.js";
-import { groupFileExists } from "../../storage/groupFileExists.js";
-import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
-import { writeGroupFileBytes } from "../../storage/writeGroupFileBytes.js";
+import { groupFileExists } from "../../storage/group-file-exists.js";
+import { readGroupFileBytes } from "../../storage/read-group-file-bytes.js";
+import { writeGroupFileBytes } from "../../storage/write-group-file-bytes.js";
 import { ulid } from "../../utils/ulid.js";
 
 import type { DataConnection, Peer, PeerError } from "peerjs";
@@ -1404,7 +1404,7 @@ export class PeerJsChannel implements Channel {
       const args = payload.args || {};
       const commandId = payload.commandId || "";
 
-      import("../../core/utils/initControlPlane.js")
+      import("../../core/utils/init-control-plane.js")
         .then(({ executeClientControlCommand }) =>
           executeClientControlCommand(action, args),
         )

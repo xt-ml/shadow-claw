@@ -1,3 +1,5 @@
+import { jest } from "@jest/globals";
+import hljs from "highlight.js";
 import { renderMarkdown } from "./markdown.js";
 import {
   setAllowedCustomElements,
@@ -199,5 +201,79 @@ describe("renderMarkdown", () => {
     expect(html).toContain('<x-hook-component value="5"></x-hook-component>');
 
     setAllowedCustomElements([]);
+  });
+
+  it("handles self-closing custom elements without wrapping in p tags", async () => {
+    setAllowedCustomElements(["x-self-closing"]);
+    const input = '<x-self-closing attr="val" />';
+    const html = await renderMarkdown(input);
+    expect(html).not.toMatch(/<p>\s*<x-self-closing/);
+    setAllowedCustomElements([]);
+  });
+
+  it("generates unique numbered slugs for duplicate headings", async () => {
+    const input = "# Test Heading\n\n# Test Heading\n\n# Test Heading";
+    const html = await renderMarkdown(input);
+    expect(html).toContain('id="test-heading"');
+    expect(html).toContain('id="test-heading-1"');
+    expect(html).toContain('id="test-heading-2"');
+  });
+
+  it("handles code blocks with uncleaned language falling back to plaintext", async () => {
+    const input = "```???\nconsole.log(123);\n```";
+    const html = await renderMarkdown(input);
+    expect(html).toContain('class="hljs language-plaintext"');
+  });
+
+  it("does not render frontmatter when renderFrontmatter option is false", async () => {
+    const input = "---\ntitle: Secret\n---\n# Content";
+    const html = await renderMarkdown(input, { renderFrontmatter: false });
+    expect(html).not.toContain("markdown-frontmatter");
+    expect(html).toContain('<h1 id="content">Content</h1>');
+  });
+
+  it("falls back to escaped text when markdown parsing throws an error", async () => {
+    const errSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const markedModule = await import("marked");
+    const origParse = markedModule.marked.parse;
+    (markedModule.marked as any).parse = () => {
+      throw new Error("Marked exploded");
+    };
+
+    try {
+      const html = await renderMarkdown("Text to escape");
+      expect(html).toBe("<p>Text to escape</p>");
+      expect(errSpy).toHaveBeenCalled();
+    } finally {
+      (markedModule.marked as any).parse = origParse;
+      errSpy.mockRestore();
+    }
+  });
+
+  it("highlights code blocks when language is supported by hljs", async () => {
+    const input = "```javascript\nconst x = 42;\n```";
+    const html = await renderMarkdown(input);
+    expect(html).toContain("hljs language-javascript");
+  });
+
+  it("catches errors in highlight.js and falls back to escaped text", async () => {
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const origGetLang = hljs.getLanguage;
+    const origHighlight = hljs.highlight;
+    hljs.getLanguage = (() => true) as any;
+    hljs.highlight = (() => {
+      throw new Error("Highlight failure");
+    }) as any;
+
+    try {
+      const input = "```badlang\nconst x = 1;\n```";
+      const html = await renderMarkdown(input);
+      expect(html).toContain("hljs language-badlang");
+      expect(warnSpy).toHaveBeenCalled();
+    } finally {
+      hljs.getLanguage = origGetLang;
+      hljs.highlight = origHighlight;
+      warnSpy.mockRestore();
+    }
   });
 });

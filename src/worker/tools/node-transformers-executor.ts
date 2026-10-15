@@ -14,10 +14,10 @@ import {
   convertToolSchemasToOpenAI,
   createToolCallStreamFilter,
   parseLocalModelToolCalls,
-} from "../../subsystems/providers/utils/parseLocalModelToolCall.js";
+} from "../../subsystems/providers/utils/parse-local-model-tool-call.js";
 import { ulid } from "../../utils/ulid.js";
-import { setNodeTransformersCompletionExecutor } from "../utils/handleInvoke.js";
-import { setNodeTransformersTaskExecutor } from "../../subsystems/providers/executeNativeAiTask.js";
+import { setNodeTransformersCompletionExecutor } from "../utils/handle-invoke.js";
+import { setNodeTransformersTaskExecutor } from "../../subsystems/providers/execute-native-ai-task.js";
 
 let defaultService: TransformersRuntimeService | null = null;
 
@@ -46,7 +46,7 @@ export interface NodeTransformersCompletionOptions {
   service?: TransformersRuntimeService;
 }
 
-export { createToolCallStreamFilter } from "../../subsystems/providers/utils/parseLocalModelToolCall.js";
+export { createToolCallStreamFilter } from "../../subsystems/providers/utils/parse-local-model-tool-call.js";
 
 /**
  * Executes a chat completion in-process using the Transformers.js runtime.

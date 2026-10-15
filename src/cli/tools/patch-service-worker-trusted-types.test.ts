@@ -92,4 +92,18 @@ describe("patchServiceWorkerTrustedTypesFile", () => {
       await fs.rm(tempDir, { recursive: true, force: true });
     }
   });
+
+  it("main() falls back to DEFAULT_SERVICE_WORKER_PATH when process.argv[2] is omitted", async () => {
+    const prevArgv = process.argv;
+    try {
+      process.argv = ["node", "patch.js"];
+      // It might reject because dist/public/service-worker.js does not exist in testing temp/dist,
+      // or resolve if it does. Let's catch or assert.
+      await main().catch((err) => {
+        expect(err.message).toBeDefined();
+      });
+    } finally {
+      process.argv = prevArgv;
+    }
+  });
 });

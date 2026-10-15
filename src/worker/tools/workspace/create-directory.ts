@@ -1,5 +1,5 @@
 import { ShadowClawDatabase } from "../../../db/types.js";
-import { createGroupDirectory } from "../../../storage/createGroupDirectory.js";
+import { createGroupDirectory } from "../../../storage/create-group-directory.js";
 
 export async function executeCreateDirectory(
   db: ShadowClawDatabase,

@@ -7,9 +7,9 @@ import {
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { VMStatusPayload } from "../../subsystems/worker/types.js";
 
-import { extractLastPromptLine } from "./utils/extractLastPromptLine.js";
-import { isNearBottom } from "./utils/isNearBottom.js";
-import { normalizeTerminalText } from "./utils/normalizeTerminalText.js";
+import { extractLastPromptLine } from "./utils/extract-last-prompt-line.js";
+import { isNearBottom } from "./utils/is-near-bottom.js";
+import { normalizeTerminalText } from "./utils/normalize-terminal-text.js";
 
 import ShadowClawElement from "../shadow-claw-element.js";
 import shadowClawTerminalStyles from "./shadow-claw-terminal.css" with { type: "css" };

@@ -8,15 +8,15 @@ const mockReadGroupFileBytes =
   jest.fn<(db: any, groupId: string, path: string) => Promise<Uint8Array>>();
 const mockIsBinaryContent = jest.fn<(b: Uint8Array) => boolean>();
 
-jest.unstable_mockModule("../../../storage/listGroupFiles.js", () => ({
+jest.unstable_mockModule("../../../storage/list-group-files.js", () => ({
   listGroupFiles: mockListGroupFiles,
 }));
 
-jest.unstable_mockModule("../../../storage/readGroupFileBytes.js", () => ({
+jest.unstable_mockModule("../../../storage/read-group-file-bytes.js", () => ({
   readGroupFileBytes: mockReadGroupFileBytes,
 }));
 
-jest.unstable_mockModule("./utils/isBinaryContent.js", () => ({
+jest.unstable_mockModule("../../../utils/is-binary.js", () => ({
   isBinaryContent: mockIsBinaryContent,
 }));
 

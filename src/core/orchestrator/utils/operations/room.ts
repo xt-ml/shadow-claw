@@ -1,7 +1,7 @@
 import type { RoomInvitePayload } from "../../../../subsystems/channels/peer-protocol.js";
 import type { RoomManager } from "../../../../subsystems/channels/room-manager.js";
 import type { RoomMeta } from "../../../../subsystems/channels/types.js";
-import type { EventBus } from "../EventBus.js";
+import type { EventBus } from "../event-bus.js";
 
 interface RoomOpsState {
   events: EventBus;

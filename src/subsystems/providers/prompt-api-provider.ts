@@ -1,8 +1,8 @@
 import { sanitizeModelOutput } from "../../content/chat-template-sanitizer.js";
 import { ShadowClawDatabase } from "../../db/db.js";
-import { createLogMessage } from "../../worker/utils/createLogMessage.js";
-import { createToolActivityMessage } from "../../worker/utils/createToolActivityMessage.js";
-import { executeTool } from "../../worker/utils/executeTool.js";
+import { createLogMessage } from "../../worker/utils/create-log-message.js";
+import { createToolActivityMessage } from "../../worker/utils/create-tool-activity-message.js";
+import { executeTool } from "../../worker/utils/execute-tool.js";
 import { setPostHandler } from "../../worker/utils/post.js";
 import { DEFAULT_BUILTIN_PROFILE } from "../tools/builtin-profiles.js";
 import { TOOL_DEFINITIONS, ToolDefinition } from "../tools/tools.js";
@@ -14,13 +14,13 @@ import {
 import {
   DEFAULT_PROMPT_API_MODEL_SIZE_BYTES,
   PromptApiProgressAggregator,
-} from "./utils/promptApiProgressAggregator.js";
+} from "./utils/prompt-api-progress-aggregator.js";
 import {
   setModelCacheProgressHook,
   clearModelCacheProgressHook,
   createModelCacheFetch,
-} from "./utils/createModelCacheFetch.js";
-import { normalizeMessagesForChatTemplate } from "./utils/chatTemplate.js";
+} from "./utils/create-model-cache-fetch.js";
+import { normalizeMessagesForChatTemplate } from "./utils/chat-template.js";
 
 import type { SubagentInvokeContext } from "../../worker/tools/spawn-subagent/spawn-subagent.js";
 

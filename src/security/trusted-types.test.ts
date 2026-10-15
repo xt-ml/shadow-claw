@@ -149,4 +149,122 @@ describe("trusted-types helpers", () => {
     );
     expect(url.__trustedScriptUrl).toBe("blob:test");
   });
+
+  it("handles setEscapedHtml, escapeToTrustedHtml, and sanitizeSrcdocHtml", async () => {
+    const { escapeToTrustedHtml, sanitizeSrcdocHtml, setEscapedHtml } =
+      await import("./trusted-types.js");
+
+    const escaped = escapeToTrustedHtml("<script>&'\"");
+    expect(escaped).not.toContain("<script>");
+
+    const srcdoc = sanitizeSrcdocHtml("<b>bold</b>");
+    expect(srcdoc).toContain("<b>bold</b>");
+
+    const element = document.createElement("div");
+    const result = setEscapedHtml(element, "Hello <World>");
+    expect(element.innerHTML).toContain("Hello &lt;World&gt;");
+    expect(result).toBeDefined();
+  });
+
+  it("handles setTrustedSrcdoc and toTrustedHtmlPresanitized", async () => {
+    const { setTrustedSrcdoc, toTrustedHtmlPresanitized } =
+      await import("./trusted-types.js");
+
+    const presanitized = toTrustedHtmlPresanitized("<p>pre</p>");
+    expect(String(presanitized)).toContain("<p>pre</p>");
+
+    const iframe = document.createElement("iframe");
+    const res = setTrustedSrcdoc(iframe, "<p>iframe doc</p>");
+    expect(iframe.srcdoc).toContain("<p>iframe doc</p>");
+    expect(res).toBeDefined();
+  });
+
+  it("reuses existing policy when factory.getPolicy is available on first check", async () => {
+    const existingPolicy = {
+      createHTML: (input: string) => `existing:${input}`,
+      createScriptURL: (url: string) => `existing:${url}`,
+    };
+    const getPolicy = jest.fn(() => existingPolicy);
+    const createPolicy = jest.fn();
+
+    Object.defineProperty(globalThis, "trustedTypes", {
+      configurable: true,
+      value: { getPolicy, createPolicy },
+    });
+
+    const { sanitizeToTrustedHtml, toTrustedScriptUrl } =
+      await import("./trusted-types.js");
+    expect(sanitizeToTrustedHtml("<p>test</p>")).toContain("existing:");
+    expect(toTrustedScriptUrl("https://foo.com")).toBe(
+      "existing:https://foo.com",
+    );
+    expect(createPolicy).not.toHaveBeenCalled();
+  });
+
+  it("handles toTrustedScriptUrl fallback when policy lacks createScriptURL", async () => {
+    const policyWithoutScript = {
+      createHTML: (input: string) => input,
+    };
+    Object.defineProperty(globalThis, "trustedTypes", {
+      configurable: true,
+      value: {
+        getPolicy: () => policyWithoutScript,
+        createPolicy: () => policyWithoutScript,
+      },
+    });
+
+    const { toTrustedScriptUrl } = await import("./trusted-types.js");
+    expect(toTrustedScriptUrl("https://example.com/script.js")).toBe(
+      "https://example.com/script.js",
+    );
+  });
+
+  it("handles createPolicy throwing when getPolicy is not a function", async () => {
+    Object.defineProperty(globalThis, "trustedTypes", {
+      configurable: true,
+      value: {
+        createPolicy: () => {
+          throw new Error("Creation error");
+        },
+      },
+    });
+
+    const { sanitizeToTrustedHtml } = await import("./trusted-types.js");
+    const res = sanitizeToTrustedHtml("<p>hello</p>");
+    expect(String(res)).toContain("<p>hello</p>");
+  });
+
+  it("calls policy.createHTML in toTrustedHtmlPresanitized when policy exists", async () => {
+    const customPolicy = {
+      createHTML: jest.fn((input: string) => `policy:${input}`),
+    };
+    Object.defineProperty(globalThis, "trustedTypes", {
+      configurable: true,
+      value: {
+        createPolicy: jest.fn(),
+        getPolicy: () => customPolicy,
+      },
+    });
+
+    const { toTrustedHtmlPresanitized } = await import("./trusted-types.js");
+    expect(toTrustedHtmlPresanitized("<div>wrapped</div>")).toBe(
+      "policy:<div>wrapped</div>",
+    );
+  });
+
+  it("handles getPolicy returning null in catch block when createPolicy throws", async () => {
+    Object.defineProperty(globalThis, "trustedTypes", {
+      configurable: true,
+      value: {
+        createPolicy: () => {
+          throw new Error("createPolicy failed");
+        },
+        getPolicy: () => null,
+      },
+    });
+
+    const { sanitizeToTrustedHtml } = await import("./trusted-types.js");
+    const res = sanitizeToTrustedHtml("<p>fallback</p>");
+    expect(String(res)).toContain("<p>fallback</p>");
+  });
 });

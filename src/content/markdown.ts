@@ -16,7 +16,7 @@ import {
   PostFrontmatter,
   renderFrontmatterMarkup,
   splitFrontmatter,
-} from "../common/utils/frontmatter.mjs";
+} from "../utils/frontmatter.js";
 
 import {
   ensureIframeSanitizerHook,
@@ -171,8 +171,13 @@ marked.use({
         .replace(/^-|-$/gu, "");
 
       let slug = baseSlug;
-      const counts = this.options?.headingCounts;
-      if (counts instanceof Map) {
+      const counts =
+        this.options?.headingCounts || this.parser?.options?.headingCounts;
+      if (
+        counts &&
+        typeof counts.get === "function" &&
+        typeof counts.set === "function"
+      ) {
         const count = counts.get(baseSlug) || 0;
         counts.set(baseSlug, count + 1);
         if (count > 0) {

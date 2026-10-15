@@ -1,7 +1,7 @@
 import hljs from "highlight.js";
 
 import { renderMarkdown } from "../../content/markdown.js";
-import { splitFrontmatter } from "../../common/utils/frontmatter.mjs";
+import { splitFrontmatter } from "../../utils/frontmatter.js";
 
 import { CONFIG_KEYS } from "../../config/config.js";
 import {
@@ -15,7 +15,7 @@ import {
 
 import { effect } from "../../core/effect.js";
 import { getDb } from "../../db/db.js";
-import { getConfig } from "../../db/getConfig.js";
+import { getConfig } from "../../db/get-config.js";
 
 import {
   sanitizeSrcdocHtml,
@@ -24,8 +24,8 @@ import {
   toTrustedHtmlPresanitized,
 } from "../../security/trusted-types.js";
 
-import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
-import { writeGroupFile } from "../../storage/writeGroupFile.js";
+import { readGroupFileBytes } from "../../storage/read-group-file-bytes.js";
+import { writeGroupFile } from "../../storage/write-group-file.js";
 
 import { fileViewerStore } from "../../stores/file-viewer.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
@@ -37,7 +37,7 @@ import {
   getIframeThemeStyleHtml,
   getIframeThemeStylesheetLink,
 } from "../../ui/iframe-theme.js";
-import { isTruthyConfigValue } from "../../utils/parseBooleanConfig.js";
+import { isTruthyConfigValue } from "../../utils/parse-boolean-config.js";
 import { getImageMimeType } from "../../utils/mime.js";
 
 import "../shadow-claw-dialog/shadow-claw-dialog.js";

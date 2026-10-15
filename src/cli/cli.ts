@@ -1254,6 +1254,7 @@ program
     false,
   )
   .option("--api-key <key>", "API key")
+  .option("--base-url <url>", "Base URL for LLM provider API endpoint")
   .option("-v, --verbose", "Enable verbose execution logging", false)
   .option(
     "--allow-internet, --internet-access",

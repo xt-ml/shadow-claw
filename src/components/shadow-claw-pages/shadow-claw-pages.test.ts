@@ -75,21 +75,21 @@ jest.unstable_mockModule("../../stores/orchestrator.js", () => {
   };
 });
 
-jest.unstable_mockModule("../../storage/readGroupFile.js", () => ({
+jest.unstable_mockModule("../../storage/read-group-file.js", () => ({
   readGroupFile: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../storage/writeGroupFile.js", () => ({
+jest.unstable_mockModule("../../storage/write-group-file.js", () => ({
   writeGroupFile: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../storage/staticMainSite.js", () => ({
+jest.unstable_mockModule("../../storage/static-main-site.js", () => ({
   getStaticMainManifest: jest.fn(async () => ({ pages: [] })),
   getStaticPageContent: jest.fn(async () => null),
   seedStaticMainSite: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../storage/readGroupFileBytes.js", () => ({
+jest.unstable_mockModule("../../storage/read-group-file-bytes.js", () => ({
   readGroupFileBytes: jest.fn(),
 }));
 
@@ -103,27 +103,31 @@ jest.unstable_mockModule("../../db/db.js", () => ({
   getDb: jest.fn(async () => ({})),
 }));
 
-jest.unstable_mockModule("../../db/getConfig.js", () => ({
+jest.unstable_mockModule("../../db/get-config.js", () => ({
   getConfig: jest.fn(async () => "0"),
 }));
 
-jest.unstable_mockModule("./utils/requestConfirmation.js", () => ({
+jest.unstable_mockModule("./utils/request-confirmation.js", () => ({
   requestConfirmation: jest.fn(),
 }));
 
 const { ShadowClawPages } = await import("./shadow-claw-pages.js");
 const { orchestratorStore } = await import("../../stores/orchestrator.js");
-const { readGroupFile } = await import("../../storage/readGroupFile.js");
-const { writeGroupFile } = await import("../../storage/writeGroupFile.js");
+const { readGroupFile } = await import("../../storage/read-group-file.js");
+const { writeGroupFile } = await import("../../storage/write-group-file.js");
 const { getStaticPageContent } =
-  await import("../../storage/staticMainSite.js");
+  await import("../../storage/static-main-site.js");
 const { readGroupFileBytes } =
-  await import("../../storage/readGroupFileBytes.js");
+  await import("../../storage/read-group-file-bytes.js");
 const { renderMarkdown } = await import("../../content/markdown.js");
-const { getConfig } = await import("../../db/getConfig.js");
+const { getConfig } = await import("../../db/get-config.js");
 const { setSanitizedHtml, setTrustedSrcdoc } =
   await import("../../security/trusted-types.js");
-const { requestConfirmation } = await import("./utils/requestConfirmation.js");
+const { requestConfirmation } = await import("./utils/request-confirmation.js");
+const { showError, showSuccess } = await import("../../ui/toast.js");
+const { fileViewerStore } = await import("../../stores/file-viewer.js");
+const { toolsStore } = await import("../../stores/tools.js");
+const { effect } = await import("../../core/effect.js");
 
 describe("shadow-claw-pages", () => {
   beforeEach(() => {
@@ -1423,7 +1427,7 @@ describe("shadow-claw-pages", () => {
 
       const iframe = document.createElement("iframe");
       iframe.setAttribute("data-pages-iframe", "");
-      const fakeWindow = {} as Window;
+      const fakeWindow = { postMessage: jest.fn() } as unknown as Window;
       component.previewFrameWindow = fakeWindow;
 
       const root =
@@ -1436,6 +1440,7 @@ describe("shadow-claw-pages", () => {
       } as MessageEvent);
 
       expect(iframe.style.height).toBe("850px");
+      component.previewFrameWindow = null;
     });
   });
 
@@ -1699,7 +1704,7 @@ describe("shadow-claw-pages", () => {
       (orchestratorStore as any).pages = pages;
       component.selectedPage = pages[1];
 
-      const fakeWindow = {} as Window;
+      const fakeWindow = { postMessage: jest.fn() } as unknown as Window;
       component.previewFrameWindow = fakeWindow;
 
       // Swipe left message -> goToNextPage
@@ -1709,6 +1714,7 @@ describe("shadow-claw-pages", () => {
       } as MessageEvent);
 
       expect(component.selectedPage).toEqual(pages[2]);
+      component.previewFrameWindow = null;
     });
 
     it("suppresses keyboard and gesture navigation when focus or target has data-no-nav attribute", async () => {
@@ -1898,6 +1904,750 @@ describe("shadow-claw-pages", () => {
         "group-1",
       );
       expect(htmlRes).toContain("<p>Hello</p>");
+    });
+    it("handles handleIframeMessage edge cases: null message, broadcast-result, and storage-proxy", async () => {
+      const component = new ShadowClawPages();
+      component.db = {} as any;
+      const fakeWin = { postMessage: jest.fn() } as unknown as Window;
+      component.previewFrameWindow = fakeWin;
+
+      // 1. null / invalid message data
+      expect(() => {
+        component.handleIframeMessage({
+          data: null,
+          source: fakeWin,
+        } as MessageEvent);
+      }).not.toThrow();
+
+      // 2. broadcast-result with broadcastProxy
+      const mockBroadcast = {
+        handleResultFromIframe: jest.fn(),
+      };
+      component.broadcastProxy = mockBroadcast as any;
+      component.handleIframeMessage({
+        data: {
+          type: "shadow-claw-broadcast-result",
+          channel: "my-chan",
+          payload: { foo: "bar" },
+        },
+        source: fakeWin,
+      } as MessageEvent);
+      expect(mockBroadcast.handleResultFromIframe).toHaveBeenCalledWith(
+        fakeWin,
+        "my-chan",
+        { foo: "bar" },
+      );
+
+      // 2b. broadcast-result without broadcastProxy
+      component.broadcastProxy = null;
+      expect(() => {
+        component.handleIframeMessage({
+          data: {
+            type: "shadow-claw-broadcast-result",
+            channel: "my-chan",
+            payload: { foo: "bar" },
+          },
+          source: fakeWin,
+        } as MessageEvent);
+      }).not.toThrow();
+
+      // 3. storage-proxy from mismatched window -> ignored
+      const otherWin = { postMessage: jest.fn() } as unknown as Window;
+      component.handleIframeMessage({
+        data: {
+          type: "shadow-claw-storage-proxy",
+          requestId: "req-1",
+          method: "getItem",
+          args: ["key"],
+        },
+        source: otherWin,
+      } as MessageEvent);
+
+      // 4. storage-proxy with matching source and default pageKey
+      component.selectedPage = null;
+      component.handleIframeMessage({
+        data: {
+          type: "shadow-claw-storage-proxy",
+          requestId: "req-2",
+          method: "getItem",
+          args: ["key"],
+        },
+        source: fakeWin,
+      } as MessageEvent);
+
+      component.previewFrameWindow = null;
+    });
+
+    it("handles handleIframeMessage swipe and iframe-resize edge cases", async () => {
+      const component = new ShadowClawPages();
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const fakeWin = { postMessage: jest.fn() } as unknown as Window;
+      component.previewFrameWindow = fakeWin;
+
+      const pages = [
+        { groupId: "group-1", path: "docs/1.md" },
+        { groupId: "group-1", path: "docs/2.md" },
+      ];
+      (orchestratorStore as any).pages = pages;
+      component.selectedPage = pages[0];
+
+      // Swipe from mismatched source -> ignored
+      const otherWin = { postMessage: jest.fn() } as unknown as Window;
+      component.handleIframeMessage({
+        data: { type: "shadow-claw-swipe", direction: "left" },
+        source: otherWin,
+      } as MessageEvent);
+      expect(component.selectedPage).toBe(pages[0]);
+
+      // Swipe left -> goToNextPage
+      component.handleIframeMessage({
+        data: { type: "shadow-claw-swipe", direction: "left" },
+        source: fakeWin,
+      } as MessageEvent);
+      expect(component.selectedPage).toBe(pages[1]);
+
+      // Swipe right -> goToPreviousPage
+      component.handleIframeMessage({
+        data: { type: "shadow-claw-swipe", direction: "right" },
+        source: fakeWin,
+      } as MessageEvent);
+      expect(component.selectedPage).toBe(pages[0]);
+
+      // Swipe with unknown direction -> ignored
+      component.handleIframeMessage({
+        data: { type: "shadow-claw-swipe", direction: "up" },
+        source: fakeWin,
+      } as MessageEvent);
+      expect(component.selectedPage).toBe(pages[0]);
+
+      // iframe-resize without iframe in DOM
+      component.handleIframeMessage({
+        data: { type: "shadow-claw-iframe-resize", height: 500 },
+        source: fakeWin,
+      } as MessageEvent);
+
+      // iframe-resize with iframe in DOM
+      const iframe = document.createElement("iframe");
+      iframe.setAttribute("data-pages-iframe", "");
+      root.appendChild(iframe);
+      const iframeWin = { postMessage: jest.fn() } as unknown as Window;
+      Object.defineProperty(iframe, "contentWindow", {
+        value: iframeWin,
+        configurable: true,
+      });
+
+      component.previewFrameWindow = null;
+      component.handleIframeMessage({
+        data: { type: "shadow-claw-iframe-resize", height: 600 },
+        source: iframeWin,
+      } as MessageEvent);
+      expect(iframe.style.height).toBe("600px");
+      expect(component.previewFrameWindow).toBe(iframeWin);
+
+      // iframe-resize with matching previewFrameWindow
+      component.handleIframeMessage({
+        data: { type: "shadow-claw-iframe-resize", height: 750 },
+        source: iframeWin,
+      } as MessageEvent);
+      expect(iframe.style.height).toBe("750px");
+
+      // iframe-resize with mismatched source when previewFrameWindow is set
+      component.handleIframeMessage({
+        data: { type: "shadow-claw-iframe-resize", height: 900 },
+        source: otherWin,
+      } as MessageEvent);
+      expect(iframe.style.height).toBe("750px");
+
+      iframe.remove();
+      component.previewFrameWindow = null;
+    });
+
+    it("handles handleIframeMessage file-viewer-link navigation and gameSave", async () => {
+      const component = new ShadowClawPages();
+      const fakeWin = { postMessage: jest.fn() } as unknown as Window;
+      component.previewFrameWindow = fakeWin;
+
+      // 1. !this.db -> ignored
+      component.db = null;
+      component.handleIframeMessage({
+        data: { type: "shadow-claw-file-viewer-link", href: "/files/doc.html" },
+        source: fakeWin,
+      } as MessageEvent);
+
+      component.db = {} as any;
+      component.selectedPage = { groupId: "group-1", path: "index.html" };
+
+      // 2. Mismatched window source -> ignored
+      const otherWin = { postMessage: jest.fn() } as unknown as Window;
+      component.handleIframeMessage({
+        data: { type: "shadow-claw-file-viewer-link", href: "/files/doc.html" },
+        source: otherWin,
+      } as MessageEvent);
+
+      // 3. Link with gameSave parameter -> calls reloadPreviewWithSearchParams
+      const reloadSpy = jest
+        .spyOn(component as any, "reloadPreviewWithSearchParams")
+        .mockImplementation(async () => {});
+      component.handleIframeMessage({
+        data: {
+          type: "shadow-claw-file-viewer-link",
+          href: "http://localhost/files/group-1/game.html?gameSave=abc",
+        },
+        source: fakeWin,
+      } as MessageEvent);
+      expect(reloadSpy).toHaveBeenCalledWith("?gameSave=abc");
+
+      // 4. External link -> window.open
+      const openSpy = jest.spyOn(window, "open").mockImplementation(() => null);
+      component.handleIframeMessage({
+        data: {
+          type: "shadow-claw-file-viewer-link",
+          href: "https://example.com/external-page",
+        },
+        source: fakeWin,
+      } as MessageEvent);
+      expect(openSpy).toHaveBeenCalledWith(
+        "https://example.com/external-page",
+        "_blank",
+        "noopener,noreferrer",
+      );
+
+      // 5. Internal link with window.navigation
+      const mockNavigate = jest.fn();
+      (window as any).navigation = { navigate: mockNavigate };
+      component.handleIframeMessage({
+        data: {
+          type: "shadow-claw-file-viewer-link",
+          href: "http://localhost/files/group-1/other.html",
+        },
+        source: fakeWin,
+      } as MessageEvent);
+      expect(mockNavigate).toHaveBeenCalled();
+
+      // 6. Internal link without window.navigation -> history.pushState + popstate
+      delete (window as any).navigation;
+      const pushStateSpy = jest
+        .spyOn(window.history, "pushState")
+        .mockImplementation(() => {});
+      const popStateListener = jest.fn();
+      window.addEventListener("popstate", popStateListener);
+
+      component.handleIframeMessage({
+        data: {
+          type: "shadow-claw-file-viewer-link",
+          href: "http://localhost/files/group-1/other.html",
+        },
+        source: fakeWin,
+      } as MessageEvent);
+      expect(pushStateSpy).toHaveBeenCalled();
+      expect(popStateListener).toHaveBeenCalled();
+
+      window.removeEventListener("popstate", popStateListener);
+      openSpy.mockRestore();
+      pushStateSpy.mockRestore();
+    });
+
+    it("handles reloadPreviewWithSearchParams guards and execution", async () => {
+      const component = new ShadowClawPages();
+      component.db = {} as any;
+      (
+        readGroupFile as jest.MockedFunction<typeof readGroupFile>
+      ).mockResolvedValue("<h1>Title</h1>");
+
+      // Guard 1: !this.selectedPage
+      orchestratorStore._activePinnedPage.set(null);
+      (component as any).renderedContent = "<p>content</p>";
+      await (component as any).reloadPreviewWithSearchParams("?foo=bar");
+
+      // Guard 2: !this.renderedContent
+      orchestratorStore._activePinnedPage.set({
+        groupId: "group-1",
+        path: "page.html",
+      });
+      (component as any).renderedContent = null;
+      await (component as any).reloadPreviewWithSearchParams("?foo=bar");
+
+      // Execution with renderedContent and root
+      (component as any).renderedContent = "<h1>Title</h1>";
+      await (component as any).reloadPreviewWithSearchParams("?foo=bar");
+      const iframe = component.shadowRoot?.querySelector("[data-pages-iframe]");
+      expect(iframe).toBeInstanceOf(HTMLIFrameElement);
+      component.previewFrameWindow = null;
+    });
+
+    it("handles boundary conditions for goToNextPage and goToPreviousPage", async () => {
+      const component = new ShadowClawPages();
+      const pages = [
+        { groupId: "group-1", path: "1.md" },
+        { groupId: "group-1", path: "2.md" },
+      ];
+      (orchestratorStore as any).pages = pages;
+
+      // When selectedPage is not in list (index = -1)
+      component.selectedPage = { groupId: "group-1", path: "unknown.md" };
+      component.goToNextPage();
+      expect(component.selectedPage.path).toBe("unknown.md");
+      component.goToPreviousPage();
+      expect(component.selectedPage.path).toBe("unknown.md");
+
+      // At end of list (index = 1) -> goToNextPage is no-op
+      component.selectedPage = pages[1];
+      component.goToNextPage();
+      expect(component.selectedPage).toBe(pages[1]);
+
+      // At start of list (index = 0) -> goToPreviousPage is no-op
+      component.selectedPage = pages[0];
+      component.goToPreviousPage();
+      expect(component.selectedPage).toBe(pages[0]);
+    });
+
+    it("handles showNavButtonsTemporarily timeout lifecycle and replacement", () => {
+      jest.useFakeTimers();
+      const component = new ShadowClawPages();
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const viewer = root.querySelector(".pages__viewer");
+
+      // First trigger
+      component.showNavButtonsTemporarily(1000);
+      expect(viewer?.classList.contains("pages__viewer--nav-visible")).toBe(
+        true,
+      );
+      expect((component as any).navFadeTimer).not.toBeNull();
+
+      // Second trigger before timeout replaces timer
+      component.showNavButtonsTemporarily(2000);
+      expect(viewer?.classList.contains("pages__viewer--nav-visible")).toBe(
+        true,
+      );
+
+      // Advance timers
+      jest.advanceTimersByTime(2000);
+      expect(viewer?.classList.contains("pages__viewer--nav-visible")).toBe(
+        false,
+      );
+      expect((component as any).navFadeTimer).toBeNull();
+
+      // Without shadowRoot
+      const detached = new ShadowClawPages();
+      Object.defineProperty(detached, "shadowRoot", { value: null });
+      expect(() => detached.showNavButtonsTemporarily()).not.toThrow();
+
+      jest.useRealTimers();
+    });
+
+    it("handles handleRemoveAll success, error object, and non-error throws", async () => {
+      const component = new ShadowClawPages();
+      component.db = {} as any;
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const btn = root.querySelector(
+        ".pages__remove-all-btn",
+      ) as HTMLButtonElement;
+
+      // 1. Success case
+      (requestConfirmation as jest.Mock).mockResolvedValueOnce(true);
+      (orchestratorStore.removeAllPages as jest.Mock).mockResolvedValueOnce(
+        undefined,
+      );
+      await component.handleRemoveAll();
+      expect(showSuccess).toHaveBeenCalledWith(
+        "Removed all pages from Pages",
+        2400,
+      );
+      expect(btn.textContent).toBe("🗑️ Remove All");
+      expect(btn.hasAttribute("disabled")).toBe(false);
+
+      // 2. Error object throw
+      (requestConfirmation as jest.Mock).mockResolvedValueOnce(true);
+      (orchestratorStore.removeAllPages as jest.Mock).mockRejectedValueOnce(
+        new Error("DB locked"),
+      );
+      await component.handleRemoveAll();
+      expect(showError).toHaveBeenCalledWith(
+        "Failed to remove all pages: DB locked",
+        4500,
+      );
+
+      // 3. String error throw
+      (requestConfirmation as jest.Mock).mockResolvedValueOnce(true);
+      (orchestratorStore.removeAllPages as jest.Mock).mockRejectedValueOnce(
+        "Disk error",
+      );
+      await component.handleRemoveAll();
+      expect(showError).toHaveBeenCalledWith(
+        "Failed to remove all pages: Disk error",
+        4500,
+      );
+    });
+
+    it("handles handleReorder when moving to first vs intermediate position", async () => {
+      const component = new ShadowClawPages();
+      component.db = {} as any;
+      const pages = [
+        { groupId: "group-1", path: "1.md" },
+        { groupId: "group-1", path: "2.md" },
+        { groupId: "group-1", path: "3.md" },
+      ];
+      (orchestratorStore as any).pages = pages;
+
+      const navigateListener = jest.fn();
+      document.addEventListener("shadow-claw-navigate", navigateListener);
+
+      // Move index 2 to 0 -> movedToFirst is page 3
+      await component.handleReorder(2, 0);
+      expect(orchestratorStore.reorderPages).toHaveBeenCalled();
+      expect(component.selectedPage?.path).toBe("3.md");
+      expect(navigateListener).toHaveBeenCalled();
+
+      // Move index 0 to 1 -> not moved to first, no new navigation
+      navigateListener.mockClear();
+      await component.handleReorder(0, 1);
+      expect(navigateListener).not.toHaveBeenCalled();
+
+      document.removeEventListener("shadow-claw-navigate", navigateListener);
+    });
+
+    it("handles renderPageList actions: details toggle, edit, and remove button flows", async () => {
+      const component = new ShadowClawPages();
+      component.db = {} as any;
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const pages = [{ groupId: "group-1", path: "docs/1.md" }];
+      const groups = [{ groupId: "group-1", name: "Docs Group" }];
+      (orchestratorStore as any).pages = pages;
+      (orchestratorStore as any).groups = groups;
+      component.selectedPage = pages[0];
+
+      component.renderPageList(pages, groups as any);
+
+      // Status text for 1 page
+      const status = root.querySelector("[data-pages-status]");
+      expect(status?.textContent).toBe("1 saved page");
+
+      // Details toggle listener
+      const details = root.querySelector(
+        "details.pages__group-details",
+      ) as HTMLDetailsElement;
+      expect(details).not.toBeNull();
+      details.open = false;
+      details.dispatchEvent(new Event("toggle"));
+      details.open = true;
+      details.dispatchEvent(new Event("toggle"));
+
+      // Edit button click - db present
+      const editBtn = root.querySelector(".pages__edit") as HTMLButtonElement;
+      editBtn.click();
+      expect(fileViewerStore.openFile).toHaveBeenCalledWith(
+        component.db,
+        "docs/1.md",
+        "group-1",
+      );
+
+      // Edit button error cases
+      (fileViewerStore.openFile as jest.Mock).mockRejectedValueOnce(
+        new Error("Editor failed"),
+      );
+      editBtn.click();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(showError).toHaveBeenCalledWith(
+        "Failed to edit file: Editor failed",
+        4500,
+      );
+
+      (fileViewerStore.openFile as jest.Mock).mockRejectedValueOnce(
+        "Raw string error",
+      );
+      editBtn.click();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(showError).toHaveBeenCalledWith(
+        "Failed to edit file: Raw string error",
+        4500,
+      );
+
+      // Edit button without db
+      component.db = null;
+      editBtn.click();
+
+      // Remove button without db
+      const removeBtn = root.querySelector(
+        ".pages__remove",
+      ) as HTMLButtonElement;
+      removeBtn.click();
+
+      // Remove button with db - cancelled
+      component.db = {} as any;
+      (requestConfirmation as jest.Mock).mockResolvedValueOnce(false);
+      removeBtn.click();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(orchestratorStore.removePage).not.toHaveBeenCalled();
+
+      // Remove button with db - confirmed
+      (requestConfirmation as jest.Mock).mockResolvedValueOnce(true);
+      (orchestratorStore.removePage as jest.Mock).mockResolvedValueOnce(
+        undefined,
+      );
+      removeBtn.click();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(showSuccess).toHaveBeenCalledWith(
+        "Removed docs/1.md from Pages",
+        2400,
+      );
+
+      // Remove button error object
+      (requestConfirmation as jest.Mock).mockResolvedValueOnce(true);
+      (orchestratorStore.removePage as jest.Mock).mockRejectedValueOnce(
+        new Error("Lock conflict"),
+      );
+      removeBtn.click();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(showError).toHaveBeenCalledWith(
+        "Failed to remove page: Lock conflict",
+        4500,
+      );
+
+      // Remove button string error
+      (requestConfirmation as jest.Mock).mockResolvedValueOnce(true);
+      (orchestratorStore.removePage as jest.Mock).mockRejectedValueOnce(
+        "General error",
+      );
+      removeBtn.click();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(showError).toHaveBeenCalledWith(
+        "Failed to remove page: General error",
+        4500,
+      );
+
+      // Empty pages list
+      component.renderPageList([], []);
+      expect(status?.textContent).toBe("0 saved pages");
+    });
+
+    it("handles renderSelectedPage token cancellation and plain text rendering", async () => {
+      const component = new ShadowClawPages();
+      component.db = {} as any;
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const rendered = root.querySelector(
+        "[data-pages-rendered]",
+      ) as HTMLElement;
+
+      // Plain text file (neither html nor markdown)
+      (
+        readGroupFile as jest.MockedFunction<typeof readGroupFile>
+      ).mockResolvedValue("Plain text content");
+      component.selectedPage = { groupId: "group-1", path: "notes.txt" };
+      await component.renderSelectedPage();
+      expect(rendered.textContent).toBe("Plain text content");
+
+      // Idempotent plain text re-render
+      await component.renderSelectedPage();
+      expect(rendered.textContent).toBe("Plain text content");
+
+      // Token race cancellation check
+      component.selectedPage = { groupId: "group-1", path: "doc2.txt" };
+      (
+        readGroupFile as jest.MockedFunction<typeof readGroupFile>
+      ).mockImplementationOnce(async () => {
+        // Increment renderToken behind the scenes before resolving
+        (component as any).renderToken++;
+        return "Stale content";
+      });
+      await component.renderSelectedPage();
+      // Should have bailed out and not set rendered.textContent to "Stale content"
+      expect(rendered.textContent).not.toBe("Stale content");
+
+      // Render error: Error object vs string error
+      component.selectedPage = { groupId: "group-1", path: "err.md" };
+      (
+        readGroupFile as jest.MockedFunction<typeof readGroupFile>
+      ).mockRejectedValueOnce(new Error("Corrupt DB"));
+      (
+        getStaticPageContent as jest.MockedFunction<typeof getStaticPageContent>
+      ).mockRejectedValueOnce(new Error("No static"));
+      await component.renderSelectedPage();
+      expect(showError).toHaveBeenCalledWith(
+        "Failed to load page err.md: Corrupt DB",
+        5000,
+      );
+
+      (
+        readGroupFile as jest.MockedFunction<typeof readGroupFile>
+      ).mockRejectedValueOnce("String failure");
+      (
+        getStaticPageContent as jest.MockedFunction<typeof getStaticPageContent>
+      ).mockRejectedValueOnce("No static");
+      await component.renderSelectedPage();
+      expect(showError).toHaveBeenCalledWith(
+        "Failed to load page err.md: String failure",
+        5000,
+      );
+    });
+
+    it("handles visibility, focus, auto-refresh config, and file saved events", async () => {
+      const component = new ShadowClawPages();
+      component.db = {} as any;
+      component.selectedPage = { groupId: "group-1", path: "doc.md" };
+      (
+        readGroupFile as jest.MockedFunction<typeof readGroupFile>
+      ).mockResolvedValue("# Doc");
+
+      // handleVisibilityChange: render-and-timer
+      Object.defineProperty(document, "hidden", {
+        value: false,
+        configurable: true,
+      });
+      Object.defineProperty(component, "isConnected", {
+        value: true,
+        configurable: true,
+      });
+      component.handleVisibilityChange();
+
+      // handleVisibilityChange: clear-timer
+      (component as any).autoRefreshTimer = setInterval(() => {}, 10000);
+      Object.defineProperty(document, "hidden", {
+        value: true,
+        configurable: true,
+      });
+      component.handleVisibilityChange();
+      expect((component as any).autoRefreshTimer).toBeNull();
+
+      // handleWindowFocus
+      Object.defineProperty(document, "hidden", {
+        value: false,
+        configurable: true,
+      });
+      component.handleWindowFocus();
+
+      // handleAnchorNavigation
+      const anchorNavResult = component.handleAnchorNavigation("section-1");
+      expect(typeof anchorNavResult).toBe("boolean");
+
+      const detached = new ShadowClawPages();
+      Object.defineProperty(detached, "shadowRoot", { value: null });
+      expect(detached.handleAnchorNavigation("sec")).toBe(false);
+
+      // handleAutoRefreshConfigChange with valid and null detail
+      const configEventNum = new CustomEvent(
+        "shadow-claw-pages-auto-refresh-change",
+        {
+          detail: { interval: 15 },
+        },
+      );
+      component.handleAutoRefreshConfigChange(configEventNum);
+      expect(component.autoRefreshIntervalSec).toBe(15);
+
+      const configEventNull = new CustomEvent(
+        "shadow-claw-pages-auto-refresh-change",
+        {
+          detail: null,
+        },
+      );
+      component.handleAutoRefreshConfigChange(configEventNull);
+
+      // handleFileSaved matching vs non-matching
+      const savedMatching = new CustomEvent("shadow-claw-file-saved", {
+        detail: { path: "doc.md", groupId: "group-1" },
+      });
+      component.handleFileSaved(savedMatching);
+
+      const savedOther = new CustomEvent("shadow-claw-file-saved", {
+        detail: { path: "other.md", groupId: "group-2" },
+      });
+      component.handleFileSaved(savedOther);
+    });
+
+    it("handles connectedCallback click outside dropdown and prerender overrides", async () => {
+      // 1. sc-prerender-override class
+      document.documentElement.classList.add("sc-prerender-override");
+      const compOverride = new ShadowClawPages();
+      await compOverride.connectedCallback();
+      const rendered = compOverride.shadowRoot?.querySelector(
+        "[data-pages-rendered]",
+      ) as HTMLElement;
+      expect(rendered.hidden).toBe(true);
+      compOverride.disconnectedCallback();
+      document.documentElement.classList.remove("sc-prerender-override");
+
+      // 2. Click outside dropdown
+      const component = new ShadowClawPages();
+      await component.connectedCallback();
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const dropdown = root.querySelector(
+        "[data-pages-dropdown]",
+      ) as HTMLDetailsElement;
+      if (dropdown) {
+        dropdown.open = true;
+
+        // Click outside dropdown
+        const outsideTarget = document.createElement("div");
+        root.appendChild(outsideTarget);
+        root.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        expect(dropdown.open).toBe(false);
+      }
+
+      component.disconnectedCallback();
+    });
+
+    it("handles setupEffects callbacks directly", async () => {
+      const component = new ShadowClawPages();
+      component.db = {} as any;
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const registeredCallbacks: Array<() => void> = [];
+      (effect as jest.Mock).mockImplementation((cb: () => void) => {
+        registeredCallbacks.push(cb);
+        return () => undefined;
+      });
+
+      component.setupEffects();
+      expect(registeredCallbacks.length).toBeGreaterThanOrEqual(3);
+
+      // Effect 1: declarative tools registration
+      const mockBroadcast = { registerChannelsFromTools: jest.fn() };
+      component.broadcastProxy = mockBroadcast as any;
+      (toolsStore as any)._declarativeTools = {
+        get: () => [{ name: "tool-1" }],
+      };
+      registeredCallbacks[0]();
+
+      // Effect 2: renderPageList
+      (orchestratorStore as any).pages = [{ groupId: "group-1", path: "1.md" }];
+      registeredCallbacks[1]();
+
+      // Effect 3: page selection validation
+      (orchestratorStore as any).pages = [];
+      (orchestratorStore as any)._activePinnedPage.set({
+        groupId: "group-1",
+        path: "1.md",
+      });
+      registeredCallbacks[2]();
+      expect(component.selectedPage).toBeNull();
+
+      // Effect 3 with pages when activePinnedPage is not found
+      const page1 = { groupId: "group-1", path: "1.md" };
+      (orchestratorStore as any).pages = [page1];
+      (orchestratorStore as any)._activePinnedPage.set(null);
+      (component as any).routingReady = false;
+      registeredCallbacks[2]();
+      expect(component.selectedPage).toEqual(page1);
+
+      // Effect 3 with routingReady = true triggers renderSelectedPage
+      (component as any).routingReady = true;
+      const renderSpy = jest
+        .spyOn(component, "renderSelectedPage")
+        .mockImplementation(async () => {});
+      registeredCallbacks[2]();
+      expect(renderSpy).toHaveBeenCalled();
     });
   });
 });

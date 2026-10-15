@@ -1,10 +1,10 @@
 import { jest } from "@jest/globals";
 
-jest.unstable_mockModule("../../../db/setConfig.js", () => ({
+jest.unstable_mockModule("../../../db/set-config.js", () => ({
   setConfig: jest.fn<any>().mockResolvedValue(undefined),
 }));
 
-jest.unstable_mockModule("../../../db/getConfig.js", () => ({
+jest.unstable_mockModule("../../../db/get-config.js", () => ({
   getConfig: jest.fn<any>().mockResolvedValue(undefined),
 }));
 
@@ -321,6 +321,164 @@ describe("shadow-claw-webvm", () => {
   it("handles missing orchestrator early returns", async () => {
     const el = new ShadowClawWebvm();
     el.orchestrator = null;
+    await el.saveVMBashTimeout();
+    await el.saveVMBootHost();
+    await el.saveVMBootMode();
+    await el.saveVMNetworkRelayURL();
+  });
+
+  it("covers render variations for boot mode, timeout clamping, and render catch", async () => {
+    const { getConfig } = await import("../../../db/get-config.js");
+    const el = new ShadowClawWebvm();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    el.db = {} as any;
+
+    // 1. VM boot mode = "9p"
+    (getConfig as any).mockImplementation((_db: any, key: string) => {
+      if (key === "vm_boot_mode") return Promise.resolve("9p");
+      if (key === "vm_bash_timeout_sec") return Promise.resolve("0"); // < 1 -> clamped to 1
+      if (key === "vm_boot_host")
+        return Promise.resolve("   http://custom-host.com   ");
+      if (key === "vm_network_relay_url")
+        return Promise.resolve("   wss://relay.com   ");
+      return Promise.resolve(undefined);
+    });
+    await el.render();
+
+    const modeSelect = el.shadowRoot?.querySelector(
+      '[data-setting="vm-boot-mode-select"]',
+    ) as HTMLSelectElement;
+    const timeoutInput = el.shadowRoot?.querySelector(
+      '[data-setting="vm-bash-timeout-input"]',
+    ) as HTMLInputElement;
+    expect(modeSelect.value).toBe("9p");
+    expect(timeoutInput.value).toBe("1");
+
+    // 2. VM boot mode = "ext2" and timeout > MAX
+    (getConfig as any).mockImplementation((_db: any, key: string) => {
+      if (key === "vm_boot_mode") return Promise.resolve("ext2");
+      if (key === "vm_bash_timeout_sec") return Promise.resolve("999999");
+      return Promise.resolve(undefined);
+    });
+    await el.render();
+    expect(modeSelect.value).toBe("ext2");
+    expect(Number(timeoutInput.value)).toBe(1800);
+
+    // 3. VM boot mode = "auto"
+    (getConfig as any).mockImplementation((_db: any, key: string) => {
+      if (key === "vm_boot_mode") return Promise.resolve("auto");
+      return Promise.resolve(undefined);
+    });
+    await el.render();
+    expect(modeSelect.value).toBe("auto");
+
+    // 4. Render catch block
+    (getConfig as any).mockRejectedValueOnce(new Error("Config load failure"));
+    await el.render();
+
+    document.body.removeChild(el);
+  });
+
+  it("covers saveVMBootMode variations (9p, ext2, auto, invalid) and non-Error catches", async () => {
+    const { showError } = await import("../../../ui/toast.js");
+    const orch = createOrchestratorStub();
+    (orchestratorStore as any).orchestrator = orch;
+    (orchestratorStore as any).ready = true;
+
+    const el = new ShadowClawWebvm();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    el.db = {} as any;
+    el.orchestrator = orch as any;
+
+    const select = el.shadowRoot?.querySelector(
+      '[data-setting="vm-boot-mode-select"]',
+    ) as HTMLSelectElement;
+
+    // "9p"
+    select.value = "9p";
+    await el.saveVMBootMode();
+    expect(mockSetVMBootMode).toHaveBeenCalledWith(orch, el.db, "9p");
+
+    // "ext2"
+    select.value = "ext2";
+    await el.saveVMBootMode();
+    expect(mockSetVMBootMode).toHaveBeenCalledWith(orch, el.db, "ext2");
+
+    // "auto"
+    select.value = "auto";
+    await el.saveVMBootMode();
+    expect(mockSetVMBootMode).toHaveBeenCalledWith(orch, el.db, "auto");
+
+    // "invalid" -> falls back to "disabled"
+    select.value = "unknown-mode";
+    await el.saveVMBootMode();
+    expect(mockSetVMBootMode).toHaveBeenCalledWith(orch, el.db, "disabled");
+
+    // Non-Error exception in saveVMBootMode
+    mockSetVMBootMode.mockRejectedValueOnce("raw boot mode error");
+    await el.saveVMBootMode();
+    expect(showError).toHaveBeenCalledWith(
+      "Error saving WebVM mode: raw boot mode error",
+      6000,
+    );
+
+    // Non-Error exception in saveVMBashTimeout
+    mockSetVMBashTimeout.mockRejectedValueOnce("raw timeout error");
+    const timeoutInput = el.shadowRoot?.querySelector(
+      '[data-setting="vm-bash-timeout-input"]',
+    ) as HTMLInputElement;
+    timeoutInput.value = "10";
+    await el.saveVMBashTimeout();
+    expect(showError).toHaveBeenCalledWith(
+      "Error saving WebVM bash timeout: raw timeout error",
+      6000,
+    );
+
+    // Non-Error exception in saveVMBootHost
+    mockSetVMBootHost.mockRejectedValueOnce("raw boot host error");
+    const bootHostInput = el.shadowRoot?.querySelector(
+      '[data-setting="vm-boot-host-input"]',
+    ) as HTMLInputElement;
+    bootHostInput.value = "";
+    await el.saveVMBootHost();
+    expect(showError).toHaveBeenCalledWith(
+      "Error saving WebVM boot host: raw boot host error",
+      6000,
+    );
+
+    // Non-Error exception in saveVMNetworkRelayURL
+    mockSetVMNetworkRelayURL.mockRejectedValueOnce("raw relay error");
+    const relayInput = el.shadowRoot?.querySelector(
+      '[data-setting="vm-network-relay-url-input"]',
+    ) as HTMLInputElement;
+    relayInput.value = "";
+    await el.saveVMNetworkRelayURL();
+    expect(showError).toHaveBeenCalledWith(
+      "Error saving WebVM relay URL: raw relay error",
+      6000,
+    );
+
+    document.body.removeChild(el);
+  });
+
+  it("guards against null shadowRoot across connectedCallback, bindEventListeners, and save methods", async () => {
+    const el = new ShadowClawWebvm();
+
+    // connectedCallback throws if no shadowRoot
+    Object.defineProperty(el, "shadowRoot", {
+      value: null,
+      configurable: true,
+    });
+    await expect(el.connectedCallback()).rejects.toThrow(
+      "shadowRoot not found",
+    );
+
+    el.bindEventListeners();
+    el.db = {} as any;
+    el.orchestrator = createOrchestratorStub() as any;
+    await el.render();
     await el.saveVMBashTimeout();
     await el.saveVMBootHost();
     await el.saveVMBootMode();

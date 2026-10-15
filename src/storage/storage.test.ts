@@ -7,27 +7,27 @@ jest.unstable_mockModule("../config/config.js", () => ({
   getOpfsRootName: () => "sc-root",
 }));
 
-jest.unstable_mockModule("../db/deleteConfig.js", () => ({
+jest.unstable_mockModule("../db/delete-config.js", () => ({
   deleteConfig: jest.fn(),
 }));
 
-jest.unstable_mockModule("../db/getConfig.js", () => ({
+jest.unstable_mockModule("../db/get-config.js", () => ({
   getConfig: jest.fn(),
 }));
 
-jest.unstable_mockModule("./getGroupDir.js", () => ({
+jest.unstable_mockModule("./get-group-dir.js", () => ({
   getGroupDir: jest.fn(),
 }));
 
-jest.unstable_mockModule("./parsePath.js", () => ({
+jest.unstable_mockModule("./parse-path.js", () => ({
   parsePath: jest.fn(),
 }));
 
-const { getGroupDir } = await import("./getGroupDir.js");
-const { listGroupFiles } = await import("./listGroupFiles.js");
-const { parsePath } = await import("./parsePath.js");
-const { readGroupFile } = await import("./readGroupFile.js");
-const { writeGroupFile } = await import("./writeGroupFile.js");
+const { getGroupDir } = await import("./get-group-dir.js");
+const { listGroupFiles } = await import("./list-group-files.js");
+const { parsePath } = await import("./parse-path.js");
+const { readGroupFile } = await import("./read-group-file.js");
+const { writeGroupFile } = await import("./write-group-file.js");
 
 // Mock FileSystemDirectoryHandle globally
 class MockFileSystemDirectoryHandle {
@@ -70,8 +70,8 @@ describe("storage.js", () => {
   beforeEach(async () => {
     jest.resetModules();
 
-    await import("../db/deleteConfig.js");
-    getConfig = (await import("../db/getConfig.js")).getConfig;
+    await import("../db/delete-config.js");
+    getConfig = (await import("../db/get-config.js")).getConfig;
     storage = await import("./storage.js");
 
     mockWritable = {

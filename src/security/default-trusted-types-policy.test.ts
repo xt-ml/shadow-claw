@@ -164,4 +164,85 @@ describe("ensureDefaultTrustedTypesPolicy", () => {
     expect(createScriptURL).toHaveBeenCalledWith("service-worker.js");
     expect(url.toString()).toBe("trusted:service-worker.js");
   });
+
+  it("invokes createHTML and createScriptURL identity callbacks", () => {
+    let capturedRules: any;
+    const createPolicy = jest.fn((_name: string, rules: any) => {
+      capturedRules = rules;
+      return rules;
+    });
+
+    Object.defineProperty(globalThis, "trustedTypes", {
+      configurable: true,
+      value: { createPolicy },
+    });
+
+    ensureDefaultTrustedTypesPolicy();
+    expect(capturedRules.createHTML("<b>hello</b>")).toBe("<b>hello</b>");
+    expect(capturedRules.createScriptURL("https://example.com")).toBe(
+      "https://example.com",
+    );
+  });
+
+  it("returns raw url when trustedTypes is undefined", () => {
+    Object.defineProperty(globalThis, "trustedTypes", {
+      configurable: true,
+      value: undefined,
+    });
+    expect(toDefaultTrustedScriptUrl("worker.js")).toBe("worker.js");
+  });
+
+  it("reuses existing fallback policy when default policy exists in policy names", () => {
+    const fallbackPolicy = {
+      createHTML: (input: string) => input,
+      createScriptURL: (url: string) => `fallback:${url}`,
+    };
+    const getPolicy = jest.fn((name: string) => {
+      if (name === "default") return null;
+      if (name === "shadowclaw-sandbox") return fallbackPolicy;
+      return null;
+    });
+    const getPolicyNames = jest.fn(() => ["default"]);
+    const createPolicy = jest.fn();
+
+    Object.defineProperty(globalThis, "trustedTypes", {
+      configurable: true,
+      value: {
+        getPolicy,
+        getPolicyNames,
+        createPolicy,
+      },
+    });
+
+    expect(toDefaultTrustedScriptUrl("worker.js")).toBe("fallback:worker.js");
+    expect(createPolicy).not.toHaveBeenCalled();
+  });
+
+  it("falls back to getPolicy in catch block when createPolicy throws", () => {
+    const defaultPolicy = {
+      createHTML: (input: string) => input,
+      createScriptURL: (url: string) => `recovered:${url}`,
+    };
+    let first = true;
+    const getPolicy = jest.fn((name: string) => {
+      if (first) {
+        first = false;
+        return null;
+      }
+      return name === "default" ? defaultPolicy : null;
+    });
+    const createPolicy = jest.fn(() => {
+      throw new Error("Policy create failure");
+    });
+
+    Object.defineProperty(globalThis, "trustedTypes", {
+      configurable: true,
+      value: {
+        getPolicy,
+        createPolicy,
+      },
+    });
+
+    expect(toDefaultTrustedScriptUrl("worker.js")).toBe("recovered:worker.js");
+  });
 });

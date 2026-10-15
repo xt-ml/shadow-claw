@@ -10,51 +10,6 @@ import {
   isAllowedCustomElement,
 } from "../security/custom-element-security.js";
 
-export type HashInput = File | Blob | ArrayBuffer | ArrayBufferView;
-
-/**
- * Format a date for use in a filename: yyyy-mm-dd_hh-mm-ss
- */
-export function formatDateForFilename(date = new Date()): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
-
-  const yyyy = date.getFullYear();
-  const mm = pad(date.getMonth() + 1);
-  const dd = pad(date.getDate());
-
-  const hh = pad(date.getHours());
-  const min = pad(date.getMinutes());
-  const ss = pad(date.getSeconds());
-
-  return `${yyyy}-${mm}-${dd}_${hh}-${min}-${ss}`;
-}
-
-/**
- * Format a timestamp for display: e.g. "Sun, Mar 1, 1:25 PM"
- */
-export function formatTimestamp(timestamp: number): string {
-  const date = new Date(timestamp);
-
-  return new Intl.DateTimeFormat("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  }).format(date);
-}
-
-/**
- * Escape HTML special characters in a string.
- */
-export function escapeHtml(str: string): string {
-  const div = document.createElement("div");
-  div.textContent = str;
-
-  return div.innerHTML;
-}
-
 /**
  * Sanitize HTML content using DOMPurify, allowing custom element tags.
  */
@@ -261,53 +216,4 @@ export function handleSpecialLinkNavigation(
   }
 
   return false;
-}
-
-/**
- * Convert various input types to an ArrayBuffer for hashing.
- */
-export function toArrayBuffer(input: HashInput): Promise<ArrayBuffer> {
-  if (input instanceof Blob) {
-    return input.arrayBuffer();
-  }
-
-  if (input instanceof ArrayBuffer) {
-    return Promise.resolve(input.slice(0) as ArrayBuffer);
-  }
-
-  const { buffer, byteOffset, byteLength } = input;
-
-  return Promise.resolve(
-    buffer.slice(byteOffset, byteOffset + byteLength) as ArrayBuffer,
-  );
-}
-
-/**
- * Convert an ArrayBuffer to a hex string.
- */
-export function bufferToHex(buffer: ArrayBuffer): string {
-  return Array.from(new Uint8Array(buffer))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-/**
- * Compute the SHA-256 hash and return it as a hex string.
- */
-export async function computeSha256(input: HashInput): Promise<string> {
-  const data = await toArrayBuffer(input);
-  const subtle =
-    globalThis.crypto?.subtle ??
-    (globalThis as any).window?.crypto?.subtle ??
-    (typeof process !== "undefined"
-      ? (await import("node:crypto")).webcrypto?.subtle
-      : undefined);
-
-  if (!subtle) {
-    throw new Error("crypto.subtle is not available in current environment");
-  }
-
-  const hashBuffer = await subtle.digest("SHA-256", data);
-
-  return bufferToHex(hashBuffer);
 }

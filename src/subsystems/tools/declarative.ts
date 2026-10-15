@@ -1,7 +1,7 @@
 import { CONFIG_KEYS, DEFAULT_GROUP_ID } from "../../config/config.js";
-import { getConfig } from "../../db/getConfig.js";
-import { getGroupDir } from "../../storage/getGroupDir.js";
-import { readGroupFile } from "../../storage/readGroupFile.js";
+import { getConfig } from "../../db/get-config.js";
+import { getGroupDir } from "../../storage/get-group-dir.js";
+import { readGroupFile } from "../../storage/read-group-file.js";
 
 import type { ShadowClawDatabase } from "../../db/types.js";
 import type {

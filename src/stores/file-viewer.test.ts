@@ -1,21 +1,22 @@
 import { jest } from "@jest/globals";
 
-jest.unstable_mockModule("../storage/readGroupFile.js", () => ({
+jest.unstable_mockModule("../storage/read-group-file.js", () => ({
   readGroupFile: jest.fn(),
 }));
 
-jest.unstable_mockModule("../storage/readGroupFileBytes.js", () => ({
+jest.unstable_mockModule("../storage/read-group-file-bytes.js", () => ({
   readGroupFileBytes: jest.fn(),
 }));
 
-jest.unstable_mockModule("../storage/getGroupFile.js", () => ({
+jest.unstable_mockModule("../storage/get-group-file.js", () => ({
   getGroupFile: jest.fn(),
 }));
 
 const { FileViewerStore } = await import("./file-viewer.js");
-const { readGroupFile } = await import("../storage/readGroupFile.js");
-const { readGroupFileBytes } = await import("../storage/readGroupFileBytes.js");
-const { getGroupFile } = await import("../storage/getGroupFile.js");
+const { readGroupFile } = await import("../storage/read-group-file.js");
+const { readGroupFileBytes } =
+  await import("../storage/read-group-file-bytes.js");
+const { getGroupFile } = await import("../storage/get-group-file.js");
 
 describe("FileViewerStore", () => {
   beforeEach(() => {

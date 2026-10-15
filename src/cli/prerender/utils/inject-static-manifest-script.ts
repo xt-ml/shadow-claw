@@ -1,4 +1,4 @@
-import { escapeJsonForHtmlScript } from "./escape-json-for-html-script.js";
+import { escapeJsonForHtmlScript } from "../../../utils/html.js";
 import { insertBeforeClosingHead } from "./insert-before-closing-head.js";
 
 export function injectStaticManifestScript(

@@ -27,7 +27,7 @@ const mockParseDirectToolCommand =
       msg: InboundMessage,
     ) => ParsedDirectToolCommand | null
   >();
-jest.unstable_mockModule("./parseDirectToolCommand.js", () => ({
+jest.unstable_mockModule("./parse-direct-tool-command.js", () => ({
   parseDirectToolCommand: mockParseDirectToolCommand,
 }));
 
@@ -39,7 +39,7 @@ const mockDiscoverSkills =
     ) => Promise<{ skills: SkillRecord[]; diagnostics: SkillDiagnostic[] }>
   >();
 jest.unstable_mockModule(
-  "../../../subsystems/skills/discoverSkills.js",
+  "../../../subsystems/skills/discover-skills.js",
   () => ({ discoverSkills: mockDiscoverSkills }),
 );
 
@@ -93,7 +93,7 @@ jest.unstable_mockModule("../../../db/groups.js", () => ({
   listGroups: mockListGroups,
 }));
 
-jest.unstable_mockModule("../../../db/saveMessage.js", () => ({
+jest.unstable_mockModule("../../../db/save-message.js", () => ({
   saveMessage: mockSaveMessage,
 }));
 
@@ -108,7 +108,7 @@ const mockInvokeAgent =
       subagent?: boolean,
     ) => Promise<void>
   >();
-jest.unstable_mockModule("./invokeAgent.js", () => ({
+jest.unstable_mockModule("./invoke-agent.js", () => ({
   invokeAgent: mockInvokeAgent,
 }));
 

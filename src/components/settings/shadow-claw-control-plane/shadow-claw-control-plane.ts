@@ -1,7 +1,7 @@
 import { effect } from "../../../core/effect.js";
 import { getDb } from "../../../db/db.js";
-import { getConfig } from "../../../db/getConfig.js";
-import { setConfig } from "../../../db/setConfig.js";
+import { getConfig } from "../../../db/get-config.js";
+import { setConfig } from "../../../db/set-config.js";
 import {
   CONFIG_KEYS,
   DEFAULT_CONTROL_PLANE_ENABLED,
@@ -191,7 +191,7 @@ export class ShadowClawControlPlane extends ShadowClawElement {
     if (cpEnabledToggle && this.db) {
       try {
         const { isControlPlaneEnabled } =
-          await import("../../../core/utils/initControlPlane.js");
+          await import("../../../core/utils/init-control-plane.js");
         cpEnabledToggle.checked = await isControlPlaneEnabled(this.db);
       } catch (_) {
         cpEnabledToggle.checked = DEFAULT_CONTROL_PLANE_ENABLED;
@@ -266,7 +266,7 @@ export class ShadowClawControlPlane extends ShadowClawElement {
         ensureControlPlaneConnected,
         stopControlPlaneClient,
         shouldConnectControlPlane,
-      } = await import("../../../core/utils/initControlPlane.js");
+      } = await import("../../../core/utils/init-control-plane.js");
 
       if (enabled) {
         if (shouldConnectControlPlane()) {
@@ -318,7 +318,7 @@ export class ShadowClawControlPlane extends ShadowClawElement {
         isControlPlaneEnabled,
         ensureControlPlaneConnected,
         shouldConnectControlPlane,
-      } = await import("../../../core/utils/initControlPlane.js");
+      } = await import("../../../core/utils/init-control-plane.js");
 
       if (
         (await isControlPlaneEnabled(this.db)) &&
@@ -382,7 +382,7 @@ export class ShadowClawControlPlane extends ShadowClawElement {
         isControlPlaneEnabled,
         ensureControlPlaneConnected,
         shouldConnectControlPlane,
-      } = await import("../../../core/utils/initControlPlane.js");
+      } = await import("../../../core/utils/init-control-plane.js");
 
       if (
         (await isControlPlaneEnabled(this.db)) &&

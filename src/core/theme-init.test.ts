@@ -1,3 +1,4 @@
+import { jest } from "@jest/globals";
 import { initializeThemeAndBootState } from "./theme-init.js";
 
 describe("theme-init initializeThemeAndBootState", () => {
@@ -112,5 +113,72 @@ describe("theme-init initializeThemeAndBootState", () => {
     expect(
       document.documentElement.classList.contains("sc-prerender-override"),
     ).toBe(false);
+  });
+
+  it("handles GitHub Pages 404 redirect and updates history", async () => {
+    const { handleGithubPages404Redirects } = await import("./theme-init.js");
+    const replaceSpy = jest
+      .spyOn(history, "replaceState")
+      .mockImplementation(() => {});
+
+    sessionStorage.setItem(
+      "shadow-claw-github-pages-404-redirect",
+      "/different/path",
+    );
+
+    try {
+      handleGithubPages404Redirects();
+      expect(
+        sessionStorage.getItem("shadow-claw-github-pages-404-redirect"),
+      ).toBeNull();
+      expect(replaceSpy).toHaveBeenCalledWith(null, "", "/different/path");
+    } finally {
+      replaceSpy.mockRestore();
+    }
+  });
+
+  it("resolves stored theme and prefers-color-scheme dark/light", () => {
+    localStorage.setItem("shadow-claw-theme", "dark");
+    initializeThemeAndBootState();
+    expect(document.documentElement.classList.contains("dark-mode")).toBe(true);
+
+    localStorage.setItem("shadow-claw-theme", "light");
+    initializeThemeAndBootState();
+    expect(document.documentElement.classList.contains("light-mode")).toBe(
+      true,
+    );
+  });
+
+  it("switches font link media to all on window load event", () => {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.media = "print";
+    link.href =
+      "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined";
+    document.head.appendChild(link);
+
+    try {
+      const loadEvent = new Event("load");
+      Object.defineProperty(loadEvent, "target", { value: link });
+      window.dispatchEvent(loadEvent);
+      expect(link.media).toBe("all");
+    } finally {
+      link.remove();
+    }
+  });
+
+  it("uses MutationObserver when shadow-claw element appears dynamically", async () => {
+    document.body.innerHTML = "";
+    localStorage.setItem("shadow-claw-override-prerender-skeleton", "true");
+
+    initializeThemeAndBootState();
+
+    const dynamicHost = document.createElement("shadow-claw");
+    document.body.appendChild(dynamicHost);
+
+    // Allow MutationObserver callback to run
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(dynamicHost.getAttribute("data-js-boot-pending")).toBe("true");
   });
 });

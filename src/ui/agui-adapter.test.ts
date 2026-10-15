@@ -174,4 +174,54 @@ describe("AGUIAdapter", () => {
     expect(dispatched[1].groupId).toBe("peer:abc");
     expect(dispatched[1].event.delta).toBe("B");
   });
+
+  it("ignores streaming-done, streaming-end, streaming-error, and tool-activity without active run", () => {
+    events.emit("streaming-done", { groupId: "unknown" });
+    events.emit("streaming-end", { groupId: "unknown" });
+    events.emit("streaming-error", { groupId: "unknown" });
+    events.emit("tool-activity", {
+      groupId: "unknown",
+      tool: "test",
+      status: "running",
+    });
+
+    expect(dispatched).toHaveLength(0);
+  });
+
+  it("handles tool-activity error status and streaming-error without explicit error message", () => {
+    events.emit("streaming-start", { groupId: "br:main" });
+    events.emit("tool-activity", {
+      groupId: "br:main",
+      tool: "exec_cmd",
+      status: "running",
+    });
+    events.emit("tool-activity", {
+      groupId: "br:main",
+      tool: "exec_cmd",
+      status: "error",
+    });
+
+    const endToolEvent = dispatched.find(
+      (d) => d.event.type === "TOOL_CALL_END",
+    );
+    expect(endToolEvent).toBeDefined();
+
+    // End text message so messageId becomes null
+    events.emit("streaming-end", { groupId: "br:main" });
+    dispatched = [];
+
+    // streaming-error with no message when messageId is already null
+    events.emit("streaming-error", { groupId: "br:main" });
+    expect(dispatched).toHaveLength(1);
+    expect(dispatched[0].event.type).toBe("RUN_ERROR");
+    expect(dispatched[0].event.message).toBe("Unknown streaming error");
+  });
+
+  it("ignores redundant start() calls when already started", () => {
+    adapter.start();
+    adapter.start();
+
+    events.emit("streaming-start", { groupId: "br:main" });
+    expect(dispatched).toHaveLength(2); // exactly 1 run, not duplicated
+  });
 });

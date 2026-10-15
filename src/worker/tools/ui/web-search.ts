@@ -1,7 +1,7 @@
 import { CONFIG_KEYS } from "../../../config/config.js";
-import { getConfig } from "../../../db/getConfig.js";
-import { stripHtml } from "../../utils/stripHtml.js";
-import { wrapUntrustedContent } from "../../utils/wrapUntrustedContent.js";
+import { getConfig } from "../../../db/get-config.js";
+import { stripHtml } from "../../../utils/html.js";
+import { wrapUntrustedContent } from "../../utils/wrap-untrusted-content.js";
 
 import type { ShadowClawDatabase } from "../../../db/types.js";
 

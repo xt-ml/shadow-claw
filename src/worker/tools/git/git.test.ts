@@ -235,6 +235,210 @@ describe("worker/tools/git", () => {
     expect(result).toContain("<<<<<<< ours");
   });
 
+  it("handles successful git_merge and stored author name/email in db", async () => {
+    const deps = makeDeps({
+      getConfig: jest.fn(async (_db, key) => {
+        if (key === "git-author-name") return "Stored Name";
+        if (key === "git-author-email") return "stored@example.com";
+        return undefined;
+      }),
+      gitMerge: jest.fn(async () => "Fast-forward merge succeeded"),
+    });
+
+    const result = await executeGitTool(
+      {} as any,
+      "git_merge",
+      { repo: "demo", theirs: "feature" },
+      "group-1",
+      deps,
+    );
+
+    expect(result).toBe("Fast-forward merge succeeded");
+    expect(deps.gitMerge).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authorName: "Stored Name",
+        authorEmail: "stored@example.com",
+      }),
+    );
+  });
+
+  it("handles conflict errors without data.filepaths, unreadable files, and files without markers", async () => {
+    const deps = makeDeps({
+      gitMerge: jest.fn(async () => {
+        // Error with message containing conflict path but without data.filepaths
+        throw new Error(
+          "conflicts in the following files: file-nomarkers.ts, file-unreadable.ts",
+        );
+      }),
+      readGroupFile: jest.fn(async (_db, _groupId, path: string) => {
+        if (path.includes("file-nomarkers.ts")) {
+          return "const clean = true;\n";
+        }
+        if (path.includes("file-unreadable.ts")) {
+          throw new Error("File unreadable");
+        }
+        return "";
+      }),
+    });
+
+    const result = await executeGitTool(
+      {} as any,
+      "git_merge",
+      { repo: "demo", theirs: "feature" },
+      "group-1",
+      deps,
+    );
+
+    expect(result).toContain(
+      "Automatic merge failed with conflicts in 2 file(s)",
+    );
+    expect(result).toContain(
+      "file-nomarkers.ts — conflict markers not found (may have auto-resolved)",
+    );
+    expect(result).toContain("file-unreadable.ts — could not read file");
+  });
+
+  it("falls back to getConfig for author credentials in commit, tag, and push when credentials lack them", async () => {
+    const deps = makeDeps({
+      resolveGitCredentials: jest.fn(async () => ({
+        token: "tok",
+        authorName: undefined,
+        authorEmail: undefined,
+      })),
+      getConfig: jest.fn(async (_db, key) => {
+        if (key === "git-author-name") return "Fallback Author";
+        if (key === "git-author-email") return "fallback@example.com";
+        return undefined;
+      }),
+    });
+
+    await executeGitTool(
+      {} as any,
+      "git_commit",
+      { repo: "demo", message: "Initial" },
+      "group-1",
+      deps,
+    );
+    expect(deps.gitCommit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authorName: "Fallback Author",
+        authorEmail: "fallback@example.com",
+      }),
+    );
+
+    await executeGitTool(
+      {} as any,
+      "git_tag",
+      { repo: "demo", tag: "v1.0" },
+      "group-1",
+      deps,
+    );
+    expect(deps.gitTag).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authorName: "Fallback Author",
+        authorEmail: "fallback@example.com",
+      }),
+    );
+
+    await executeGitTool(
+      {} as any,
+      "git_pull",
+      { repo: "demo" },
+      "group-1",
+      deps,
+    );
+    expect(deps.gitPull).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authorName: "Fallback Author",
+        authorEmail: "fallback@example.com",
+      }),
+    );
+  });
+
+  it("respects explicit author_name and author_email in commit, tag, pull, and merge", async () => {
+    const deps = makeDeps({
+      gitCommit: jest.fn(async () => "committed"),
+      gitTag: jest.fn(async () => "tagged"),
+      gitPull: jest.fn(async () => "pulled"),
+      gitMerge: jest.fn(async () => "merged"),
+    });
+
+    await executeGitTool(
+      {} as any,
+      "git_commit",
+      {
+        repo: "demo",
+        message: "Explicit",
+        author_name: "Explicit",
+        author_email: "exp@example.com",
+      },
+      "group-1",
+      deps,
+    );
+    expect(deps.gitCommit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authorName: "Explicit",
+        authorEmail: "exp@example.com",
+      }),
+    );
+
+    await executeGitTool(
+      {} as any,
+      "git_tag",
+      {
+        repo: "demo",
+        tag: "v2.0",
+        author_name: "Explicit",
+        author_email: "exp@example.com",
+      },
+      "group-1",
+      deps,
+    );
+    expect(deps.gitTag).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authorName: "Explicit",
+        authorEmail: "exp@example.com",
+      }),
+    );
+
+    await executeGitTool(
+      {} as any,
+      "git_pull",
+      {
+        repo: "demo",
+        author_name: "Explicit",
+        author_email: "exp@example.com",
+      },
+      "group-1",
+      deps,
+    );
+    expect(deps.gitPull).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authorName: "Explicit",
+        authorEmail: "exp@example.com",
+      }),
+    );
+
+    await executeGitTool(
+      {} as any,
+      "git_merge",
+      {
+        repo: "demo",
+        theirs: "main",
+        author_name: "Explicit",
+        author_email: "exp@example.com",
+      },
+      "group-1",
+      deps,
+    );
+    expect(deps.gitMerge).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authorName: "Explicit",
+        authorEmail: "exp@example.com",
+      }),
+    );
+  });
+
   it("executes remaining git tool operations (add, branch, branches, checkout, config, etc.)", async () => {
     const deps = makeDeps();
 

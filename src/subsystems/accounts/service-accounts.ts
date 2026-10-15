@@ -3,8 +3,8 @@ import {
   GENERAL_ACCOUNT_PROVIDER_CAPABILITIES,
   getGeneralAccountProviderCapabilities,
 } from "../../config/config.js";
-import { getConfig } from "../../db/getConfig.js";
-import { setConfig } from "../../db/setConfig.js";
+import { getConfig } from "../../db/get-config.js";
+import { setConfig } from "../../db/set-config.js";
 import { decryptValue, encryptValue } from "../../security/crypto.js";
 import {
   resolveStoredCredentialAuthMode,

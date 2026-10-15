@@ -5,8 +5,8 @@
 
 import { CONFIG_KEYS } from "../../config/config.js";
 import { getDb } from "../../db/db.js";
-import { getConfig } from "../../db/getConfig.js";
-import { getOrCreateSubscriberId } from "../../db/getOrCreateSubscriberId.js";
+import { getConfig } from "../../db/get-config.js";
+import { getOrCreateSubscriberId } from "../../db/get-or-create-subscriber-id.js";
 
 /**
  * Resolve a push route URL, optionally using a configured proxy.
@@ -119,7 +119,7 @@ export async function subscribeToPush(
 
   if (!resolvedClientId || !resolvedDeviceLabel) {
     try {
-      const initCp = await import("../../core/utils/initControlPlane.js");
+      const initCp = await import("../../core/utils/init-control-plane.js");
       if (
         !resolvedClientId &&
         typeof initCp.getOrCreateControlPlaneClientId === "function"
@@ -197,7 +197,7 @@ export async function syncExistingPushSubscription(
     }
 
     try {
-      const initCp = await import("../../core/utils/initControlPlane.js");
+      const initCp = await import("../../core/utils/init-control-plane.js");
       if (
         !resolvedClientId &&
         typeof initCp.getOrCreateControlPlaneClientId === "function"

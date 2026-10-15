@@ -48,7 +48,7 @@ describe("agent init", () => {
 
   afterEach(async () => {
     const { closeSqliteDatabase } =
-      await import("../../db/sqlite/openSqliteDatabase.js").catch(() => ({
+      await import("../../db/sqlite/open-sqlite-database.js").catch(() => ({
         closeSqliteDatabase: () => {},
       }));
     closeSqliteDatabase?.();
@@ -127,7 +127,7 @@ describe("agent init", () => {
   it("bootstrapHeadlessAgent defaults workspace to isolated sandbox unless --workspace is explicitly passed", async () => {
     const { bootstrapHeadlessAgent } = await import("./agent-bootstrap.js");
     const { closeSqliteDatabase } =
-      await import("../../db/sqlite/openSqliteDatabase.js").catch(() => ({
+      await import("../../db/sqlite/open-sqlite-database.js").catch(() => ({
         closeSqliteDatabase: () => {},
       }));
 
@@ -176,7 +176,7 @@ describe("agent init", () => {
   it("runs interactive cache wizard via resolveCacheDir when no existing cache exists", async () => {
     const { bootstrapHeadlessAgent } = await import("./agent-bootstrap.js");
     const { closeSqliteDatabase } =
-      await import("../../db/sqlite/openSqliteDatabase.js").catch(() => ({
+      await import("../../db/sqlite/open-sqlite-database.js").catch(() => ({
         closeSqliteDatabase: () => {},
       }));
     const { mkdir } = await import("node:fs/promises");
@@ -226,7 +226,7 @@ describe("agent init", () => {
   it("allows selecting temporary directory in cache wizard for agent", async () => {
     const { bootstrapHeadlessAgent } = await import("./agent-bootstrap.js");
     const { closeSqliteDatabase } =
-      await import("../../db/sqlite/openSqliteDatabase.js").catch(() => ({
+      await import("../../db/sqlite/open-sqlite-database.js").catch(() => ({
         closeSqliteDatabase: () => {},
       }));
     const { mkdir } = await import("node:fs/promises");
@@ -280,7 +280,7 @@ describe("agent skills listing", () => {
 
   afterEach(async () => {
     const { closeSqliteDatabase } =
-      await import("../../db/sqlite/openSqliteDatabase.js").catch(() => ({
+      await import("../../db/sqlite/open-sqlite-database.js").catch(() => ({
         closeSqliteDatabase: () => {},
       }));
     closeSqliteDatabase?.();
@@ -512,10 +512,12 @@ Instructions for make-file
 
       let stderrOutput = "";
       const originalStderrWrite = process.stderr.write;
+      const originalStdoutWrite = process.stdout.write;
       process.stderr.write = ((chunk: any) => {
         stderrOutput += String(chunk);
         return true;
       }) as any;
+      process.stdout.write = (() => true) as any;
 
       const mockInvokeHandler = async (_db: any, payload: any) => {
         core.post({
@@ -602,6 +604,7 @@ Instructions for make-file
         expect(stderrOutput).not.toContain("Warning:");
       } finally {
         process.stderr.write = originalStderrWrite;
+        process.stdout.write = originalStdoutWrite;
       }
     });
 
@@ -1160,7 +1163,7 @@ Instructions for make-file
 
     afterEach(async () => {
       const { closeSqliteDatabase } =
-        await import("../../db/sqlite/openSqliteDatabase.js").catch(() => ({
+        await import("../../db/sqlite/open-sqlite-database.js").catch(() => ({
           closeSqliteDatabase: () => {},
         }));
       closeSqliteDatabase?.();
@@ -1606,7 +1609,7 @@ describe("runAgentRun — --file attachments", () => {
 
   afterEach(async () => {
     const { closeSqliteDatabase } =
-      await import("../../db/sqlite/openSqliteDatabase.js");
+      await import("../../db/sqlite/open-sqlite-database.js");
     closeSqliteDatabase?.();
     await rm(tmpDir, { recursive: true, force: true });
   });
@@ -1933,7 +1936,7 @@ describe("agent clear and run --no-history", () => {
 
   afterEach(async () => {
     const { closeSqliteDatabase } =
-      await import("../../db/sqlite/openSqliteDatabase.js");
+      await import("../../db/sqlite/open-sqlite-database.js");
     closeSqliteDatabase?.();
     await rm(tmpDir, { recursive: true, force: true });
   });
@@ -2024,7 +2027,7 @@ describe("runAgentRun — verbose logging of prompting steps", () => {
     process.stderr.write = originalStderrWrite;
     process.stdout.write = originalStdoutWrite;
     const { closeSqliteDatabase } =
-      await import("../../db/sqlite/openSqliteDatabase.js").catch(() => ({
+      await import("../../db/sqlite/open-sqlite-database.js").catch(() => ({
         closeSqliteDatabase: () => {},
       }));
     closeSqliteDatabase?.();
@@ -2133,7 +2136,7 @@ describe("runAgentRun — internet access options and configuration", () => {
 
   afterEach(async () => {
     const { closeSqliteDatabase } =
-      await import("../../db/sqlite/openSqliteDatabase.js").catch(() => ({
+      await import("../../db/sqlite/open-sqlite-database.js").catch(() => ({
         closeSqliteDatabase: () => {},
       }));
     closeSqliteDatabase?.();
@@ -2223,7 +2226,7 @@ describe("runAgentRun — custom system prompt options", () => {
 
   afterEach(async () => {
     const { closeSqliteDatabase } =
-      await import("../../db/sqlite/openSqliteDatabase.js").catch(() => ({
+      await import("../../db/sqlite/open-sqlite-database.js").catch(() => ({
         closeSqliteDatabase: () => {},
       }));
     closeSqliteDatabase?.();
@@ -2493,7 +2496,7 @@ describe("runAgentRun — custom tools options", () => {
 
   afterEach(async () => {
     const { closeSqliteDatabase } =
-      await import("../../db/sqlite/openSqliteDatabase.js").catch(() => ({
+      await import("../../db/sqlite/open-sqlite-database.js").catch(() => ({
         closeSqliteDatabase: () => {},
       }));
     closeSqliteDatabase?.();
@@ -2843,7 +2846,7 @@ describe("agent import", () => {
 
   afterEach(async () => {
     const { closeSqliteDatabase } =
-      await import("../../db/sqlite/openSqliteDatabase.js").catch(() => ({
+      await import("../../db/sqlite/open-sqlite-database.js").catch(() => ({
         closeSqliteDatabase: () => {},
       }));
     closeSqliteDatabase?.();

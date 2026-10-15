@@ -1,12 +1,12 @@
 import { jest } from "@jest/globals";
 
-jest.unstable_mockModule("../../../storage/createGroupDirectory.js", () => ({
+jest.unstable_mockModule("../../../storage/create-group-directory.js", () => ({
   createGroupDirectory: jest.fn(),
 }));
 
 const { executeCreateDirectory } = await import("./create-directory.js");
 const { createGroupDirectory } =
-  await import("../../../storage/createGroupDirectory.js");
+  await import("../../../storage/create-group-directory.js");
 
 describe("executeCreateDirectory", () => {
   const mockDb: any = {};

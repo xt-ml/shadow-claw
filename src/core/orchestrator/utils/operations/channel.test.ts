@@ -21,11 +21,11 @@ const mockDecryptValue = jest.fn<(val: string) => Promise<string | null>>();
 const mockSetRemoteAgentTyping =
   jest.fn<(groupId: string, typing: boolean) => void>();
 
-jest.unstable_mockModule("../../../../db/setConfig.js", () => ({
+jest.unstable_mockModule("../../../../db/set-config.js", () => ({
   setConfig: mockDefaultSetConfig,
 }));
 
-jest.unstable_mockModule("../../../../db/getConfig.js", () => ({
+jest.unstable_mockModule("../../../../db/get-config.js", () => ({
   getConfig: mockDefaultGetConfig,
 }));
 

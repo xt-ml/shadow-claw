@@ -119,7 +119,7 @@ Used by direct Google Gemini API integrations (`format: "google"`). Note that th
 - **Response parsing**:
   - Extracts text and `functionCall` blocks from the response candidates.
 
-### Transformers.js Browser format (`src/worker/worker.ts` & `src/worker/utils/handleInvoke.ts`)
+### Transformers.js Browser format (`src/worker/worker.ts` & `src/worker/utils/handle-invoke.ts`)
 
 - **Default Provider**: `transformers_js_browser` ("Transformers.js (Browser)") is the default in-browser provider in ShadowClaw, pre-configured with model `onnx-community/Qwen3-0.6B-ONNX` and guided onboarding.
 - **Zero Configuration**: Keyless, private, zero-cost execution running entirely in-browser once models are cached.
@@ -156,7 +156,7 @@ Backed by the `builtin-ai-tasks` subsystem with dynamic polyfill loading and a M
 
 ### Subagent provider dispatch
 
-Main-thread invocation paths route subagent execution through `dispatchSubagentInvoke` (`src/core/orchestrator/utils/dispatchSubagentInvoke.ts`) instead of hard-coding provider-specific branches in each provider implementation.
+Main-thread invocation paths route subagent execution through `dispatchSubagentInvoke` (`src/core/orchestrator/utils/dispatch-subagent-invoke.ts`) instead of hard-coding provider-specific branches in each provider implementation.
 
 - Browser providers are routed explicitly by provider ID (`prompt_api`, `litert_lm_browser`, `transformers_js_browser`).
 - Prompt API and LiteRT browser providers perform environment support checks before invocation.

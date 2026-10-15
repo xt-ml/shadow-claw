@@ -1827,6 +1827,319 @@ describe("git", () => {
       });
       expect(diffTwoRefs).toContain("Comparing HEAD~1");
       expect(diffTwoRefs).toContain("test.txt");
+
+      // 9. gitDiff with deleted file (B is null) and added file (A is null)
+      mockGit.walk = jest.fn<any>().mockImplementation(async ({ map }: any) => {
+        const A = {
+          type: async () => "blob",
+          oid: async () => "oid-a",
+          content: async () =>
+            new TextEncoder().encode("deleted line 1\ndeleted line 2"),
+        };
+        const B = {
+          type: async () => "blob",
+          oid: async () => "oid-b",
+          content: async () => new TextEncoder().encode("new added line"),
+        };
+        const diffDeleted = await map("deleted.txt", [A, null]);
+        const diffAdded = await map("new.txt", [null, B]);
+        // Cover dot path
+        await map(".", [A, B]);
+        // Cover tree type
+        const treeObj = { type: async () => "tree" };
+        await map("dir", [treeObj, treeObj]);
+        // Cover identical OID
+        const sameObj = {
+          type: async () => "blob",
+          oid: async () => "same-oid",
+        };
+        await map("same.txt", [sameObj, sameObj]);
+        return [diffDeleted, diffAdded];
+      });
+
+      const diffDeletedAndAdded = await gitDiff({
+        repo: "new-repo",
+        ref1: "HEAD~1",
+        ref2: "HEAD",
+      });
+      expect(diffDeletedAndAdded).toContain("deleted.txt (deleted)");
+      expect(diffDeletedAndAdded).toContain("new.txt (new file)");
+    });
+
+    it("evaluates getGitTargetAddressSpace correctly for all IP and host patterns", () => {
+      expect(getGitTargetAddressSpace("/api/git/proxy")).toBe("loopback");
+      expect(getGitTargetAddressSpace("http://localhost:8080/repo.git")).toBe(
+        "loopback",
+      );
+      expect(getGitTargetAddressSpace("http://127.0.0.1:3000/repo.git")).toBe(
+        "loopback",
+      );
+      expect(getGitTargetAddressSpace("http://[::1]:9000/repo.git")).toBe(
+        "loopback",
+      );
+      expect(getGitTargetAddressSpace("http://192.168.1.1:8080/repo.git")).toBe(
+        "private",
+      );
+      expect(getGitTargetAddressSpace("http://10.0.0.5:8080/repo.git")).toBe(
+        "private",
+      );
+      expect(getGitTargetAddressSpace("http://172.25.0.1:8080/repo.git")).toBe(
+        "private",
+      );
+      expect(
+        getGitTargetAddressSpace("https://github.com/owner/repo.git"),
+      ).toBeUndefined();
+      expect(
+        getGitTargetAddressSpace("https://[invalid-ipv6/"),
+      ).toBeUndefined();
+    });
+
+    it("handles all gitStatus statusMatrix file states and detached HEAD", async () => {
+      const { gitStatus } = await import("./git.js");
+
+      // Test deleted, modified (staged), unmodified, and unknown states
+      mockGit.statusMatrix = jest.fn<any>().mockResolvedValue([
+        ["deleted.txt", 1, 0, 0],
+        ["staged.txt", 1, 2, 2],
+        ["unmodified.txt", 1, 1, 1],
+        ["weird.txt", 3, 3, 3],
+      ]);
+      mockGit.currentBranch = jest.fn<any>().mockResolvedValue(undefined);
+
+      const statusOutput = await gitStatus({ repo: "test-status-repo" });
+      expect(statusOutput).toContain("deleted: deleted.txt");
+      expect(statusOutput).toContain("modified (staged): staged.txt");
+      expect(statusOutput).not.toContain("unmodified: unmodified.txt");
+      expect(statusOutput).toContain("[3,3,3]: weird.txt");
+      expect(statusOutput).toContain("On branch (detached HEAD)");
+
+      // Test clean working tree on detached HEAD
+      mockGit.statusMatrix = jest
+        .fn<any>()
+        .mockResolvedValue([["unmodified.txt", 1, 1, 1]]);
+      const cleanOutput = await gitStatus({ repo: "test-status-repo" });
+      expect(cleanOutput).toContain("On branch (detached HEAD)");
+      expect(cleanOutput).toContain("Nothing to commit, working tree clean");
+    });
+
+    it("handles gitPush with tags, gitFetch with branch, and gitLog with ref", async () => {
+      const { gitPush, gitFetch, gitLog } = await import("./git.js");
+
+      mockGit.currentBranch = jest.fn<any>().mockResolvedValue("main");
+      mockGit.push = jest.fn<any>().mockResolvedValue({
+        ok: false,
+        refs: { "refs/heads/main": { error: "rejected" } },
+      });
+      const pushRes = await gitPush({ repo: "test-repo", tags: true });
+      expect(pushRes).toContain("Push result:");
+
+      mockGit.fetch = jest.fn<any>().mockResolvedValue({
+        fetchHead: "1234567890abcdef",
+      });
+      const fetchRes = await gitFetch({
+        repo: "test-repo",
+        branch: "feature-branch",
+        remote: "origin",
+      });
+      expect(fetchRes).toContain("Fetched feature-branch from origin");
+
+      mockGit.log = jest.fn<any>().mockResolvedValue([
+        {
+          oid: "abcdef1234567890",
+          commit: {
+            author: { name: "Author", timestamp: 1600000000 },
+            message: "commit message",
+          },
+        },
+      ]);
+      const logRes = await gitLog({ repo: "test-repo", ref: "v1.0.0" });
+      expect(logRes).toContain("commit message");
+    });
+
+    it("handles gitDiff without differences and single file worktree status", async () => {
+      const { gitDiff } = await import("./git.js");
+
+      // 1. Comparing two refs with no differences
+      mockGit.resolveRef = jest
+        .fn<any>()
+        .mockImplementation(async ({ ref }: any) => {
+          return ref === "HEAD~1" ? "111111111111" : "222222222222";
+        });
+      mockGit.readCommit = jest.fn<any>().mockResolvedValue({
+        commit: { tree: "tree-oid" },
+      });
+      mockGit.walk = jest.fn<any>().mockResolvedValue([]);
+
+      const diffNoDiff = await gitDiff({
+        repo: "test-repo",
+        ref1: "HEAD~1",
+        ref2: "HEAD",
+      });
+      expect(diffNoDiff).toContain("No differences.");
+
+      // 2. Diffing single untracked file
+      mockGit.statusMatrix = jest
+        .fn<any>()
+        .mockResolvedValue([["untracked.txt", 0, 2, 0]]);
+
+      const diffUntracked = await gitDiff({
+        repo: "test-repo",
+      });
+      expect(diffUntracked).toContain("+++ untracked.txt (new file)");
+
+      // 3. Diffing single deleted file
+      mockGit.statusMatrix = jest
+        .fn<any>()
+        .mockResolvedValue([["deleted.txt", 1, 0, 0]]);
+      mockGit.readBlob = jest.fn<any>().mockResolvedValue({
+        blob: new TextEncoder().encode("line 1\nline 2"),
+      });
+
+      const diffDeleted = await gitDiff({
+        repo: "test-repo",
+      });
+      expect(diffDeleted).toContain("--- deleted.txt (deleted)");
+      expect(diffDeleted).toContain("+++ /dev/null");
+    });
+
+    it("supports makeDirHandleFs utf8 encoding, unlink, and rmdir", async () => {
+      const { makeDirHandleFs } = await import("./git.js");
+      const fs = makeDirHandleFs(mockDirHandle);
+
+      mockDirHandle.getFileHandle = jest.fn<any>().mockResolvedValue({
+        kind: "file",
+        getFile: async () => ({
+          size: 10,
+          lastModified: 100,
+          arrayBuffer: async () =>
+            new TextEncoder().encode("file content").buffer,
+        }),
+      });
+
+      const text = await fs.promises.readFile("test.txt", "utf8");
+      expect(text).toBe("file content");
+
+      const textWithObj = await fs.promises.readFile("test.txt", {
+        encoding: "utf8",
+      });
+      expect(textWithObj).toBe("file content");
+
+      await fs.promises.unlink("test.txt");
+      expect(mockDirHandle.removeEntry).toHaveBeenCalled();
+
+      await fs.promises.rmdir("test-dir");
+      expect(mockDirHandle.removeEntry).toHaveBeenCalled();
+    });
+
+    it("handles gitListBranches with remote flag and empty branches", async () => {
+      const { gitListBranches } = await import("./git.js");
+
+      // Remote branches
+      mockGit.listBranches = jest
+        .fn<any>()
+        .mockResolvedValue(["origin/main", "origin/dev"]);
+      mockGit.currentBranch = jest.fn<any>().mockResolvedValue("origin/main");
+
+      const remoteBranches = await gitListBranches({
+        repo: "test-repo",
+        remote: true,
+      });
+      expect(remoteBranches).toContain("* origin/main");
+      expect(remoteBranches).toContain("  origin/dev");
+      expect(mockGit.listBranches).toHaveBeenCalledWith(
+        expect.objectContaining({ remote: "origin" }),
+      );
+
+      // Empty branches
+      mockGit.listBranches = jest.fn<any>().mockResolvedValue([]);
+      const emptyRes = await gitListBranches({ repo: "test-repo" });
+      expect(emptyRes).toBe("No branches found.");
+    });
+
+    it("handles gitShow with initial commit and with parent commit", async () => {
+      const { gitShow } = await import("./git.js");
+
+      mockGit.resolveRef = jest.fn<any>().mockResolvedValue("commit-oid-1234");
+
+      // Initial commit (no parent)
+      mockGit.readCommit = jest.fn<any>().mockResolvedValue({
+        commit: {
+          parent: [],
+          author: {
+            name: "Initial Dev",
+            email: "dev@example.com",
+            timestamp: 1600000000,
+          },
+          message: "Root commit",
+        },
+      });
+
+      const initialShow = await gitShow({ repo: "test-repo", ref: "HEAD" });
+      expect(initialShow).toContain("Initial commit.");
+      expect(initialShow).toContain("Root commit");
+
+      // Commit with parent
+      mockGit.readCommit = jest.fn<any>().mockResolvedValue({
+        commit: {
+          parent: ["parent-oid-5678"],
+          author: {
+            name: "Second Dev",
+            email: "dev2@example.com",
+            timestamp: 1600000100,
+          },
+          message: "Second commit",
+        },
+      });
+      mockGit.walk = jest.fn<any>().mockResolvedValue([]);
+
+      const parentShow = await gitShow({ repo: "test-repo", ref: "HEAD" });
+      expect(parentShow).toContain("Second commit");
+    });
+
+    it("reads file contents at specific ref using gitReadFileAtRef", async () => {
+      const { gitReadFileAtRef } = await import("./git.js");
+
+      mockGit.resolveRef = jest.fn<any>().mockResolvedValue("target-oid");
+      mockGit.readBlob = jest.fn<any>().mockResolvedValue({
+        blob: new TextEncoder().encode("content at ref"),
+      });
+
+      const content = await gitReadFileAtRef({
+        repo: "test-repo",
+        ref: "v1.0.0",
+        filepath: "README.md",
+      });
+      expect(content).toBe("content at ref");
+    });
+
+    it("repoNameFromUrl returns fallback 'repo' for empty url", async () => {
+      const { repoNameFromUrl } = await import("./git.js");
+      expect(repoNameFromUrl("")).toBe("repo");
+    });
+
+    it("rmdirRecursive recursively traverses and unlinks files when initial rmdir throws", async () => {
+      const { rmdirRecursive } = await import("./git.js");
+
+      let rmdirCalls = 0;
+      const fakePfs = {
+        rmdir: jest.fn<any>().mockImplementation(async (_p: string) => {
+          rmdirCalls++;
+          if (rmdirCalls === 1) {
+            throw new Error("Directory not empty");
+          }
+          return undefined;
+        }),
+        readdir: jest.fn<any>().mockResolvedValue(["subdir", "file.txt"]),
+        stat: jest.fn<any>().mockImplementation(async (p: string) => ({
+          isDirectory: () => p.endsWith("subdir"),
+        })),
+        unlink: jest.fn<any>().mockResolvedValue(undefined),
+      };
+
+      await rmdirRecursive(fakePfs, "my-dir");
+      expect(fakePfs.unlink).toHaveBeenCalledWith("my-dir/file.txt");
+      expect(fakePfs.rmdir).toHaveBeenCalledWith("my-dir/subdir");
+      expect(fakePfs.rmdir).toHaveBeenCalledWith("my-dir");
     });
   });
 });

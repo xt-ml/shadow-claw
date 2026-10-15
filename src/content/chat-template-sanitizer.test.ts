@@ -1,5 +1,8 @@
-import { describe, expect, it } from "@jest/globals";
-import { stripChatTemplateControlTokens } from "./chat-template-sanitizer.js";
+import { describe, expect, it, jest } from "@jest/globals";
+import {
+  stripChatTemplateControlTokens,
+  sanitizeModelOutput,
+} from "./chat-template-sanitizer.js";
 
 describe("chat-template-sanitizer", () => {
   it("removes common control tokens from chat templates", () => {
@@ -164,5 +167,28 @@ describe("chat-template-sanitizer", () => {
     ["markdown headers", "## Summary\n### Details"],
   ])("%s — not stripped", (_name, text) => {
     expect(stripChatTemplateControlTokens(text)).toBe(text);
+  });
+
+  describe("sanitizeModelOutput", () => {
+    it("returns clean text unchanged without console.info", () => {
+      const infoSpy = jest.spyOn(console, "info").mockImplementation(() => {});
+      const clean = "Just normal assistant response.";
+      const result = sanitizeModelOutput(clean, "ollama");
+      expect(result).toBe(clean);
+      expect(infoSpy).not.toHaveBeenCalled();
+      infoSpy.mockRestore();
+    });
+
+    it("strips control tokens and logs console.info with source", () => {
+      const infoSpy = jest.spyOn(console, "info").mockImplementation(() => {});
+      const dirty = "<|im_start|>assistant\nHello world<|im_end|>";
+      const result = sanitizeModelOutput(dirty, "transformers_js");
+      expect(result).toBe("assistant\nHello world");
+      expect(infoSpy).toHaveBeenCalledTimes(1);
+      expect(infoSpy.mock.calls[0][0]).toContain(
+        'from "transformers_js" output',
+      );
+      infoSpy.mockRestore();
+    });
   });
 });

@@ -1,11 +1,11 @@
 import { CONFIG_KEYS } from "../../config/config.js";
 import { sanitizeModelOutput } from "../../content/chat-template-sanitizer.js";
 import { ShadowClawDatabase } from "../../db/db.js";
-import { getConfig } from "../../db/getConfig.js";
+import { getConfig } from "../../db/get-config.js";
 import { toTrustedScriptUrl } from "../../security/trusted-types.js";
-import { createLogMessage } from "../../worker/utils/createLogMessage.js";
-import { createToolActivityMessage } from "../../worker/utils/createToolActivityMessage.js";
-import { executeTool } from "../../worker/utils/executeTool.js";
+import { createLogMessage } from "../../worker/utils/create-log-message.js";
+import { createToolActivityMessage } from "../../worker/utils/create-tool-activity-message.js";
+import { executeTool } from "../../worker/utils/execute-tool.js";
 import { setPostHandler } from "../../worker/utils/post.js";
 import { ToolDefinition } from "../tools/tools.js";
 

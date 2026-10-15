@@ -19,7 +19,7 @@ jest.unstable_mockModule("../../utils/post.js", () => ({
   post: mockPost,
 }));
 
-jest.unstable_mockModule("./tasks-utils.js", () => ({
+jest.unstable_mockModule("../../../db/get-group-tasks.js", () => ({
   getGroupTasks: mockGetGroupTasks,
 }));
 

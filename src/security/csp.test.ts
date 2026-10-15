@@ -4,6 +4,7 @@ import {
   applyCspReportOnlyHeader,
   buildCspReportOnlyValue,
   extractCspConfigOrigins,
+  loadWorkspaceConfigSync,
 } from "./csp.js";
 import { getTrustedTypesPolicyName } from "./trusted-types.js";
 
@@ -108,5 +109,32 @@ describe("csp", () => {
       expect.any(String),
     );
     expect(res.setHeader).toHaveBeenCalledWith("Origin-Agent-Cluster", "?1");
+  });
+
+  it("extracts security scriptSrc and filters blank entries", () => {
+    const config = {
+      allowedCustomElementDomains: ["example.org"],
+      security: {
+        scriptSrc: ["https://scripts.custom.com", "   ", 123 as any],
+        workerSrc: ["blob:", "   "],
+        connectSrc: ["https://api.custom.com", ""],
+      },
+    };
+    const extracted = extractCspConfigOrigins(config);
+    expect(extracted.scriptHosts).toContain("https://scripts.custom.com");
+    expect(extracted.scriptHosts).toContain("https://example.org");
+    expect(extracted.workerSources).toContain("blob:");
+    expect(extracted.connectSources).toContain("https://api.custom.com");
+  });
+
+  it("handles non-existent rootPath in loadWorkspaceConfigSync", () => {
+    const origCwd = process.cwd;
+    try {
+      process.cwd = () => "/tmp/isolated-empty-dir";
+      const config = loadWorkspaceConfigSync("/tmp/isolated-empty-dir/sub");
+      expect(config).toBeNull();
+    } finally {
+      process.cwd = origCwd;
+    }
   });
 });

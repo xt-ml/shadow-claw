@@ -1,4 +1,4 @@
-import { uploadGroupFile } from "../storage/uploadGroupFile.js";
+import { uploadGroupFile } from "../storage/upload-group-file.js";
 import type { MessageAttachment, MessageAttachmentSource } from "./types.js";
 import type { ShadowClawDatabase } from "../db/types.js";
 import { sanitizeFilename } from "../utils/filename.js";

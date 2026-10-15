@@ -1,6 +1,6 @@
 import { jest } from "@jest/globals";
 
-jest.unstable_mockModule("./createLogMessage.js", () => ({
+jest.unstable_mockModule("./create-log-message.js", () => ({
   createLogMessage: jest.fn(() => ({ type: "thinking-log" })),
 }));
 
@@ -9,7 +9,7 @@ jest.unstable_mockModule("./post.js", () => ({
 }));
 
 const { log } = await import("./log.js");
-const { createLogMessage } = await import("./createLogMessage.js");
+const { createLogMessage } = await import("./create-log-message.js");
 const { post } = await import("./post.js");
 
 describe("log", () => {

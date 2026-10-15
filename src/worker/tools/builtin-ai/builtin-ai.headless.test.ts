@@ -2,7 +2,7 @@ import { jest } from "@jest/globals";
 
 const mockExecuteNativeAiTask = jest.fn<any>();
 jest.unstable_mockModule(
-  "../../../subsystems/providers/executeNativeAiTask.js",
+  "../../../subsystems/providers/execute-native-ai-task.js",
   () => ({
     executeNativeAiTask: mockExecuteNativeAiTask,
   }),

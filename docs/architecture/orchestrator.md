@@ -231,8 +231,8 @@ Key operations include:
 - **Providers:** `setProvider`, `setModel`, `setBedrockSettings`, etc. (`src/core/orchestrator/utils/operations/provider.ts`)
 - **Channels & Rooms:** `submitMessage`, `setChannelEnabled`, `createRoom`, `inviteToRoom` (`src/core/orchestrator/utils/operations/channel.ts`, `room.ts`)
 - **Settings:** `setMaxIterations`, `setStreamingEnabled`, `setProxyUrl` (`src/core/orchestrator/utils/settings.ts`)
-- **Pages & Static Site:** `reorderPages`, `setDefaultPinnedPage`, `effectiveDefaultPage`, `seedStaticMainSite`, `suppressPage`/`unsuppressPage` (`src/stores/orchestrator.ts`, `src/storage/staticMainSite.ts`, `src/storage/suppressedPages.ts`)
+- **Pages & Static Site:** `reorderPages`, `setDefaultPinnedPage`, `effectiveDefaultPage`, `seedStaticMainSite`, `suppressPage`/`unsuppressPage` (`src/stores/orchestrator.ts`, `src/storage/static-main-site.ts`, `src/storage/suppressed-pages.ts`)
 - **VM/Terminal:** `setVMBootMode`, `openTerminalSession`, `sendTerminalInput` (`src/core/orchestrator/utils/operations/vm.ts`)
 - **Tasks:** `syncTaskToServer`, `deleteTaskFromServer`, `shouldStartLocalScheduler` (`src/core/orchestrator/utils/operations/task.ts`)
 
-Initialization is handled by modular setup functions (`initCoreConfig`, `initChannelsAndRooms`, `initWorkerAndScheduler`) coordinated during app startup. Non-critical tasks (such as background model registry fetching and full static site manifest syncing) are deferred via `requestIdleCallback` during `initTasks` (`src/core/orchestrator/utils/initTasks.ts`) to maintain immediate UI responsiveness.
+Initialization is handled by modular setup functions (`initCoreConfig`, `initChannelsAndRooms`, `initWorkerAndScheduler`) coordinated during app startup. Non-critical tasks (such as background model registry fetching and full static site manifest syncing) are deferred via `requestIdleCallback` during `initTasks` (`src/core/orchestrator/utils/init-tasks.ts`) to maintain immediate UI responsiveness.

@@ -15,19 +15,19 @@ import {
   getModelMaxTokens,
 } from "../../config/config.js";
 
-import { buildDynamicContext } from "../../context/buildDynamicContext.js";
-import { estimateTokens } from "../../context/estimateTokens.js";
-import { buildConversationMessages } from "../../db/buildConversationMessages.js";
-import { clearGroupMessages } from "../../db/clearGroupMessages.js";
-import { getConfig } from "../../db/getConfig.js";
+import { buildDynamicContext } from "../../context/build-dynamic-context.js";
+import { estimateTokens } from "../../context/estimate-tokens.js";
+import { buildConversationMessages } from "../../db/build-conversation-messages.js";
+import { clearGroupMessages } from "../../db/clear-group-messages.js";
+import { getConfig } from "../../db/get-config.js";
 import { listGroups } from "../../db/groups.js";
-import { openDatabase } from "../../db/openDatabase.js";
+import { openDatabase } from "../../db/open-database.js";
 import { roomIdFromGroupId } from "../../db/rooms.js";
-import { saveMessage } from "../../db/saveMessage.js";
-import { setConfig } from "../../db/setConfig.js";
+import { saveMessage } from "../../db/save-message.js";
+import { setConfig } from "../../db/set-config.js";
 import { decryptValue, encryptValue } from "../../security/crypto.js";
 import { VMBootMode, VMStatus } from "../../shell/vm.js";
-import { readGroupFile } from "../../storage/readGroupFile.js";
+import { readGroupFile } from "../../storage/read-group-file.js";
 
 import {
   OrchestratorDisplayState,
@@ -48,12 +48,12 @@ import { isPromptApiSupported } from "../../subsystems/providers/prompt-api-prov
 
 import { getContextLimit } from "../../subsystems/providers/providers.js";
 import { TaskScheduler } from "../../subsystems/tools/task-scheduler.js";
-import { formatA2UIActionPrompt } from "../../ui/a2ui/utils/formatA2UIActionPrompt.js";
+import { formatA2UIActionPrompt } from "../../ui/a2ui/utils/format-a2ui-action-prompt.js";
 import { ulid } from "../../utils/ulid.js";
 import { buildSystemPrompt } from "../../worker/utils/system-prompt.js";
 import { Router } from "../router.js";
 import { enqueue } from "./utils/enqueue.js";
-import { EventBus } from "./utils/EventBus.js";
+import { EventBus } from "./utils/event-bus.js";
 
 import {
   createRoomManager,
@@ -63,18 +63,18 @@ import {
   initLlamafileAndMesh,
   initProviderAndModel,
   initWorkerAndScheduler,
-} from "./utils/initTasks.js";
+} from "./utils/init-tasks.js";
 
-import { invokeAgent } from "./utils/invokeAgent.js";
+import { invokeAgent } from "./utils/invoke-agent.js";
 
 import {
   cancelLlamafileRequest,
   stopTransformersProgressPolling,
 } from "./utils/operations/provider.js";
 
-import { syncWebMcpRegistration } from "./utils/syncWebMcpRegistration.js";
+import { syncWebMcpRegistration } from "./utils/sync-web-mcp-registration.js";
 import { DEFAULT_DIRECT_TOOL_COMMAND_POLICY } from "./utils/types.js";
-import { ensureControlPlaneConnected } from "../utils/initControlPlane.js";
+import { ensureControlPlaneConnected } from "../utils/init-control-plane.js";
 import { applyAllChannelRunningStates } from "./utils/operations/channel.js";
 
 import type { ShadowClawDatabase } from "../../db/db.js";

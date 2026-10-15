@@ -11,7 +11,7 @@ import {
   closePushStore,
   saveSubscription,
 } from "../../../subsystems/notifications/push-store.js";
-import { getPackageVersion } from "../../utils/packageVersion.js";
+import { getPackageVersion } from "../../utils/package-version.js";
 
 describe("ShadowClaw Built-in MCP Tools", () => {
   it("registers all built-in ShadowClaw control tools", () => {

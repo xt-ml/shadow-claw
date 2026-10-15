@@ -4,7 +4,7 @@ import {
   resolvePrettyPathToRouteAsync,
   resolveRouteToPrettyPathAsync,
   resolveDefaultPinnedPageRef,
-} from "../storage/staticRouting.js";
+} from "../storage/static-routing.js";
 
 export {
   resolvePrettyPathToRoute,

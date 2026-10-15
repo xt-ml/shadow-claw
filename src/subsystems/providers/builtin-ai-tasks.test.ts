@@ -1,11 +1,14 @@
 import { jest } from "@jest/globals";
 
+const mockGetDb = jest.fn<any>().mockResolvedValue(null);
+const mockGetConfig = jest.fn<any>().mockResolvedValue(null);
+
 jest.unstable_mockModule("../../db/db.js", () => ({
-  getDb: jest.fn<any>().mockResolvedValue(null),
+  getDb: mockGetDb,
 }));
 
-jest.unstable_mockModule("../../db/getConfig.js", () => ({
-  getConfig: jest.fn<any>().mockResolvedValue(null),
+jest.unstable_mockModule("../../db/get-config.js", () => ({
+  getConfig: mockGetConfig,
 }));
 
 const {
@@ -21,6 +24,7 @@ const {
   proofreadText,
   embedText,
   setCustomLegacyTaskFactories,
+  getPromptApiFallbackModel,
 } = await import("./builtin-ai-tasks.js");
 
 describe("builtin-ai-tasks subsystem", () => {
@@ -316,12 +320,55 @@ describe("builtin-ai-tasks subsystem", () => {
   describe("isBuiltinTaskSupported", () => {
     it("returns false when global task class is missing", () => {
       delete (globalThis as any).Summarizer;
+      delete (globalThis as any).Writer;
+      delete (globalThis as any).Rewriter;
+      delete (globalThis as any).LanguageDetector;
+      delete (globalThis as any).Translator;
+      delete (globalThis as any).Proofreader;
+      delete (globalThis as any).SemanticEmbedder;
+
       expect(isBuiltinTaskSupported("summarizer")).toBe(false);
+      expect(isBuiltinTaskSupported("writer")).toBe(false);
+      expect(isBuiltinTaskSupported("rewriter")).toBe(false);
+      expect(isBuiltinTaskSupported("language-detector")).toBe(false);
+      expect(isBuiltinTaskSupported("translator")).toBe(false);
+      expect(isBuiltinTaskSupported("proofreader")).toBe(false);
+      expect(isBuiltinTaskSupported("semantic-embedder")).toBe(false);
+      expect(isBuiltinTaskSupported("unknown" as any)).toBe(false);
     });
 
     it("returns true when global task class is present", () => {
       (globalThis as any).Summarizer = class {};
+      (globalThis as any).Writer = class {};
+      (globalThis as any).Rewriter = class {};
+      (globalThis as any).LanguageDetector = class {};
+      (globalThis as any).Translator = class {};
+      (globalThis as any).Proofreader = class {};
+      (globalThis as any).SemanticEmbedder = class {};
+
       expect(isBuiltinTaskSupported("summarizer")).toBe(true);
+      expect(isBuiltinTaskSupported("writer")).toBe(true);
+      expect(isBuiltinTaskSupported("rewriter")).toBe(true);
+      expect(isBuiltinTaskSupported("language-detector")).toBe(true);
+      expect(isBuiltinTaskSupported("translator")).toBe(true);
+      expect(isBuiltinTaskSupported("proofreader")).toBe(true);
+      expect(isBuiltinTaskSupported("semantic-embedder")).toBe(true);
+    });
+  });
+
+  describe("getPromptApiFallbackModel", () => {
+    it("returns configured model from db when present", async () => {
+      mockGetDb.mockResolvedValueOnce({} as any);
+      mockGetConfig.mockResolvedValueOnce("custom-user-model/onnx");
+      const model = await getPromptApiFallbackModel();
+      expect(model).toBe("custom-user-model/onnx");
+    });
+
+    it("returns default polyfill model when db is absent or unconfigured", async () => {
+      mockGetDb.mockResolvedValueOnce(null);
+      const model = await getPromptApiFallbackModel();
+      expect(typeof model).toBe("string");
+      expect(model.length).toBeGreaterThan(0);
     });
   });
 
@@ -765,6 +812,33 @@ describe("builtin-ai-tasks subsystem", () => {
       expect(mockDetect).toHaveBeenCalledWith("Hello world");
       expect(mockDestroy).toHaveBeenCalled();
     });
+
+    it("throws error when LanguageDetector is not available", async () => {
+      const origProp = Object.getOwnPropertyDescriptor(
+        globalThis,
+        "LanguageDetector",
+      );
+      Object.defineProperty(globalThis, "LanguageDetector", {
+        get: () => undefined,
+        set: () => {},
+        configurable: true,
+      });
+      (globalThis as any).translation = {};
+      if ((globalThis as any).ai) {
+        delete (globalThis as any).ai.languageDetector;
+      }
+      try {
+        await expect(detectLanguage("Hello world")).rejects.toThrow(
+          "Language Detector API is not supported or polyfilled",
+        );
+      } finally {
+        if (origProp) {
+          Object.defineProperty(globalThis, "LanguageDetector", origProp);
+        } else {
+          delete (globalThis as any).LanguageDetector;
+        }
+      }
+    });
   });
 
   describe("translateText", () => {
@@ -790,6 +864,97 @@ describe("builtin-ai-tasks subsystem", () => {
       });
       expect(mockTranslate).toHaveBeenCalledWith("Hello world");
       expect(mockDestroy).toHaveBeenCalled();
+    });
+
+    it("throws error when Translator is not available", async () => {
+      const origProp = Object.getOwnPropertyDescriptor(
+        globalThis,
+        "Translator",
+      );
+      Object.defineProperty(globalThis, "Translator", {
+        get: () => undefined,
+        set: () => {},
+        configurable: true,
+      });
+      (globalThis as any).translation = {};
+      if ((globalThis as any).ai) {
+        delete (globalThis as any).ai.translator;
+      }
+      try {
+        await expect(
+          translateText("Hello world", {
+            sourceLanguage: "en",
+            targetLanguage: "es",
+          }),
+        ).rejects.toThrow("Translator API is not supported or polyfilled");
+      } finally {
+        if (origProp) {
+          Object.defineProperty(globalThis, "Translator", origProp);
+        } else {
+          delete (globalThis as any).Translator;
+        }
+      }
+    });
+  });
+
+  describe("createMonitorHandler via task progress", () => {
+    it("reports download progress events accurately", async () => {
+      let capturedMonitor: any;
+      (globalThis as any).Summarizer = {
+        create: jest.fn<any>().mockImplementation(async (opts: any) => {
+          capturedMonitor = opts?.monitor;
+          return {
+            summarize: jest.fn<any>().mockResolvedValue("Summary done"),
+            destroy: jest.fn(),
+          };
+        }),
+      };
+
+      const progressUpdates: any[] = [];
+      const onProgress = jest.fn((p) => {
+        progressUpdates.push(p);
+      });
+
+      const promise = summarizeText("Sample doc", { onProgress });
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(typeof capturedMonitor).toBe("function");
+
+      const listeners: Record<string, Function> = {};
+      const mockTarget = {
+        addEventListener: (name: string, fn: Function) => {
+          listeners[name] = fn;
+        },
+      };
+
+      capturedMonitor(mockTarget);
+      expect(progressUpdates[0].message).toContain("0%");
+
+      // Test 1: loaded / total ratio
+      listeners["downloadprogress"]?.({ loaded: 40, total: 100 });
+      expect(progressUpdates[progressUpdates.length - 1].progress).toBe(0.4);
+      expect(progressUpdates[progressUpdates.length - 1].message).toContain(
+        "40%",
+      );
+
+      // Test 2: loaded ratio decimal (0.75)
+      listeners["downloadprogress"]?.({ loaded: 0.75 });
+      expect(progressUpdates[progressUpdates.length - 1].progress).toBe(0.75);
+      expect(progressUpdates[progressUpdates.length - 1].message).toContain(
+        "75%",
+      );
+
+      // Test 3: loaded bytes > 1 without total
+      listeners["downloadprogress"]?.({ loaded: 10 * 1024 * 1024 });
+      expect(progressUpdates[progressUpdates.length - 1].message).toContain(
+        "10.0 MB downloaded",
+      );
+
+      // Null target
+      capturedMonitor(null);
+
+      const res = await promise;
+      expect(res).toBe("Summary done");
     });
   });
 
@@ -834,6 +999,16 @@ describe("builtin-ai-tasks subsystem", () => {
       expect(result).toBe("Rewritten proofread text.");
       expect(mockRewrite).toHaveBeenCalled();
       expect(mockDestroy).toHaveBeenCalled();
+    });
+
+    it("throws error when both Proofreader and Rewriter fail", async () => {
+      delete (globalThis as any).Proofreader;
+      delete (globalThis as any).Rewriter;
+      delete (globalThis as any).LanguageModel;
+
+      await expect(
+        proofreadText("Bad text", { context: "Email" }),
+      ).rejects.toThrow(/Rewriter task failed across all tiers/);
     });
   });
 

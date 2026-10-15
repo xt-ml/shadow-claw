@@ -20,11 +20,11 @@ const mockGetAllowFullInternetAccess = jest
   .fn<() => Promise<boolean>>()
   .mockResolvedValue(false);
 
-jest.unstable_mockModule("../../utils/sandboxedEval.js", () => ({
+jest.unstable_mockModule("../../utils/sandboxed-eval.js", () => ({
   sandboxedEval: mockSandboxedEval,
 }));
 
-jest.unstable_mockModule("../utils/getAllowFullInternetAccess.js", () => ({
+jest.unstable_mockModule("../utils/get-allow-full-internet-access.js", () => ({
   getAllowFullInternetAccess: mockGetAllowFullInternetAccess,
 }));
 

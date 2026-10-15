@@ -1,0 +1,52 @@
+import { orchestratorStore } from "../../stores/orchestrator.js";
+import { installE2eBridge, shouldInstallE2eBridge } from "./e2e-bridge.js";
+
+import { type ShadowClaw } from "../../components/shadow-claw/shadow-claw.js";
+import { type Orchestrator } from "../orchestrator/orchestrator.js";
+
+export async function initializeApp(
+  doc: Document,
+  isInitializing: boolean,
+): Promise<
+  { orchestrator: Orchestrator; isInitializing: boolean } | undefined
+> {
+  if (isInitializing) {
+    return;
+  }
+
+  isInitializing = true;
+  try {
+    console.log("🦞 ShadowClaw initializing...");
+
+    const uiElement = (doc.querySelector("shadow-claw") ||
+      doc.body.appendChild(doc.createElement("shadow-claw"))) as ShadowClaw;
+
+    console.log("✅ ShadowClaw initialized successfully");
+    isInitializing = false;
+
+    // Conditionally install E2E bridge for tests
+    if (shouldInstallE2eBridge()) {
+      console.log("🧪 E2E Test Bridge enabled");
+      installE2eBridge(orchestratorStore, uiElement);
+    }
+
+    await orchestratorStore.whenReady;
+
+    if (
+      typeof window !== "undefined" &&
+      typeof uiElement.orchestrator?.ensureAllConnections === "function"
+    ) {
+      try {
+        await uiElement.orchestrator.ensureAllConnections({ force: false });
+      } catch (err) {
+        console.warn("[App] Failed to ensure connections on initialize:", err);
+      }
+    }
+
+    return { orchestrator: uiElement.orchestrator, isInitializing };
+  } catch (error) {
+    console.error("❌ Failed to initialize ShadowClaw:", error);
+
+    throw error;
+  }
+}

@@ -53,4 +53,40 @@ describe("renderVideo", () => {
     );
     expect(el.poster).toBe("");
   });
+
+  it("handles http poster URL, fallback url keys, and empty resolved URL", () => {
+    const spec: VideoSpec = {
+      id: "test-video",
+      component: "Video",
+      url: "",
+      posterUrl: "https://example.com/poster.jpg",
+      weight: 3,
+    };
+
+    const ctx = {
+      resolveMediaUrl: jest.fn().mockImplementation((url: any) => url) as any,
+    };
+
+    const el = renderVideo(
+      { ...spec, url: undefined, src: "https://example.com/vid.mp4" } as any,
+      { dataModel: {} } as any,
+      ctx,
+    ) as HTMLVideoElement;
+    expect(el.poster).toBe("https://example.com/poster.jpg");
+    expect(el.src).toBe("https://example.com/vid.mp4");
+
+    const elSource = renderVideo(
+      { component: "Video", source: "s.mp4" } as any,
+      { dataModel: {} } as any,
+      { resolveMediaUrl: () => "" },
+    ) as HTMLVideoElement;
+    expect(elSource.src).toBe("");
+
+    const elVidUrl = renderVideo(
+      { component: "Video", videoUrl: "v.mp4" } as any,
+      { dataModel: {} } as any,
+      { resolveMediaUrl: () => "" },
+    ) as HTMLVideoElement;
+    expect(elVidUrl.src).toBe("");
+  });
 });

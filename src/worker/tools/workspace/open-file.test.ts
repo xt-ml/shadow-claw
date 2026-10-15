@@ -1,6 +1,6 @@
 import { jest } from "@jest/globals";
 
-jest.unstable_mockModule("../../../storage/groupFileExists.js", () => ({
+jest.unstable_mockModule("../../../storage/group-file-exists.js", () => ({
   groupFileExists: jest.fn(),
 }));
 
@@ -9,7 +9,8 @@ jest.unstable_mockModule("../../utils/post.js", () => ({
 }));
 
 const { executeOpenFile } = await import("./open-file.js");
-const { groupFileExists } = await import("../../../storage/groupFileExists.js");
+const { groupFileExists } =
+  await import("../../../storage/group-file-exists.js");
 const { post } = await import("../../utils/post.js");
 
 describe("executeOpenFile", () => {

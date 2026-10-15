@@ -26,7 +26,7 @@ import {
   parseLocalModelToolCalls,
   createToolCallStreamFilter,
   convertToolSchemasToOpenAI,
-} from "../../subsystems/providers/utils/parseLocalModelToolCall.js";
+} from "../../subsystems/providers/utils/parse-local-model-tool-call.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

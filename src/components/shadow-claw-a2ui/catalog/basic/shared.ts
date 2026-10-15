@@ -1,9 +1,9 @@
-import { resolveJsonPointer } from "../../../../ui/a2ui/utils/resolveJsonPointer.js";
+import { resolveJsonPointer } from "../../../../ui/a2ui/utils/resolve-json-pointer.js";
 
 import type { ChildList, TextVariant } from "../../../../ui/a2ui/types.js";
 import type { RenderContext, SurfaceState } from "../../../types.js";
 
-export { resolveChildIds } from "../../../../ui/a2ui/utils/resolveChildIds.js";
+export { resolveChildIds } from "../../../../ui/a2ui/utils/resolve-child-ids.js";
 
 export function renderChildrenList(
   children: ChildList,

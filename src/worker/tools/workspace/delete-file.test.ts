@@ -1,17 +1,18 @@
 import { jest } from "@jest/globals";
 
-jest.unstable_mockModule("../../../storage/deleteGroupFile.js", () => ({
+jest.unstable_mockModule("../../../storage/delete-group-file.js", () => ({
   deleteGroupFile: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../../storage/deleteGroupDirectory.js", () => ({
+jest.unstable_mockModule("../../../storage/delete-group-directory.js", () => ({
   deleteGroupDirectory: jest.fn(),
 }));
 
 const { executeDeleteFile } = await import("./delete-file.js");
-const { deleteGroupFile } = await import("../../../storage/deleteGroupFile.js");
+const { deleteGroupFile } =
+  await import("../../../storage/delete-group-file.js");
 const { deleteGroupDirectory } =
-  await import("../../../storage/deleteGroupDirectory.js");
+  await import("../../../storage/delete-group-directory.js");
 
 describe("executeDeleteFile", () => {
   const mockDb: any = {};

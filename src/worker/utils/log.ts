@@ -1,4 +1,4 @@
-import { createLogMessage } from "./createLogMessage.js";
+import { createLogMessage } from "./create-log-message.js";
 import { post } from "./post.js";
 
 /**

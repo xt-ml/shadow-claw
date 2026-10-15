@@ -45,11 +45,11 @@ describe("webmcp integration", () => {
       }),
     }));
 
-    jest.unstable_mockModule("../../db/openDatabase.js", () => ({
+    jest.unstable_mockModule("../../db/open-database.js", () => ({
       openDatabase: mockOpenDatabase,
     }));
 
-    jest.unstable_mockModule("../../worker/utils/executeTool.js", () => ({
+    jest.unstable_mockModule("../../worker/utils/execute-tool.js", () => ({
       executeTool: mockExecuteTool,
     }));
 
@@ -230,11 +230,11 @@ describe("webmcp integration", () => {
       initializeWebMCPPolyfill: jest.fn(),
     }));
 
-    jest.unstable_mockModule("../../db/openDatabase.js", () => ({
+    jest.unstable_mockModule("../../db/open-database.js", () => ({
       openDatabase: mockOpenDatabase,
     }));
 
-    jest.unstable_mockModule("../../worker/utils/executeTool.js", () => ({
+    jest.unstable_mockModule("../../worker/utils/execute-tool.js", () => ({
       executeTool: mockExecuteTool,
     }));
 

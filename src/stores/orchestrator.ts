@@ -1,7 +1,7 @@
 import { Signal } from "signal-polyfill";
 
 import { CONFIG_KEYS, DEFAULT_GROUP_ID } from "../config/config.js";
-import { compactContext } from "../core/orchestrator/utils/compactContext.js";
+import { compactContext } from "../core/orchestrator/utils/compact-context.js";
 
 import {
   flushTerminalWorkspace,
@@ -15,15 +15,15 @@ import {
   setVMBashFullInternetAccess,
 } from "../core/orchestrator/utils/settings.js";
 
-import { clearGroupMessages } from "../db/clearGroupMessages.js";
-import { cloneGroupMessages } from "../db/cloneGroupMessages.js";
-import { cloneGroupTasks } from "../db/cloneGroupTasks.js";
-import { deleteMessage } from "../db/deleteMessage.js";
-import { deleteTask } from "../db/deleteTask.js";
-import { getAllTasks } from "../db/getAllTasks.js";
-import { getConfig } from "../db/getConfig.js";
-import { getOrCreateSubscriberId } from "../db/getOrCreateSubscriberId.js";
-import { getRecentMessages } from "../db/getRecentMessages.js";
+import { clearGroupMessages } from "../db/clear-group-messages.js";
+import { cloneGroupMessages } from "../db/clone-group-messages.js";
+import { cloneGroupTasks } from "../db/clone-group-tasks.js";
+import { deleteMessage } from "../db/delete-message.js";
+import { deleteTask } from "../db/delete-task.js";
+import { getAllTasks } from "../db/get-all-tasks.js";
+import { getConfig } from "../db/get-config.js";
+import { getOrCreateSubscriberId } from "../db/get-or-create-subscriber-id.js";
+import { getRecentMessages } from "../db/get-recent-messages.js";
 
 import {
   cloneGroup,
@@ -39,24 +39,24 @@ import {
   updateGroupToolTags,
 } from "../db/groups.js";
 
-import { saveMessage } from "../db/saveMessage.js";
-import { saveTask } from "../db/saveTask.js";
-import { setConfig } from "../db/setConfig.js";
-import { updateTaskLastRun } from "../db/updateTaskLastRun.js";
-import { reorderTasks } from "../db/reorderTasks.js";
-import { copyGroupDirectory } from "../storage/copyGroupDirectory.js";
-import { ensureMainGroupIndex } from "../storage/ensureMainGroupIndex.js";
+import { saveMessage } from "../db/save-message.js";
+import { saveTask } from "../db/save-task.js";
+import { setConfig } from "../db/set-config.js";
+import { updateTaskLastRun } from "../db/update-task-last-run.js";
+import { reorderTasks } from "../db/reorder-tasks.js";
+import { copyGroupDirectory } from "../storage/copy-group-directory.js";
+import { ensureMainGroupIndex } from "../storage/ensure-main-group-index.js";
 
 import {
   DEFAULT_MAIN_GROUP_MEMORY_PATH,
   ensureMainGroupMemory,
   isMainGroupMemorySuppressed,
   setMainGroupMemorySuppressed,
-} from "../storage/ensureMainGroupMemory.js";
+} from "../storage/ensure-main-group-memory.js";
 
-import { listGroupFiles } from "../storage/listGroupFiles.js";
-import { readGroupFile } from "../storage/readGroupFile.js";
-import { requestStorageAccess } from "../storage/requestStorageAccess.js";
+import { listGroupFiles } from "../storage/list-group-files.js";
+import { readGroupFile } from "../storage/read-group-file.js";
+import { requestStorageAccess } from "../storage/request-storage-access.js";
 import { getStorageStatus } from "../storage/storage.js";
 import {
   configureCustomElementSecurity,
@@ -68,19 +68,19 @@ import {
   getSiteConfigDefaultPinnedPage,
   isStaticMainSiteSeeded,
   seedStaticMainSite,
-} from "../storage/staticMainSite.js";
+} from "../storage/static-main-site.js";
 import {
   getAppBasePath,
   resolveDefaultPinnedPageRef,
 } from "../core/app-routes.js";
-import { suppressPage, unsuppressPage } from "../storage/suppressedPages.js";
-import { writeGroupFile } from "../storage/writeGroupFile.js";
+import { suppressPage, unsuppressPage } from "../storage/suppressed-pages.js";
+import { writeGroupFile } from "../storage/write-group-file.js";
 import { AGUIAdapter } from "../ui/agui-adapter.js";
 import { showError, showSuccess } from "../ui/toast.js";
-import { applyJsonPatch } from "../utils/jsonPatch.js";
-import { isPagePathAllowed } from "../utils/isPagePathAllowed.js";
-import { normalizeStringList } from "../utils/normalizeStringList.js";
-import { parseStoredStringList } from "../utils/parseStoredStringList.js";
+import { applyJsonPatch } from "../utils/json-patch.js";
+import { isPagePathAllowed } from "../utils/is-page-path-allowed.js";
+import { normalizeStringList } from "../utils/normalize-string-list.js";
+import { parseStoredStringList } from "../utils/parse-stored-string-list.js";
 import { ulid } from "../utils/ulid.js";
 import { toolsStore } from "./tools.js";
 

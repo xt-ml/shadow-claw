@@ -17,10 +17,10 @@ const __dirname = dirname(__filename);
 const projectRoot = getProjectRoot(import.meta.url);
 
 const rolldownConfigUrl = pathToFileURL(
-  path.resolve(projectRoot, "rolldown.config.mjs"),
+  path.resolve(projectRoot, "configs/rolldown/rolldown.config.mjs"),
 ).href;
 const rolldownLibConfigUrl = pathToFileURL(
-  path.resolve(projectRoot, "rolldown.lib.config.mjs"),
+  path.resolve(projectRoot, "configs/rolldown/rolldown.lib.config.mjs"),
 ).href;
 
 const {
@@ -455,7 +455,7 @@ describe("rolldown.config.mjs", () => {
       process.env.NODE_ENV = "production";
       try {
         const prodModule = await import(
-          `../../../rolldown.config.mjs?prodTest=${Date.now()}`
+          `../../../configs/rolldown/rolldown.config.mjs?prodTest=${Date.now()}`
         );
         const prodFrontend = prodModule.default.find(
           (entry: any) => entry.input === "src/core/index.ts",

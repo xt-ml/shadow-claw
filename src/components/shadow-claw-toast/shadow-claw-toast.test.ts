@@ -151,8 +151,86 @@ describe("shadow-claw-toast", () => {
     await el.render();
 
     el.exitingToasts.add(id);
+    await el.render();
+    const exitingToastEl = el.shadowRoot?.querySelector(".toast.exiting");
+    expect(exitingToastEl).not.toBeNull();
+
     await el.dismissWithAnimation(id);
     // Should not re-add or throw
     expect(el.exitingToasts.has(id)).toBe(true);
+  });
+
+  it("renders error toasts with alert role and assertive live region", async () => {
+    toastStore.show("Error occurred", { type: "error" });
+    await el.render();
+
+    const errorEl = el.shadowRoot?.querySelector(".toast.error");
+    expect(errorEl?.getAttribute("role")).toBe("alert");
+    expect(errorEl?.getAttribute("aria-live")).toBe("assertive");
+  });
+
+  it("handles keydown edge cases (non-element target, non-finite id, non-toast)", async () => {
+    // Non-element target
+    await el.handleKeyDown({} as any);
+
+    // Target with non-finite toastId
+    const fakeToast = document.createElement("div");
+    fakeToast.className = "toast";
+    fakeToast.dataset.toastId = "not-a-number";
+    const child = document.createElement("span");
+    fakeToast.appendChild(child);
+    el.shadowRoot?.querySelector(".toast-container")?.appendChild(fakeToast);
+
+    const escEvent = new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    });
+    child.dispatchEvent(escEvent);
+  });
+
+  it("handles missing shadowRoot or container in lifecycle and render", async () => {
+    const testEl = new ShadowClawToast();
+    Object.defineProperty(testEl, "shadowRoot", {
+      value: null,
+      configurable: true,
+    });
+    await expect(testEl.connectedCallback()).rejects.toThrow(
+      "shadowRoot not found",
+    );
+    expect(() => testEl.disconnectedCallback()).not.toThrow();
+    await expect(testEl.render()).resolves.toBeUndefined();
+
+    const testEl2 = new ShadowClawToast();
+    testEl2.shadowRoot?.querySelector(".toast-container")?.remove();
+    await expect(testEl2.render()).resolves.toBeUndefined();
+  });
+
+  it("exports UI helper functions", async () => {
+    const {
+      showToast,
+      showSuccess,
+      showError,
+      showWarning,
+      showInfo,
+      dismissToast,
+      clearAllToasts,
+    } = await import("./shadow-claw-toast.js");
+
+    const id1 = showToast("Regular");
+    const id2 = showSuccess("Success");
+    const id3 = showError("Error");
+    const id4 = showWarning("Warning");
+    const id5 = showInfo("Info");
+
+    expect(id1).toBeDefined();
+    expect(id2).toBeDefined();
+    expect(id3).toBeDefined();
+    expect(id4).toBeDefined();
+    expect(id5).toBeDefined();
+
+    dismissToast(id1);
+    clearAllToasts();
+    expect(toastStore.toasts.length).toBe(0);
   });
 });

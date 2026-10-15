@@ -1,22 +1,22 @@
 import { describe, expect, it, jest, beforeEach } from "@jest/globals";
 
-jest.unstable_mockModule("../../db/getConfig.js", () => ({
+jest.unstable_mockModule("../../db/get-config.js", () => ({
   getConfig: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../storage/getGroupDir.js", () => ({
+jest.unstable_mockModule("../../storage/get-group-dir.js", () => ({
   getGroupDir: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../storage/readGroupFile.js", () => ({
+jest.unstable_mockModule("../../storage/read-group-file.js", () => ({
   readGroupFile: jest.fn(),
 }));
 
 const { parseDeclarativeTool, loadDeclarativeTools, findDeclarativeTool } =
   await import("./declarative.js");
-const { getConfig } = await import("../../db/getConfig.js");
-const { getGroupDir } = await import("../../storage/getGroupDir.js");
-const { readGroupFile } = await import("../../storage/readGroupFile.js");
+const { getConfig } = await import("../../db/get-config.js");
+const { getGroupDir } = await import("../../storage/get-group-dir.js");
+const { readGroupFile } = await import("../../storage/read-group-file.js");
 
 describe("declarative tools", () => {
   beforeEach(() => {

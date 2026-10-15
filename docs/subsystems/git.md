@@ -135,4 +135,4 @@ In headless Node.js mode (`isHeadlessMode()`), network requests are not bound by
 
 ## Dispatch Pattern
 
-Git tool execution is delegated from `executeTool.ts` to `executeGitTool()` in `src/worker/tools/git/git.ts` via a `case`-grouped switch. The git functions themselves are statically imported from `src/subsystems/git/git.ts` at worker startup. The `GitToolDeps` interface in `src/worker/tools/git/git.ts` lists every git function the dispatcher requires, making it easy to inject mocks in tests.
+Git tool execution is delegated from `execute-tool.ts` to `executeGitTool()` in `src/worker/tools/git/git.ts` via a `case`-grouped switch. The git functions themselves are statically imported from `src/subsystems/git/git.ts` at worker startup. The `GitToolDeps` interface in `src/worker/tools/git/git.ts` lists every git function the dispatcher requires, making it easy to inject mocks in tests.

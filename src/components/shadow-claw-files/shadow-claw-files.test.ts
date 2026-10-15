@@ -4,45 +4,48 @@ const mockAddPage = jest.fn();
 const mockRemovePage = jest.fn();
 const mockSendFileToPeer = jest.fn<any>().mockResolvedValue(undefined);
 
-jest.unstable_mockModule("../../storage/deleteAllGroupFiles.js", () => ({
+jest.unstable_mockModule("../../storage/delete-all-group-files.js", () => ({
   deleteAllGroupFiles: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../storage/deleteGroupDirectory.js", () => ({
+jest.unstable_mockModule("../../storage/delete-group-directory.js", () => ({
   deleteGroupDirectory: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../storage/deleteGroupFile.js", () => ({
+jest.unstable_mockModule("../../storage/delete-group-file.js", () => ({
   deleteGroupFile: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../storage/downloadAllGroupFilesAsZip.js", () => ({
-  downloadAllGroupFilesAsZip: jest.fn(),
-}));
+jest.unstable_mockModule(
+  "../../storage/download-all-group-files-as-zip.js",
+  () => ({
+    downloadAllGroupFilesAsZip: jest.fn(),
+  }),
+);
 
 jest.unstable_mockModule(
-  "../../storage/downloadGroupDirectoryAsZip.js",
+  "../../storage/download-group-directory-as-zip.js",
   () => ({
     downloadGroupDirectoryAsZip: jest.fn(),
   }),
 );
 
-jest.unstable_mockModule("../../storage/downloadGroupFile.js", () => ({
+jest.unstable_mockModule("../../storage/download-group-file.js", () => ({
   downloadGroupFile: jest.fn(),
 }));
 
 jest.unstable_mockModule(
-  "../../storage/restoreAllGroupFilesFromZip.js",
+  "../../storage/restore-all-group-files-from-zip.js",
   () => ({
     restoreAllGroupFilesFromZip: jest.fn(),
   }),
 );
 
-jest.unstable_mockModule("../../storage/uploadGroupFile.js", () => ({
+jest.unstable_mockModule("../../storage/upload-group-file.js", () => ({
   uploadGroupFile: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../db/getConfig.js", () => ({
+jest.unstable_mockModule("../../db/get-config.js", () => ({
   getConfig: jest.fn<any>().mockResolvedValue(undefined),
 }));
 
@@ -50,23 +53,23 @@ jest.unstable_mockModule("../../utils/ulid.js", () => ({
   ulid: jest.fn(() => "mock-ulid"),
 }));
 
-jest.unstable_mockModule("../../storage/writeGroupFile.js", () => ({
+jest.unstable_mockModule("../../storage/write-group-file.js", () => ({
   writeGroupFile: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../storage/createGroupDirectory.js", () => ({
+jest.unstable_mockModule("../../storage/create-group-directory.js", () => ({
   createGroupDirectory: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../storage/renameGroupEntry.js", () => ({
+jest.unstable_mockModule("../../storage/rename-group-entry.js", () => ({
   renameGroupEntry: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../storage/copyGroupEntry.js", () => ({
+jest.unstable_mockModule("../../storage/copy-group-entry.js", () => ({
   copyGroupEntry: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../storage/moveGroupEntry.js", () => ({
+jest.unstable_mockModule("../../storage/move-group-entry.js", () => ({
   moveGroupEntry: jest.fn(),
 }));
 
@@ -124,24 +127,32 @@ jest.unstable_mockModule("../../db/db.js", () => ({
 }));
 
 const { CONFIG_KEYS } = await import("../../config/config.js");
-const { getConfig } = await import("../../db/getConfig.js");
-const { uploadGroupFile } = await import("../../storage/uploadGroupFile.js");
+const { getConfig } = await import("../../db/get-config.js");
+const { uploadGroupFile } = await import("../../storage/upload-group-file.js");
 const { ShadowClawFiles } = await import("./shadow-claw-files.js");
-const { deleteGroupFile } = await import("../../storage/deleteGroupFile.js");
-const { renameGroupEntry } = await import("../../storage/renameGroupEntry.js");
-const { writeGroupFile } = await import("../../storage/writeGroupFile.js");
+const { deleteGroupFile } = await import("../../storage/delete-group-file.js");
+const { renameGroupEntry } =
+  await import("../../storage/rename-group-entry.js");
+const { writeGroupFile } = await import("../../storage/write-group-file.js");
 const { createGroupDirectory } =
-  await import("../../storage/createGroupDirectory.js");
-const { copyGroupEntry } = await import("../../storage/copyGroupEntry.js");
-const { moveGroupEntry } = await import("../../storage/moveGroupEntry.js");
+  await import("../../storage/create-group-directory.js");
+const { copyGroupEntry } = await import("../../storage/copy-group-entry.js");
+const { moveGroupEntry } = await import("../../storage/move-group-entry.js");
 const { showSuccess, showWarning, showError } =
   await import("../../ui/toast.js");
 const { downloadGroupDirectoryAsZip } =
-  await import("../../storage/downloadGroupDirectoryAsZip.js");
+  await import("../../storage/download-group-directory-as-zip.js");
 const { downloadGroupFile } =
-  await import("../../storage/downloadGroupFile.js");
+  await import("../../storage/download-group-file.js");
 const { deleteGroupDirectory } =
-  await import("../../storage/deleteGroupDirectory.js");
+  await import("../../storage/delete-group-directory.js");
+const { downloadAllGroupFilesAsZip } =
+  await import("../../storage/download-all-group-files-as-zip.js");
+const { deleteAllGroupFiles } =
+  await import("../../storage/delete-all-group-files.js");
+const { fileViewerStore } = await import("../../stores/file-viewer.js");
+const { restoreAllGroupFilesFromZip } =
+  await import("../../storage/restore-all-group-files-from-zip.js");
 const { orchestratorStore } = await import("../../stores/orchestrator.js");
 const { filesUiStore } = await import("../../stores/files-ui.js");
 
@@ -1268,9 +1279,9 @@ describe("shadow-claw-files", () => {
       const db = {} as any;
 
       const { downloadAllGroupFilesAsZip } =
-        await import("../../storage/downloadAllGroupFilesAsZip.js");
+        await import("../../storage/download-all-group-files-as-zip.js");
       const { deleteAllGroupFiles } =
-        await import("../../storage/deleteAllGroupFiles.js");
+        await import("../../storage/delete-all-group-files.js");
 
       // 1. Backup
       await component.handleBackup(db);
@@ -1295,9 +1306,9 @@ describe("shadow-claw-files", () => {
       const db = {} as any;
 
       const { writeGroupFile } =
-        await import("../../storage/writeGroupFile.js");
+        await import("../../storage/write-group-file.js");
       const { createGroupDirectory } =
-        await import("../../storage/createGroupDirectory.js");
+        await import("../../storage/create-group-directory.js");
 
       const dialog = component.shadowRoot?.querySelector(".files__new-dialog");
       if (dialog) (dialog as any).close = jest.fn();
@@ -1353,7 +1364,7 @@ describe("shadow-claw-files", () => {
       const db = {} as any;
 
       const { renameGroupEntry } =
-        await import("../../storage/renameGroupEntry.js");
+        await import("../../storage/rename-group-entry.js");
 
       const dialog = component.shadowRoot?.querySelector(
         ".files__rename-dialog",
@@ -1429,9 +1440,9 @@ describe("shadow-claw-files", () => {
       const db = {} as any;
 
       const { restoreAllGroupFilesFromZip } =
-        await import("../../storage/restoreAllGroupFilesFromZip.js");
+        await import("../../storage/restore-all-group-files-from-zip.js");
       const { uploadGroupFile } =
-        await import("../../storage/uploadGroupFile.js");
+        await import("../../storage/upload-group-file.js");
 
       // 1. Restore non-zip warning
       const nonZipInput = {
@@ -1495,7 +1506,7 @@ describe("shadow-claw-files", () => {
 
       // 6. handleRenameEntry
       const { renameGroupEntry } =
-        await import("../../storage/renameGroupEntry.js");
+        await import("../../storage/rename-group-entry.js");
       component._pendingRenamePath = "docs/old.txt";
       component._pendingRenameName = "old.txt";
 
@@ -2002,6 +2013,863 @@ describe("shadow-claw-files", () => {
       expect(handlePasteSpy).toHaveBeenCalledWith(expect.anything(), true);
 
       document.body.removeChild(component);
+    });
+  });
+
+  describe("additional branch coverage tests", () => {
+    it("handles upload button and disabled paste button in bindEventListeners", async () => {
+      const component = new ShadowClawFiles();
+      document.body.appendChild(component);
+      await component.render();
+
+      const uploadBtn = component.shadowRoot?.querySelector(
+        ".files__upload-btn",
+      ) as HTMLButtonElement;
+      const uploadInput = component.shadowRoot?.querySelector(
+        ".files__hidden-upload",
+      ) as HTMLInputElement;
+
+      const clickSpy = jest.spyOn(uploadInput, "click");
+      uploadBtn.click();
+      expect(clickSpy).toHaveBeenCalled();
+
+      const handleUploadSpy = jest
+        .spyOn(component, "handleUpload")
+        .mockImplementation(async () => {});
+      uploadInput.dispatchEvent(new Event("change"));
+      expect(handleUploadSpy).toHaveBeenCalled();
+
+      // Disabled paste button does not open paste dialog
+      const pasteBtn = component.shadowRoot?.querySelector(
+        ".files__paste-btn",
+      ) as HTMLButtonElement;
+      pasteBtn.setAttribute("disabled", "true");
+      const openPasteSpy = jest.spyOn(component, "openPasteDialog");
+      pasteBtn.click();
+      expect(openPasteSpy).not.toHaveBeenCalled();
+
+      document.body.removeChild(component);
+    });
+
+    it("handles drag leave, enter, and drop edge cases", async () => {
+      const component = new ShadowClawFiles();
+      document.body.appendChild(component);
+      await component.render();
+
+      const content = component.shadowRoot?.querySelector(
+        ".files__content",
+      ) as HTMLElement;
+
+      // 1. handleDragLeave when isDragActive is false -> early return
+      filesUiStore.setDragActive(false);
+      component.handleDragLeave({ relatedTarget: null } as any, content);
+      expect(filesUiStore.isDragActive).toBe(false);
+
+      // 2. handleDragLeave when relatedTarget is inside content -> remains active
+      filesUiStore.setDragActive(true);
+      const child = document.createElement("div");
+      content.appendChild(child);
+      component.handleDragLeave({ relatedTarget: child } as any, content);
+      expect(filesUiStore.isDragActive).toBe(true);
+
+      // 3. handleDragEnter with event.dataTransfer missing
+      const enterWithoutDt = {
+        dataTransfer: null,
+        preventDefault: jest.fn(),
+      } as any;
+      component.handleDragEnter(enterWithoutDt, content);
+
+      // 4. handleDrop without drag files -> early return
+      const dropWithoutFiles = {
+        dataTransfer: { types: ["text/plain"], files: [] },
+        preventDefault: jest.fn(),
+      } as any;
+      const uploadListSpy = jest.spyOn(component, "uploadFileList");
+      await component.handleDrop(dropWithoutFiles, {} as any, content);
+      expect(uploadListSpy).not.toHaveBeenCalled();
+
+      // 5. handleDrop with empty dropped array
+      const dropWithEmptyFiles = {
+        dataTransfer: { types: ["Files"], files: [] },
+        preventDefault: jest.fn(),
+      } as any;
+      await component.handleDrop(dropWithEmptyFiles, {} as any, content);
+      expect(uploadListSpy).not.toHaveBeenCalled();
+
+      document.body.removeChild(component);
+    });
+
+    it("handles handleSyncVMToHost success and error paths", async () => {
+      const component = new ShadowClawFiles();
+      document.body.appendChild(component);
+      await component.render();
+
+      // 1. Invalid button element -> early return
+      const mockShadow = document.createElement("div");
+      Object.defineProperty(component, "shadowRoot", {
+        value: mockShadow,
+        configurable: true,
+      });
+      await component.handleSyncVMToHost({} as any);
+
+      // Restore shadowRoot
+      delete (component as any).shadowRoot;
+      (orchestratorStore as any).syncVMWorkspaceToHost = jest.fn();
+      (orchestratorStore as any).loadFiles = jest
+        .fn<any>()
+        .mockResolvedValue(undefined);
+
+      // 2. Sync succeeds
+      await component.handleSyncVMToHost({} as any);
+      expect(orchestratorStore.syncVMWorkspaceToHost).toHaveBeenCalled();
+      expect(showSuccess).toHaveBeenCalledWith(
+        expect.stringContaining("Requested VM → host workspace sync"),
+        expect.any(Number),
+      );
+
+      // 3. syncVMWorkspaceToHost throws Error
+      (orchestratorStore as any).syncVMWorkspaceToHost = jest.fn(() => {
+        throw new Error("VM sync failed");
+      });
+      await component.handleSyncVMToHost({} as any);
+      expect(showError).toHaveBeenCalledWith(
+        expect.stringContaining(
+          "Failed to request VM → host sync: VM sync failed",
+        ),
+        expect.any(Number),
+      );
+
+      // 4. syncVMWorkspaceToHost throws string error
+      (orchestratorStore as any).syncVMWorkspaceToHost = jest.fn(() => {
+        throw "String VM fail";
+      });
+      await component.handleSyncVMToHost({} as any);
+      expect(showError).toHaveBeenCalledWith(
+        expect.stringContaining(
+          "Failed to request VM → host sync: String VM fail",
+        ),
+        expect.any(Number),
+      );
+
+      document.body.removeChild(component);
+    });
+
+    it("handles updateBreadcrumbs click navigation and error handling", async () => {
+      const component = new ShadowClawFiles();
+      document.body.appendChild(component);
+      await component.render();
+
+      (orchestratorStore as any).currentPath = "folderA/subB";
+      (orchestratorStore as any).resetToRootFolder = jest.fn();
+      (orchestratorStore as any).setCurrentPath = jest.fn();
+      component.updateBreadcrumbs({} as any);
+
+      const breadcrumbBtns = component.shadowRoot?.querySelectorAll(
+        ".files__breadcrumb-btn",
+      );
+      expect(breadcrumbBtns?.length).toBe(3); // Root, folderA, subB
+
+      // Click root breadcrumb (index === 0)
+      (breadcrumbBtns?.[0] as HTMLButtonElement).click();
+      expect(orchestratorStore.resetToRootFolder).toHaveBeenCalled();
+
+      // Click folderA breadcrumb (index > 0)
+      (breadcrumbBtns?.[1] as HTMLButtonElement).click();
+      expect(orchestratorStore.setCurrentPath).toHaveBeenCalledWith(
+        expect.anything(),
+        "folderA",
+      );
+
+      // setCurrentPath throws Error
+      (orchestratorStore as any).setCurrentPath = jest
+        .fn()
+        .mockRejectedValueOnce(new Error("Nav failed"));
+      (breadcrumbBtns?.[1] as HTMLButtonElement).click();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(showError).toHaveBeenCalledWith(
+        "Failed to navigate to folder: Nav failed",
+        4500,
+      );
+
+      // setCurrentPath throws string
+      (orchestratorStore as any).setCurrentPath = jest
+        .fn()
+        .mockRejectedValueOnce("Nav string error");
+      (breadcrumbBtns?.[1] as HTMLButtonElement).click();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(showError).toHaveBeenCalledWith(
+        "Failed to navigate to folder: Nav string error",
+        4500,
+      );
+
+      document.body.removeChild(component);
+    });
+
+    it("handles folder click, pages toggle, and delete actions in file list", async () => {
+      const component = new ShadowClawFiles();
+      document.body.appendChild(component);
+      await component.render();
+
+      (orchestratorStore as any).activeGroupId = "default";
+      (orchestratorStore as any).currentPath = "root_dir";
+      (orchestratorStore as any).files = ["sub_dir/", "preview.html"];
+      (orchestratorStore as any).navigateIntoFolder = jest.fn();
+      (orchestratorStore as any).addPage = jest.fn();
+      (orchestratorStore as any).removePage = jest.fn();
+      (orchestratorStore as any).pages = [];
+
+      component.updateFileList({} as any);
+
+      const items = component.shadowRoot?.querySelectorAll(".files__item");
+      const folderMain = items?.[0]?.querySelector(
+        ".files__item-main",
+      ) as HTMLElement;
+
+      // Click on folder in subpath
+      folderMain.click();
+      expect(orchestratorStore.navigateIntoFolder).toHaveBeenCalledWith(
+        expect.anything(),
+        "sub_dir/",
+      );
+
+      // Add page toggle button click
+      const pageToggleBtn = items?.[1]?.querySelector(
+        ".files__page-toggle",
+      ) as HTMLButtonElement;
+      pageToggleBtn.click();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(orchestratorStore.addPage).toHaveBeenCalledWith(
+        expect.anything(),
+        "root_dir/preview.html",
+        "default",
+      );
+
+      // Remove page toggle button click when isSavedPage is true
+      (orchestratorStore as any).pages = [
+        { groupId: "default", path: "root_dir/preview.html" },
+      ];
+      component.updateFileList({} as any);
+      const items2 = component.shadowRoot?.querySelectorAll(".files__item");
+      const pageToggleBtn2 = items2?.[1]?.querySelector(
+        ".files__page-toggle",
+      ) as HTMLButtonElement;
+      pageToggleBtn2.click();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(orchestratorStore.removePage).toHaveBeenCalledWith(
+        expect.anything(),
+        "root_dir/preview.html",
+        "default",
+      );
+
+      // Page toggle error
+      (orchestratorStore as any).removePage = jest
+        .fn()
+        .mockRejectedValueOnce(new Error("Page remove error"));
+      pageToggleBtn2.click();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(showError).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to update Pages: Page remove error"),
+        expect.any(Number),
+      );
+
+      // 4. Delete folder cancelled
+      component.requestConfirmation = jest.fn<any>().mockResolvedValue(false);
+      const dirDeleteBtn = items2?.[0]?.querySelector(
+        ".files__delete",
+      ) as HTMLButtonElement;
+      dirDeleteBtn.click();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(deleteGroupDirectory).not.toHaveBeenCalled();
+
+      // 5. Delete folder confirmed
+      component.requestConfirmation = jest.fn<any>().mockResolvedValue(true);
+      (deleteGroupDirectory as any).mockResolvedValueOnce(undefined);
+      dirDeleteBtn.click();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(deleteGroupDirectory).toHaveBeenCalledWith(
+        expect.anything(),
+        "default",
+        "root_dir/sub_dir/",
+      );
+      expect(showSuccess).toHaveBeenCalledWith("Deleted folder: sub_dir", 3000);
+
+      // 6. Delete file confirmed
+      const fileDeleteBtn = items2?.[1]?.querySelector(
+        ".files__delete",
+      ) as HTMLButtonElement;
+      (deleteGroupFile as any).mockResolvedValueOnce(undefined);
+      fileDeleteBtn.click();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(deleteGroupFile).toHaveBeenCalledWith(
+        expect.anything(),
+        "default",
+        "root_dir/preview.html",
+      );
+      expect(showSuccess).toHaveBeenCalledWith(
+        "Deleted file: preview.html",
+        3000,
+      );
+
+      // 7. Delete throws Error
+      (deleteGroupFile as any).mockRejectedValueOnce(
+        new Error("Delete denied"),
+      );
+      fileDeleteBtn.click();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(showError).toHaveBeenCalledWith(
+        "Failed to delete preview.html: Delete denied",
+        6000,
+      );
+
+      // 8. Delete throws string
+      (deleteGroupFile as any).mockRejectedValueOnce("String delete error");
+      fileDeleteBtn.click();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(showError).toHaveBeenCalledWith(
+        "Failed to delete preview.html: String delete error",
+        6000,
+      );
+
+      document.body.removeChild(component);
+    });
+
+    it("handles rename button click and cut clipboard styling in file list", async () => {
+      const component = new ShadowClawFiles();
+      document.body.appendChild(component);
+      await component.render();
+
+      (orchestratorStore as any).currentPath = "deep/path";
+      (orchestratorStore as any).files = ["file.txt"];
+      filesUiStore.setClipboard("deep/path/file.txt", "cut", false, "default");
+      component.updateFileList({} as any);
+
+      const item = component.shadowRoot?.querySelector(".files__item");
+      expect(item?.classList.contains("files__item--cut")).toBe(true);
+
+      const renameBtn = component.shadowRoot?.querySelector(
+        ".files__rename",
+      ) as HTMLButtonElement;
+      const openRenameSpy = jest.spyOn(component, "openRenameDialog");
+      renameBtn.click();
+      expect(openRenameSpy).toHaveBeenCalledWith(
+        "deep/path/file.txt",
+        "file.txt",
+        false,
+      );
+
+      document.body.removeChild(component);
+    });
+
+    it("handles updateUploadProgressUI with various values and sync button visibility", async () => {
+      const component = new ShadowClawFiles();
+      document.body.appendChild(component);
+      await component.render();
+
+      // Progress with total = 0
+      component.updateUploadProgressUI(true, 0, 0);
+      const label = component.shadowRoot?.querySelector(
+        ".files__upload-progress-label",
+      );
+      expect(label?.textContent).toContain("Uploading files...");
+
+      // Progress with total > 0
+      component.updateUploadProgressUI(true, 50, 100);
+      expect(label?.textContent).toContain("Uploading 50/100 files (50%)");
+
+      // Sync button visibility with VM enabled (9p mode)
+      (orchestratorStore as any).orchestrator.vmStatus.mode = "9p";
+      component.updateSyncButtonsVisibility();
+      const hostBtn = component.shadowRoot?.querySelector(
+        ".files__sync-host-btn",
+      ) as HTMLButtonElement;
+      expect(hostBtn?.hidden).toBe(false);
+
+      // Sync button visibility with VM disabled
+      (orchestratorStore as any).orchestrator.vmStatus.mode = null;
+      component.updateSyncButtonsVisibility();
+      expect(hostBtn?.hidden).toBe(true);
+
+      document.body.removeChild(component);
+    });
+
+    it("handles uploadFileList conflict resolution overwrite, multiple files, and errors", async () => {
+      const component = new ShadowClawFiles();
+      document.body.appendChild(component);
+      await component.render();
+
+      const db = {} as any;
+      (orchestratorStore as any).activeGroupId = "default";
+      (orchestratorStore as any).currentPath = "upload_folder";
+      (orchestratorStore as any).files = ["exists.txt"];
+
+      // 1. Empty fileList -> early return
+      await component.uploadFileList(db, []);
+      expect(uploadGroupFile).not.toHaveBeenCalled();
+
+      // 2. Overwrite conflict resolution
+      const mockConflictFile = new File(["new data"], "exists.txt", {
+        type: "text/plain",
+      });
+      const resolveConflictSpy = jest
+        .spyOn(component, "promptUploadConflict")
+        .mockResolvedValueOnce({ action: "overwrite" });
+      (uploadGroupFile as any).mockResolvedValue(undefined);
+
+      await component.uploadFileList(db, [mockConflictFile]);
+      expect(resolveConflictSpy).toHaveBeenCalled();
+      expect(uploadGroupFile).toHaveBeenCalledWith(
+        db,
+        "default",
+        "upload_folder/exists.txt",
+        mockConflictFile,
+      );
+      expect(showSuccess).toHaveBeenCalledWith(
+        "Uploaded 1 file",
+        expect.any(Number),
+      );
+
+      // 3. Rename conflict resolution and cancelled conflict resolution
+      resolveConflictSpy.mockResolvedValueOnce({
+        action: "rename",
+        name: "renamed.txt",
+      });
+      await component.uploadFileList(db, [mockConflictFile]);
+      expect(uploadGroupFile).toHaveBeenCalledWith(
+        db,
+        "default",
+        "upload_folder/renamed.txt",
+        mockConflictFile,
+      );
+
+      resolveConflictSpy.mockResolvedValueOnce(null); // Cancel conflict
+      (uploadGroupFile as any).mockClear();
+      await component.uploadFileList(db, [mockConflictFile]);
+      expect(uploadGroupFile).not.toHaveBeenCalled();
+
+      // 4. Multiple files uploaded
+      const file1 = new File(["d1"], "f1.txt", { type: "text/plain" });
+      const file2 = new File(["d2"], "f2.txt", { type: "text/plain" });
+      await component.uploadFileList(db, [file1, file2]);
+      expect(showSuccess).toHaveBeenCalledWith(
+        "Uploaded 2 files",
+        expect.any(Number),
+      );
+
+      // 5. Upload with appendUlid = true
+      (getConfig as any).mockResolvedValueOnce("true");
+      await component.uploadFileList(db, [file1]);
+      expect(uploadGroupFile).toHaveBeenCalledWith(
+        db,
+        "default",
+        expect.stringContaining("mock-ulid-f1.txt"),
+        file1,
+      );
+
+      // 6. Upload throws Error
+      (uploadGroupFile as any).mockRejectedValueOnce(new Error("Disk full"));
+      await component.uploadFileList(db, [file1]);
+      expect(showError).toHaveBeenCalledWith(
+        "Failed to upload files: Disk full",
+        6000,
+      );
+
+      // 7. Upload throws string error
+      (uploadGroupFile as any).mockRejectedValueOnce("String upload error");
+      await component.uploadFileList(db, [file1]);
+      expect(showError).toHaveBeenCalledWith(
+        "Failed to upload files: String upload error",
+        6000,
+      );
+
+      document.body.removeChild(component);
+    });
+
+    it("handles handleBackup and handleClearAll success and failure paths", async () => {
+      const component = new ShadowClawFiles();
+      document.body.appendChild(component);
+      await component.render();
+
+      const db = {} as any;
+
+      // 1. handleBackup success
+      (downloadAllGroupFilesAsZip as any).mockResolvedValueOnce(undefined);
+      await component.handleBackup(db);
+      expect(downloadAllGroupFilesAsZip).toHaveBeenCalled();
+      expect(showSuccess).toHaveBeenCalledWith(
+        "Backup created successfully",
+        3000,
+      );
+
+      // 2. handleBackup failure with Error and string
+      (downloadAllGroupFilesAsZip as any).mockRejectedValueOnce(
+        new Error("Zip fail"),
+      );
+      await component.handleBackup(db);
+      expect(showError).toHaveBeenCalledWith(
+        "Failed to create backup: Zip fail",
+        6000,
+      );
+
+      (downloadAllGroupFilesAsZip as any).mockRejectedValueOnce(
+        "String zip fail",
+      );
+      await component.handleBackup(db);
+      expect(showError).toHaveBeenCalledWith(
+        "Failed to create backup: String zip fail",
+        6000,
+      );
+
+      // 3. handleClearAll cancelled
+      component.requestConfirmation = jest
+        .fn<any>()
+        .mockResolvedValueOnce(false);
+      await component.handleClearAll(db);
+      expect(deleteAllGroupFiles).not.toHaveBeenCalled();
+
+      // 4. handleClearAll confirmed and succeeds
+      component.requestConfirmation = jest
+        .fn<any>()
+        .mockResolvedValueOnce(true);
+      (deleteAllGroupFiles as any).mockResolvedValueOnce(undefined);
+      await component.handleClearAll(db);
+      expect(deleteAllGroupFiles).toHaveBeenCalled();
+      expect(showSuccess).toHaveBeenCalledWith("All files deleted", 3500);
+
+      // 5. handleClearAll confirmed and fails (Error and string)
+      component.requestConfirmation = jest
+        .fn<any>()
+        .mockResolvedValueOnce(true);
+      (deleteAllGroupFiles as any).mockRejectedValueOnce(
+        new Error("Clear fail"),
+      );
+      await component.handleClearAll(db);
+      expect(showError).toHaveBeenCalledWith(
+        "Failed to clear files: Clear fail",
+        6000,
+      );
+
+      component.requestConfirmation = jest
+        .fn<any>()
+        .mockResolvedValueOnce(true);
+      (deleteAllGroupFiles as any).mockRejectedValueOnce("String clear fail");
+      await component.handleClearAll(db);
+      expect(showError).toHaveBeenCalledWith(
+        "Failed to clear files: String clear fail",
+        6000,
+      );
+
+      document.body.removeChild(component);
+    });
+
+    it("handles requestConfirmation and file opening in viewer", async () => {
+      const component = new ShadowClawFiles();
+      document.body.appendChild(component);
+      await component.render();
+
+      const db = {} as any;
+
+      // 1. requestConfirmation without shadow-claw shell element (falls back to warning)
+      const resWithoutShell = await component.requestConfirmation({
+        title: "Test",
+        message: "Test message",
+      });
+      expect(resWithoutShell).toBe(false);
+      expect(showWarning).toHaveBeenCalledWith("Test message", 4500);
+
+      // 2. requestConfirmation with shadow-claw element
+      const mockShell = document.createElement("shadow-claw") as any;
+      mockShell.requestDialog = jest.fn().mockResolvedValue(true);
+      document.body.appendChild(mockShell);
+
+      const resWithShell = await component.requestConfirmation({
+        title: "Test 2",
+        message: "Test message 2",
+      });
+      expect(resWithShell).toBe(true);
+      expect(mockShell.requestDialog).toHaveBeenCalledWith(
+        expect.objectContaining({ mode: "confirm", title: "Test 2" }),
+      );
+
+      document.body.removeChild(mockShell);
+
+      // 3. Open non-directory file in viewer when currentPath is "." vs subpath
+      (orchestratorStore as any).currentPath = ".";
+      (orchestratorStore as any).files = ["notes.txt"];
+      component.updateFileList(db);
+      const fileItem = component.shadowRoot?.querySelector(
+        ".files__item-main",
+      ) as HTMLElement;
+      fileItem.click();
+      await Promise.resolve();
+      expect(fileViewerStore.openFile).toHaveBeenCalledWith(
+        db,
+        "notes.txt",
+        "default",
+      );
+
+      (orchestratorStore as any).currentPath = "nested/dir";
+      component.updateFileList(db);
+      const nestedFileItem = component.shadowRoot?.querySelector(
+        ".files__item-main",
+      ) as HTMLElement;
+      nestedFileItem.click();
+      await Promise.resolve();
+      expect(fileViewerStore.openFile).toHaveBeenCalledWith(
+        db,
+        "nested/dir/notes.txt",
+        "default",
+      );
+
+      // 4. openNewFileDialog on rendered component resets input values
+      component.openNewFileDialog();
+      const newInput = component.shadowRoot?.querySelector(
+        ".files__new-input",
+      ) as HTMLInputElement;
+      const isFolderInput = component.shadowRoot?.querySelector(
+        ".files__new-is-folder",
+      ) as HTMLInputElement;
+      expect(newInput.value).toBe("");
+      expect(isFolderInput.checked).toBe(false);
+
+      // 5. openPasteDialog when currentPath !== "."
+      (orchestratorStore as any).currentPath = "custom/dest";
+      filesUiStore.setClipboard("source.txt", "copy", false, "default");
+      component.openPasteDialog();
+      const pasteMsg = component.shadowRoot?.querySelector(
+        ".files__paste-message",
+      );
+      expect(pasteMsg?.textContent).toContain("custom/dest");
+
+      document.body.removeChild(component);
+    });
+
+    it("handles promptUploadConflict branches and handleRenameEntry validations", async () => {
+      const component = new ShadowClawFiles();
+      document.body.appendChild(component);
+      await component.render();
+
+      const db = {} as any;
+
+      // 1. promptUploadConflict: overwrite button
+      const conflictPromise1 = component.promptUploadConflict(
+        "test.txt",
+        new Set(),
+      );
+      const overwriteBtn = component.shadowRoot?.querySelector(
+        ".files__upload-conflict-overwrite",
+      ) as HTMLButtonElement;
+      overwriteBtn.click();
+      const decision1 = await conflictPromise1;
+      expect(decision1).toEqual({ action: "overwrite" });
+
+      // 2. promptUploadConflict: cancel button
+      const conflictPromise2 = component.promptUploadConflict(
+        "test2.txt",
+        new Set(),
+      );
+      const cancelBtn = component.shadowRoot?.querySelector(
+        ".files__upload-conflict-cancel",
+      ) as HTMLButtonElement;
+      cancelBtn.click();
+      const decision2 = await conflictPromise2;
+      expect(decision2).toBeNull();
+
+      // 3. promptUploadConflict: rename form submit (empty -> warning, path -> warning, collision -> warning, valid -> rename)
+      const conflictPromise3 = component.promptUploadConflict(
+        "test3.txt",
+        new Set(["taken.txt"]),
+      );
+      const conflictForm = component.shadowRoot?.querySelector(
+        ".files__upload-conflict-form",
+      ) as HTMLFormElement;
+      const renameInput = component.shadowRoot?.querySelector(
+        ".files__upload-conflict-rename-input",
+      ) as HTMLInputElement;
+
+      // Empty name
+      renameInput.value = "   ";
+      conflictForm.dispatchEvent(new Event("submit"));
+      expect(showWarning).toHaveBeenCalledWith("Please enter a name", 3000);
+
+      // Path slash
+      renameInput.value = "invalid/name";
+      conflictForm.dispatchEvent(new Event("submit"));
+      expect(showWarning).toHaveBeenCalledWith(
+        "Use only a name, not a path",
+        3500,
+      );
+
+      // Collision
+      renameInput.value = "taken.txt";
+      conflictForm.dispatchEvent(new Event("submit"));
+      expect(showWarning).toHaveBeenCalledWith(
+        expect.stringContaining("already exists"),
+        4000,
+      );
+
+      // Valid rename
+      renameInput.value = "valid_unique.txt";
+      conflictForm.dispatchEvent(new Event("submit"));
+      const decision3 = await conflictPromise3;
+      expect(decision3).toEqual({ action: "rename", name: "valid_unique.txt" });
+
+      // 4. handleRenameEntry when _pendingRenamePath is missing
+      (component as any)._pendingRenamePath = null;
+      (component as any)._pendingRenameName = null;
+      await component.handleRenameEntry(db);
+
+      // 5. handleRenameEntry with renameGroupEntry throwing Error and string
+      (component as any)._pendingRenamePath = "orig.txt";
+      (component as any)._pendingRenameName = "orig.txt";
+      const renameFormInput = component.shadowRoot?.querySelector(
+        ".files__rename-input",
+      ) as HTMLInputElement;
+      renameFormInput.value = "new_name.txt";
+
+      (renameGroupEntry as any).mockRejectedValueOnce(
+        new Error("Rename locked"),
+      );
+      await component.handleRenameEntry(db);
+      expect(showError).toHaveBeenCalledWith(
+        "Failed to rename orig.txt: Rename locked",
+        expect.any(Number),
+      );
+
+      (renameGroupEntry as any).mockRejectedValueOnce("String rename fail");
+      await component.handleRenameEntry(db);
+      expect(showError).toHaveBeenCalledWith(
+        "Failed to rename orig.txt: String rename fail",
+        expect.any(Number),
+      );
+
+      document.body.removeChild(component);
+    });
+
+    it("handles handleRestore and handleUpload validations and error handling", async () => {
+      const component = new ShadowClawFiles();
+      document.body.appendChild(component);
+      await component.render();
+
+      const db = {} as any;
+
+      // 1. handleRestore with no files
+      const inputNoFiles = { files: [] } as any;
+      await component.handleRestore(db, inputNoFiles);
+      expect(restoreAllGroupFilesFromZip).not.toHaveBeenCalled();
+
+      // 2. handleRestore with non-zip file
+      const nonZipFile = new File(["test"], "data.txt", { type: "text/plain" });
+      const inputNonZip = { files: [nonZipFile], value: "data.txt" } as any;
+      await component.handleRestore(db, inputNonZip);
+      expect(showWarning).toHaveBeenCalledWith(
+        "Please select a .zip file",
+        3500,
+      );
+
+      // 3. handleRestore with zip cancelled
+      const zipFile = new File(["zip data"], "backup.zip", {
+        type: "application/zip",
+      });
+      const inputZip = { files: [zipFile], value: "backup.zip" } as any;
+      component.requestConfirmation = jest
+        .fn<any>()
+        .mockResolvedValueOnce(false);
+      await component.handleRestore(db, inputZip);
+      expect(inputZip.value).toBe("");
+      expect(restoreAllGroupFilesFromZip).not.toHaveBeenCalled();
+
+      // 4. handleRestore confirmed and succeeds
+      component.requestConfirmation = jest
+        .fn<any>()
+        .mockResolvedValueOnce(true);
+      (restoreAllGroupFilesFromZip as any).mockResolvedValueOnce(undefined);
+      await component.handleRestore(db, inputZip);
+      expect(restoreAllGroupFilesFromZip).toHaveBeenCalledWith(
+        db,
+        "default",
+        zipFile,
+      );
+      expect(showSuccess).toHaveBeenCalledWith(
+        "Files restored successfully",
+        3500,
+      );
+
+      // 5. handleRestore confirmed and fails with Error and string
+      component.requestConfirmation = jest
+        .fn<any>()
+        .mockResolvedValueOnce(true);
+      (restoreAllGroupFilesFromZip as any).mockRejectedValueOnce(
+        new Error("Corrupt zip"),
+      );
+      await component.handleRestore(db, inputZip);
+      expect(showError).toHaveBeenCalledWith(
+        "Failed to restore from backup: Corrupt zip",
+        6000,
+      );
+
+      component.requestConfirmation = jest
+        .fn<any>()
+        .mockResolvedValueOnce(true);
+      (restoreAllGroupFilesFromZip as any).mockRejectedValueOnce(
+        "String corrupt zip",
+      );
+      await component.handleRestore(db, inputZip);
+      expect(showError).toHaveBeenCalledWith(
+        "Failed to restore from backup: String corrupt zip",
+        6000,
+      );
+
+      // 6. handleUpload with no files
+      await component.handleUpload(db, { files: [] } as any);
+      const uploadListSpy = jest.spyOn(component, "uploadFileList");
+      expect(uploadListSpy).not.toHaveBeenCalled();
+
+      // 7. handleUpload with files
+      const validFile = new File(["hello"], "hello.txt", {
+        type: "text/plain",
+      });
+      uploadListSpy.mockResolvedValueOnce(undefined as any);
+      const validUploadInput = {
+        files: [validFile],
+        value: "hello.txt",
+      } as any;
+      await component.handleUpload(db, validUploadInput);
+      expect(uploadListSpy).toHaveBeenCalledWith(db, [validFile]);
+      expect(validUploadInput.value).toBe("");
+
+      document.body.removeChild(component);
+    });
+
+    it("handles missing shadowRoot and missing dialog element guards", async () => {
+      const component = new ShadowClawFiles() as any;
+      const db = {} as any;
+
+      // 1. shadowRoot is null
+      Object.defineProperty(component, "shadowRoot", {
+        value: null,
+        configurable: true,
+      });
+      component.openNewFileDialog();
+      component.openRenameDialog("file.txt", "file.txt", false);
+      component.openPasteDialog();
+      component.updateBreadcrumbs(db);
+      component.updateFileList(db);
+      component.updatePasteButtonVisibility();
+      component.updateSyncButtonsVisibility();
+      component.updateUploadProgressUI(true, 1, 2);
+      await component.promptUploadConflict("a", new Set());
+      await component.handleRenameEntry(db);
+
+      // 2. Dialog elements missing in shadowRoot
+      const emptyRoot = document.createElement("div");
+      Object.defineProperty(component, "shadowRoot", {
+        value: emptyRoot,
+        configurable: true,
+      });
+      component.openNewFileDialog();
+      component.openRenameDialog("file.txt", "file.txt", false);
+      component.openPasteDialog();
+      expect(component._pendingRenamePath).toBeNull();
     });
   });
 });

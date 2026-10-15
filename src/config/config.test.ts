@@ -552,6 +552,44 @@ describe("config.js", () => {
       const provider = getProvider(undefined as any);
       expect(provider).toBeNull();
     });
+
+    it("should override openrouter baseUrl when OPENROUTER_BASE_URL env var is set", () => {
+      const original = process.env.OPENROUTER_BASE_URL;
+      try {
+        process.env.OPENROUTER_BASE_URL =
+          "http://127.0.0.1:9999/v1/chat/completions";
+        const provider = getProvider("openrouter");
+        expect(provider).toBeDefined();
+        expect(provider!.baseUrl).toBe(
+          "http://127.0.0.1:9999/v1/chat/completions",
+        );
+      } finally {
+        if (original === undefined) {
+          delete process.env.OPENROUTER_BASE_URL;
+        } else {
+          process.env.OPENROUTER_BASE_URL = original;
+        }
+      }
+    });
+
+    it("should override huggingface baseUrl when HUGGINGFACE_BASE_URL env var is set", () => {
+      const original = process.env.HUGGINGFACE_BASE_URL;
+      try {
+        process.env.HUGGINGFACE_BASE_URL =
+          "http://127.0.0.1:8888/v1/chat/completions";
+        const provider = getProvider("huggingface");
+        expect(provider).toBeDefined();
+        expect(provider!.baseUrl).toBe(
+          "http://127.0.0.1:8888/v1/chat/completions",
+        );
+      } finally {
+        if (original === undefined) {
+          delete process.env.HUGGINGFACE_BASE_URL;
+        } else {
+          process.env.HUGGINGFACE_BASE_URL = original;
+        }
+      }
+    });
   });
 
   describe("getDefaultProvider", () => {

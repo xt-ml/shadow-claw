@@ -1,36 +1,37 @@
 import { jest } from "@jest/globals";
 
-jest.unstable_mockModule("../storage/readGroupFile.js", () => ({
+jest.unstable_mockModule("../storage/read-group-file.js", () => ({
   readGroupFile: jest.fn(),
 }));
 
-jest.unstable_mockModule("../storage/readGroupFileBytes.js", () => ({
+jest.unstable_mockModule("../storage/read-group-file-bytes.js", () => ({
   readGroupFileBytes: jest.fn(),
 }));
 
-jest.unstable_mockModule("../storage/writeGroupFile.js", () => ({
+jest.unstable_mockModule("../storage/write-group-file.js", () => ({
   writeGroupFile: jest.fn(),
 }));
 
-jest.unstable_mockModule("../storage/deleteGroupFile.js", () => ({
+jest.unstable_mockModule("../storage/delete-group-file.js", () => ({
   deleteGroupFile: jest.fn(),
 }));
 
-jest.unstable_mockModule("../storage/listGroupFiles.js", () => ({
+jest.unstable_mockModule("../storage/list-group-files.js", () => ({
   listGroupFiles: jest.fn(() => Promise.resolve([])),
 }));
 
-jest.unstable_mockModule("../storage/createGroupDirectory.js", () => ({
+jest.unstable_mockModule("../storage/create-group-directory.js", () => ({
   createGroupDirectory: jest.fn(),
 }));
 
 const { ShadowClawFileSystem, createFileSystem } = await import("./fs.js");
-const { readGroupFileBytes } = await import("../storage/readGroupFileBytes.js");
-const { writeGroupFile } = await import("../storage/writeGroupFile.js");
-const { deleteGroupFile } = await import("../storage/deleteGroupFile.js");
+const { readGroupFileBytes } =
+  await import("../storage/read-group-file-bytes.js");
+const { writeGroupFile } = await import("../storage/write-group-file.js");
+const { deleteGroupFile } = await import("../storage/delete-group-file.js");
 const { createGroupDirectory } =
-  await import("../storage/createGroupDirectory.js");
-const { listGroupFiles } = await import("../storage/listGroupFiles.js");
+  await import("../storage/create-group-directory.js");
+const { listGroupFiles } = await import("../storage/list-group-files.js");
 const { InMemoryFs } = await import("just-bash");
 
 describe("ShadowClawFileSystem", () => {

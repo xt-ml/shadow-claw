@@ -3,8 +3,8 @@ import {
   type AuthType,
   type ServiceType,
 } from "../../config/config.js";
-import { getConfig } from "../../db/getConfig.js";
-import { setConfig } from "../../db/setConfig.js";
+import { getConfig } from "../../db/get-config.js";
+import { setConfig } from "../../db/set-config.js";
 import { ulid } from "../../utils/ulid.js";
 
 import { getEmailPluginManifest } from "./catalog.js";

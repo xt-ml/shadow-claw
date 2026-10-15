@@ -93,9 +93,17 @@ jest.unstable_mockModule("../../../db/db.js", () => ({
   getDb: jest.fn<any>().mockResolvedValue({} as any),
 }));
 
+jest.unstable_mockModule("../../../core/effect.js", () => ({
+  effect: jest.fn((cb: any) => {
+    cb();
+    return () => {};
+  }),
+}));
+
 jest.unstable_mockModule("../../../stores/orchestrator.js", () => ({
   orchestratorStore: {
     orchestrator: null,
+    ready: true,
   },
 }));
 
@@ -581,5 +589,233 @@ describe("shadow-claw-channel-config", () => {
     );
 
     document.body.removeChild(el);
+  });
+
+  it("covers verifyTelegramConfig failure branches (empty token, me error, webhook error, non-Error)", async () => {
+    const el = new ShadowClawChannelConfig();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+
+    const tokenInput = el.shadowRoot?.querySelector(
+      '[data-setting="telegram-token-input"]',
+    ) as HTMLInputElement;
+
+    // 1. Empty token
+    tokenInput.value = "   ";
+    await el.verifyTelegramConfig();
+    expect(showError).toHaveBeenCalledWith(
+      "Telegram bot token is empty. Save the token first.",
+      5000,
+    );
+
+    // 2. getMe fails with description
+    tokenInput.value = "test-token";
+    (globalThis.fetch as any) = jest.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      json: () => Promise.resolve({ ok: false, description: "Invalid token" }),
+    });
+    await el.verifyTelegramConfig();
+    expect(showError).toHaveBeenCalledWith(
+      "Telegram verification failed: Invalid token",
+      7000,
+    );
+
+    // 3. getMe fails without description (HTTP status fallback)
+    (globalThis.fetch as any) = jest.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+      json: () => Promise.resolve({ ok: false }),
+    });
+    await el.verifyTelegramConfig();
+    expect(showError).toHaveBeenCalledWith(
+      "Telegram verification failed: HTTP 503",
+      7000,
+    );
+
+    // 4. getWebhookInfo fails with description
+    (globalThis.fetch as any) = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ ok: true, result: {} }), // no username -> unknown fallback
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 400,
+        json: () =>
+          Promise.resolve({ ok: false, description: "Webhook lookup error" }),
+      });
+    await el.verifyTelegramConfig();
+    expect(showError).toHaveBeenCalledWith(
+      "Telegram verification failed: Webhook lookup error",
+      7000,
+    );
+
+    // 5. getWebhookInfo fails without description (fallback HTTP status)
+    (globalThis.fetch as any) = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ ok: true, result: {} }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 502,
+        json: () => Promise.resolve({ ok: false }),
+      });
+    await el.verifyTelegramConfig();
+    expect(showError).toHaveBeenCalledWith(
+      "Telegram verification failed: HTTP 502",
+      7000,
+    );
+
+    // 6. Network error (non-Error exception)
+    (globalThis.fetch as any) = jest
+      .fn()
+      .mockRejectedValueOnce("raw network error");
+    await el.verifyTelegramConfig();
+    expect(showError).toHaveBeenCalledWith(
+      "Telegram verification failed: raw network error",
+      7000,
+    );
+
+    document.body.removeChild(el);
+  });
+
+  it("covers disabled channels, empty settings, and loading state rendering", async () => {
+    const orchestrator = createOrchestratorStub();
+    orchestrator.getTelegramConfig = jest.fn(() => ({
+      botToken: "",
+      chatIds: [],
+      useProxy: false,
+      enabled: false,
+    }));
+    orchestrator.getIMessageConfig = jest.fn(() => ({
+      serverUrl: "",
+      apiKey: "",
+      chatIds: [],
+      enabled: false,
+    }));
+    (orchestratorStore as any).orchestrator = orchestrator;
+
+    const el = new ShadowClawChannelConfig();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+
+    // Verify disabled UI state
+    expect(
+      el.shadowRoot?.querySelector('[data-info="telegram-channel-status"]')
+        ?.textContent,
+    ).toContain("Telegram channel is disabled");
+    expect(
+      el.shadowRoot?.querySelector('[data-info="telegram-token-status"]')
+        ?.textContent,
+    ).toContain("No Telegram token saved");
+    expect(
+      el.shadowRoot?.querySelector('[data-info="telegram-chat-ids-status"]')
+        ?.textContent,
+    ).toContain("No Telegram chat IDs saved");
+    expect(
+      el.shadowRoot?.querySelector('[data-info="imessage-channel-status"]')
+        ?.textContent,
+    ).toContain("iMessage channel is disabled");
+    expect(
+      el.shadowRoot?.querySelector('[data-info="imessage-chat-ids-status"]')
+        ?.textContent,
+    ).toContain("No iMessage chat IDs saved");
+
+    // Test with null orchestrator -> loading state
+    (orchestratorStore as any).orchestrator = null;
+    el.orchestrator = null;
+    await el.render();
+
+    expect(
+      el.shadowRoot?.querySelector('[data-info="telegram-token-status"]')
+        ?.textContent,
+    ).toContain("Loading Telegram settings...");
+    expect(
+      el.shadowRoot?.querySelector('[data-info="imessage-chat-ids-status"]')
+        ?.textContent,
+    ).toContain("Loading iMessage settings...");
+
+    document.body.removeChild(el);
+  });
+
+  it("covers error handling and null guards in save methods", async () => {
+    const el = new ShadowClawChannelConfig();
+
+    // Throw on missing shadowRoot in connectedCallback
+    Object.defineProperty(el, "shadowRoot", {
+      value: null,
+      configurable: true,
+    });
+    await expect(el.connectedCallback()).rejects.toThrow(
+      "shadowRoot not found",
+    );
+
+    el.bindEventListeners();
+    await el.render();
+    await el.verifyTelegramConfig();
+
+    // Null db guards
+    el.orchestrator = createOrchestratorStub() as any;
+    el.db = null;
+    await el.saveIMessageConfig();
+    await el.saveTelegramConfig();
+
+    // Null orchestrator guards
+    el.db = {} as any;
+    el.orchestrator = null;
+    (orchestratorStore as any).orchestrator = null;
+    await el.saveIMessageConfig();
+    await el.saveTelegramConfig();
+
+    // Restore orchestrator and shadowRoot and test non-Error catches in save
+    (orchestratorStore as any).orchestrator = createOrchestratorStub();
+    const realEl = new ShadowClawChannelConfig();
+    document.body.appendChild(realEl);
+    await realEl.connectedCallback();
+
+    (configureIMessage as jest.Mock<any>).mockRejectedValueOnce(
+      "imessage save error",
+    );
+    await realEl.saveIMessageConfig();
+    expect(showError).toHaveBeenCalledWith(
+      "Error saving iMessage settings: imessage save error",
+      6000,
+    );
+
+    (configureTelegram as jest.Mock<any>).mockRejectedValueOnce(
+      "telegram save error",
+    );
+    await realEl.saveTelegramConfig();
+    expect(showError).toHaveBeenCalledWith(
+      "Error saving Telegram settings: telegram save error",
+      6000,
+    );
+
+    // Test with null shadowRoot
+    Object.defineProperty(realEl, "shadowRoot", {
+      value: null,
+      configurable: true,
+    });
+    await realEl.saveIMessageConfig();
+    await realEl.saveTelegramConfig();
+
+    // Test with empty root (missing input elements)
+    const emptyRoot = document.createElement("div") as any;
+    Object.defineProperty(realEl, "shadowRoot", {
+      value: emptyRoot,
+      configurable: true,
+    });
+    await realEl.render();
+    realEl.updateChannelFieldAvailability(emptyRoot, false, false);
+    await realEl.saveIMessageConfig();
+    await realEl.saveTelegramConfig();
+
+    document.body.removeChild(realEl);
   });
 });

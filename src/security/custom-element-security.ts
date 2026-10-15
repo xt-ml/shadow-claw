@@ -1,6 +1,6 @@
 import { CONFIG_KEYS } from "../config/config.js";
 import { getDb } from "../db/db.js";
-import { getConfig } from "../db/getConfig.js";
+import { getConfig } from "../db/get-config.js";
 import { getDOMPurify, parseHostPatternMatch } from "./iframe-sanitizer.js";
 import { toTrustedScriptUrl } from "./trusted-types.js";
 

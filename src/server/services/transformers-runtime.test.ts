@@ -521,7 +521,7 @@ describe("TransformersRuntimeService", () => {
 
     it("merges bytes written by env.fetch into progress_total", async () => {
       const events =
-        await import("../../subsystems/providers/utils/createFileModelCacheFetch.js");
+        await import("../../subsystems/providers/utils/create-file-model-cache-fetch.js");
       const service = await getService();
       const totals: any[] = [];
 
@@ -564,7 +564,7 @@ describe("TransformersRuntimeService", () => {
 
     it("removes the download listener when loading fails", async () => {
       const events =
-        await import("../../subsystems/providers/utils/createFileModelCacheFetch.js");
+        await import("../../subsystems/providers/utils/create-file-model-cache-fetch.js");
       const removeSpy = jest.spyOn(
         events.modelDownloadEvents,
         "removeEventListener",

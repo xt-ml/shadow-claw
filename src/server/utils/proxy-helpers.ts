@@ -6,10 +6,8 @@
  * without pulling in unrelated concerns.
  */
 
-import {
-  withRetry,
-  isRetryableHttpError,
-} from "../../worker/utils/withRetry.js";
+import { withRetry, isRetryableHttpError } from "../../utils/retry.js";
+import { isLocalOrPrivateHost } from "../../utils/network.js";
 
 import type { Request, Response as ExpressResponse } from "express";
 
@@ -105,15 +103,7 @@ export function redactSensitiveUrl(rawUrl: string): string {
  * For a hardened deployment add IP-level resolution on top of this guard.
  */
 export function isPrivateOrLoopback(hostname: string): boolean {
-  return (
-    hostname === "localhost" ||
-    hostname === "::1" ||
-    /^127\./.test(hostname) || // 127.0.0.0/8  — loopback
-    /^10\./.test(hostname) || // 10.0.0.0/8   — RFC-1918
-    /^192\.168\./.test(hostname) || // 192.168.0.0/16 — RFC-1918
-    /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) || // 172.16.0.0/12 — RFC-1918
-    /^169\.254\./.test(hostname) // 169.254.0.0/16 — link-local / metadata
-  );
+  return isLocalOrPrivateHost(hostname);
 }
 
 // ---------------------------------------------------------------------------

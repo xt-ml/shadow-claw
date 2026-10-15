@@ -1,6 +1,6 @@
 import { runInNewContext } from "node:vm";
-import type { HeadlessEvalExecutor } from "./sandboxedEval.js";
-import { setHeadlessEvalExecutor } from "./sandboxedEval.js";
+import type { HeadlessEvalExecutor } from "./sandboxed-eval.js";
+import { setHeadlessEvalExecutor } from "./sandboxed-eval.js";
 
 /**
  * Native Node.js node:vm executor for headless CLI / server mode.

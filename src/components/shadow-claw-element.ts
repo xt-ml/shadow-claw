@@ -1,7 +1,7 @@
+import type { ShadowClawDialog } from "./shadow-claw-dialog/shadow-claw-dialog.js";
+
 export default class ShadowClawElement extends HTMLElement {
   static readonly component: string;
-
-  // These now accept the compiled modules directly
   static readonly styles: CSSStyleSheet;
   static readonly template: HTMLElement[];
 
@@ -22,6 +22,7 @@ export default class ShadowClawElement extends HTMLElement {
         const clonedElements = template.map(
           (el) => el.cloneNode(true) as HTMLElement,
         );
+
         shadowRoot.append(...clonedElements);
       }
     }
@@ -33,6 +34,7 @@ export default class ShadowClawElement extends HTMLElement {
       const dsdStyles = this.shadowRoot.querySelectorAll(
         'style[data-dsd-style], link[rel="stylesheet"]',
       );
+
       dsdStyles.forEach((el) => el.remove());
     }
 
@@ -61,11 +63,13 @@ export default class ShadowClawElement extends HTMLElement {
     if (!this.shadowRoot) {
       return;
     }
+
     const dialogs = this.shadowRoot.querySelectorAll("shadow-claw-dialog");
-    for (const dialog of dialogs) {
+    for (const dialog of dialogs as unknown as ShadowClawDialog[]) {
       if (dialog instanceof HTMLElement) {
         customElements.upgrade(dialog);
       }
+
       if (typeof (dialog as any).ensureDialog === "function") {
         (dialog as any).ensureDialog();
       }

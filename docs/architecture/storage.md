@@ -12,7 +12,7 @@ graph TD
   StorageAPI --> OPFS["OPFS Backend (Browser)<br>shadowclaw/<groupId>/workspace/"]
   StorageAPI --> LocalFS["Local Folder Backend (Browser)<br>File System Access API<br>user-chosen directory"]
   StorageAPI --> NodeFS["Node FS Backend (Headless CLI)<br>NodeFsDirectoryHandle<br>real host filesystem"]
-  StorageAPI --> WritePath["writeFileHandle.ts<br>(cross-browser writes)"]
+  StorageAPI --> WritePath["write-file-handle.ts<br>(cross-browser writes)"]
   WritePath --> Standard["createWritable()<br>Modern browsers & Node"]
   WritePath --> Sync["createSyncAccessHandle()<br>OPFS-only, workers"]
   WritePath --> WorkerFB["writeOpfsPathViaWorker()<br>Safari main-thread fallback"]
@@ -25,7 +25,7 @@ The storage root is resolved dynamically:
 1. **Headless CLI Participant**: If running in Node.js via `shadow-claw agent`, `setStorageRootFromPath(workspaceDir)` sets `explicitRoot` to a `NodeFsDirectoryHandle` targeting the host workspace directory.
 2. **User-Selected Local Directory**: In the browser, checks `CONFIG_KEYS.STORAGE_HANDLE` for a directory picked via `showDirectoryPicker()`.
 3. **OPFS Default**: In browser contexts without a local handle, falls back to OPFS root at `/shadowclaw/` via `navigator.storage.getDirectory()`.
-4. **In-Memory Fallback**: If OPFS is restricted or throws a `SecurityError` (e.g. Firefox Private Browsing mode), transparently falls back to an in-memory `FileSystemDirectoryHandle` implementation (`src/storage/memoryStorage.ts`), keeping the application functional and notifying the user.
+4. **In-Memory Fallback**: If OPFS is restricted or throws a `SecurityError` (e.g. Firefox Private Browsing mode), transparently falls back to an in-memory `FileSystemDirectoryHandle` implementation (`src/storage/memory-storage.ts`), keeping the application functional and notifying the user.
 5. Maintains a cached `explicitRoot` handle (invalidated on stale errors).
 6. Probes handle access with `probeHandleAccess()` — uses capability checks since Electron/browsers may misreport `queryPermission`.
 
@@ -60,7 +60,7 @@ Each conversation has an isolated workspace:
 
 In headless CLI mode (`server:main`), the storage root maps directly to the workspace directory without group nesting.
 
-**Path normalization** (`src/storage/parsePath.ts`):
+**Path normalization** (`src/storage/parse-path.ts`):
 
 - Strips leading `/workspace/` and `/` characters
 - Splits on `/`, filters empty segments
@@ -72,7 +72,7 @@ In headless CLI mode (`server:main`), the storage root maps directly to the work
 
 ## Write Path Selection
 
-`src/storage/writeFileHandle.ts` provides cross-browser file writing with fallback mechanisms:
+`src/storage/write-file-handle.ts` provides cross-browser file writing with fallback mechanisms:
 
 ### 1. `createWritable()` (Standard)
 
@@ -98,7 +98,7 @@ syncHandle.close();
 
 Only available for OPFS handles in workers; not on main thread (Safari limitation).
 
-### 3. Worker Fallback (via `writeFileHandle.ts`)
+### 3. Worker Fallback (via `write-file-handle.ts`)
 
 When OPFS main-thread writes fail (`"Writable file streams are not supported"`):
 
@@ -111,7 +111,7 @@ This fallback is applied to both single-file writes/copies and recursive directo
 
 ## Read Paths
 
-`src/storage/readGroupFile.ts` uses a layered approach:
+`src/storage/read-group-file.ts` uses a layered approach:
 
 1. **OPFS worker path** — `createSyncAccessHandle()` for guaranteed fresh reads
 2. **File System Access API path** — `getFile()` + `file.text()` fallback
@@ -119,7 +119,7 @@ This fallback is applied to both single-file writes/copies and recursive directo
 
 ## Write Flow
 
-`writeGroupFile(db, groupId, path, content)` in `src/storage/writeGroupFile.ts`:
+`writeGroupFile(db, groupId, path, content)` in `src/storage/write-group-file.ts`:
 
 1. Navigate to target directory (create nested dirs on-the-fly)
 2. Get or create file handle
@@ -129,7 +129,7 @@ This fallback is applied to both single-file writes/copies and recursive directo
 
 ## Directory Creation Flow
 
-`createGroupDirectory(db, groupId, dirPath)` in `src/storage/createGroupDirectory.ts`:
+`createGroupDirectory(db, groupId, dirPath)` in `src/storage/create-group-directory.ts`:
 
 1. Normalize path separators and trim leading/trailing workspace markers
 2. Reject empty paths early
@@ -157,21 +157,21 @@ This fallback is applied to both single-file writes/copies and recursive directo
 
 ## Zip Export/Import
 
-### Export (`downloadAllGroupFilesAsZip.ts`)
+### Export (`download-all-group-files-as-zip.ts`)
 
 ```mermaid
 flowchart LR
   A[Group workspace] --> B[Recursive directory walk]
-  B --> C[addDirToZip]
+  B --> C[add-dir-to-zip.ts]
   C --> D[JSZip → Blob]
   D --> E["Download via <a href=blob>"]
 ```
 
-Uses the `jszip` library. `addDirToZip.ts` recursively walks directories and adds both files and empty directory markers.
+Uses the `jszip` library. `add-dir-to-zip.ts` recursively walks directories and adds both files and empty directory markers.
 
-A per-directory variant (`downloadGroupDirectoryAsZip.ts`) is available for exporting a subtree without the full workspace.
+A per-directory variant (`download-group-directory-as-zip.ts`) is available for exporting a subtree without the full workspace.
 
-### Import (`restoreAllGroupFilesFromZip.ts`)
+### Import (`restore-all-group-files-from-zip.ts`)
 
 1. Delete all existing files in workspace
 2. Extract zip entries
@@ -228,12 +228,12 @@ To prevent storage state leakage when multiple instances are deployed under subp
    Computes database names as `shadowclaw-${namespace}` (falling back to legacy `"shadowclaw"` when unnamespaced).
 3. **OPFS Root Directory Scope (`getOpfsRootName()`):**
    Computes OPFS root directory handles as `shadow-claw-opfs-${namespace}` (falling back to `"shadowclaw"` when unnamespaced).
-4. **Automated Legacy Migration (`migrateLegacyDatabase.ts` & `migrateLegacyOpfs.ts`):**
+4. **Automated Legacy Migration (`migrate-legacy-database.ts` & `migrate-legacy-opfs.ts`):**
    When booting a namespaced deployment for the first time, ShadowClaw checks if data was previously stored under `"shadowclaw"`.
    - **IndexedDB**: Copies all object stores into the new namespaced database in a single non-destructive pass, setting `DB_MIGRATED_FROM_LEGACY`.
    - **OPFS**: Recursively copies all legacy workspace directories and files from `"shadowclaw"` into `"shadowclaw-${namespace}"` (with Safari worker write fallback), setting `OPFS_MIGRATED_FROM_LEGACY`.
      The legacy storage is left intact as a fallback seed.
-5. **Namespaced `localStorage` (`namespacedStorage.ts`):**
+5. **Namespaced `localStorage` (`namespaced-storage.ts`):**
    Key pattern `shadowclaw:${namespace}:${key}` with automatic one-time copy-on-read from legacy unprefixed keys.
 
 ## Files Browser Safeguards & Clipboard Operations

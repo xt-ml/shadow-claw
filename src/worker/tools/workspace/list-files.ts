@@ -1,5 +1,5 @@
 import { ShadowClawDatabase } from "../../../db/types.js";
-import { listGroupFiles } from "../../../storage/listGroupFiles.js";
+import { listGroupFiles } from "../../../storage/list-group-files.js";
 
 export async function executeListFiles(
   db: ShadowClawDatabase,

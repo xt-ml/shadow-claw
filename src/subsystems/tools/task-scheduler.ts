@@ -1,5 +1,5 @@
-import { getEnabledTasks } from "../../db/getEnabledTasks.js";
-import { updateTaskLastRun } from "../../db/updateTaskLastRun.js";
+import { getEnabledTasks } from "../../db/get-enabled-tasks.js";
+import { updateTaskLastRun } from "../../db/update-task-last-run.js";
 import { matchesCron } from "./cron.js";
 
 import { SCHEDULER_INTERVAL } from "../../config/config.js";

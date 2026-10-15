@@ -1,0 +1,22 @@
+{
+  "extends": "./base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "../..",
+    "lib": ["ESNext", "DOM"],
+    "types": ["jest"]
+  },
+  "include": [
+    "../../src/**/*.css",
+    "../../src/**/*.html",
+    "../../src/**/*.ts",
+    "../jest/**/*.d.ts"
+  ],
+  "exclude": [
+    "../../**/*.stories.ts",
+    "../../node_modules",
+    "../../dist",
+    "../../e2e",
+    "../../src/cli"
+  ]
+}

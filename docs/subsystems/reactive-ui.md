@@ -406,8 +406,8 @@ import { namespacedStorage, ulid } from "shadow-claw/utils";
 
 ### Library Build Pipeline
 
-1. **Type Definitions**: `npm run tsc:lib` runs `tsc -p tsconfig.lib.json` to emit `.d.ts` declaration maps under `dist/lib/`.
-2. **ESM Bundling**: `npm run build:lib` invokes Rolldown with `rolldown.lib.config.mjs` to produce tree-shakeable ESM bundles in `dist/lib/` corresponding to package export paths (`.`, `./cli`, `./cli/*`, `./components`, `./components/*`, `./utils`, `./utils/*`). Entry points across `src/components/` and `src/utils/` are dynamically discovered via `getLibraryEntries()`.
+1. **Type Definitions**: `npm run tsc:lib` runs `tsc -p configs/tsconfig/lib.json` to emit `.d.ts` declaration maps under `dist/lib/`.
+2. **ESM Bundling**: `npm run build:lib` invokes Rolldown with `configs/rolldown/rolldown.lib.config.mjs` to produce tree-shakeable ESM bundles in `dist/lib/` corresponding to package export paths (`.`, `./cli`, `./cli/*`, `./components`, `./components/*`, `./utils`, `./utils/*`). Entry points across `src/components/` and `src/utils/` are dynamically discovered via `getLibraryEntries()`.
 
 ## Storybook Component Workbench
 

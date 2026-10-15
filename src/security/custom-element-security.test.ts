@@ -587,4 +587,108 @@ describe("custom-element-security", () => {
       expect(isApprovedScript("/pages/main/assets/valid.js")).toBe(true);
     });
   });
+
+  describe("additional edge cases and configuration branches", () => {
+    it("handles normalizeElementList and normalizePatternList string and fallback inputs", () => {
+      setAllowedCustomElements("elem-one, elem-two\nelem-three");
+      expect(isAllowedCustomElement("elem-one")).toBe(true);
+      expect(isAllowedCustomElement("elem-two")).toBe(true);
+      expect(isAllowedCustomElement("elem-three")).toBe(true);
+
+      setAllowedCustomElements(123 as any);
+      expect(getAllowedCustomElements()).toEqual([]);
+
+      setAllowedCustomElementHostPatterns("cdn1.com, cdn2.com\ncdn3.org");
+      expect(getAllowedCustomElementHostPatterns()).toContain("cdn1.com");
+      expect(getAllowedCustomElementHostPatterns()).toContain("cdn2.com");
+      expect(getAllowedCustomElementHostPatterns()).toContain("cdn3.org");
+
+      setAllowedCustomElementHostPatterns(null as any);
+      expect(getAllowedCustomElementHostPatterns()).toEqual([]);
+    });
+
+    it("handles invalid or empty inputs in isAllowedCustomElement and isSafeCustomElementSource", () => {
+      expect(isAllowedCustomElement("")).toBe(false);
+      expect(isAllowedCustomElement(null as any)).toBe(false);
+      expect(isAllowedCustomElement(undefined as any)).toBe(false);
+      expect(isAllowedCustomElement(123 as any)).toBe(false);
+
+      expect(isSafeCustomElementSource("")).toBe(false);
+      expect(isSafeCustomElementSource("   ")).toBe(false);
+      expect(isSafeCustomElementSource(null as any)).toBe(false);
+      expect(isSafeCustomElementSource(undefined as any)).toBe(false);
+    });
+
+    it("configures security CSP overrides and allowSameOrigin", () => {
+      configureCustomElementSecurity(null as any);
+
+      configureCustomElementSecurity({
+        security: {
+          allowSameOrigin: true,
+          workerSrc: ["blob:", "data:"],
+          connectSrc: "https://api.custom.com",
+          scriptSrc: ["https://cdn.custom.com"],
+          styleSrc: "https://fonts.custom.com",
+          imgSrc: ["https://images.custom.com"],
+        },
+      });
+
+      expect(getIframeSandboxPolicy()).toContain("allow-same-origin");
+      const csp = getIframeCsp("test-nonce");
+      expect(csp).toContain("https://api.custom.com");
+      expect(csp).toContain("https://cdn.custom.com");
+    });
+
+    it("reads approved script descriptors from embedded site config script element", () => {
+      setApprovedCustomElementScripts([]);
+      const script = document.createElement("script");
+      script.id = "shadow-claw-site-config";
+      script.type = "application/json";
+      script.textContent = JSON.stringify({
+        customElements: {
+          scripts: [{ src: "/assets/embedded-comp.js", hasInit: true }],
+        },
+      });
+      document.body.appendChild(script);
+
+      try {
+        const descriptors = getApprovedCustomElementScriptDescriptors();
+        expect(descriptors).toHaveLength(1);
+        expect(descriptors[0].src).toBe("/assets/embedded-comp.js");
+        expect(descriptors[0].hasInit).toBe(true);
+      } finally {
+        script.remove();
+        setApprovedCustomElementScripts([]);
+      }
+    });
+
+    it("verifies getCustomElementPurifyConfig tagNameCheck and attributeNameCheck", () => {
+      setAllowedCustomElements(["allowed-comp"]);
+      const config = getCustomElementPurifyConfig();
+      const tagNameCheck = config.CUSTOM_ELEMENT_HANDLING?.tagNameCheck as
+        ((t: string) => boolean) | undefined;
+      const attributeNameCheck = config.CUSTOM_ELEMENT_HANDLING
+        ?.attributeNameCheck as ((a: string) => boolean) | undefined;
+      expect(tagNameCheck?.("allowed-comp")).toBe(true);
+      expect(tagNameCheck?.("forbidden-comp")).toBe(false);
+      expect(tagNameCheck?.("div")).toBe(true);
+      expect(attributeNameCheck?.("some-attr")).toBe(true);
+    });
+
+    it("strips unapproved custom elements and unapproved scripts during sanitization", () => {
+      setAllowedCustomElements([]);
+      setApprovedCustomElementScripts(["/pages/main/assets/safe.js"]);
+
+      const html =
+        '<div><bad-elem>text</bad-elem><script src="/pages/main/assets/bad.js"></script><script>inline()</script></div>';
+      const clean = sanitizeHtml(html, {
+        ...getCustomElementPurifyConfig(),
+        ADD_TAGS: ["script", "bad-elem"],
+        ADD_ATTR: ["src"],
+      });
+      expect(clean).not.toContain("<bad-elem");
+      expect(clean).not.toContain("bad.js");
+      expect(clean).not.toContain("inline()");
+    });
+  });
 });

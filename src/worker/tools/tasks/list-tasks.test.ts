@@ -3,7 +3,7 @@ import type { ShadowClawDatabase } from "../../../db/types.js";
 
 const mockGetGroupTasks = jest.fn<() => Promise<unknown[]>>();
 
-jest.unstable_mockModule("./tasks-utils.js", () => ({
+jest.unstable_mockModule("../../../db/get-group-tasks.js", () => ({
   getGroupTasks: mockGetGroupTasks,
 }));
 

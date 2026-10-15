@@ -119,4 +119,39 @@ describe("crypto helpers", () => {
 
     expect(plain).toBe("secret");
   });
+
+  it("returns null from encryptValue and decryptValue when database returns null", async () => {
+    Object.defineProperty(globalThis, "indexedDB", {
+      configurable: true,
+      writable: true,
+      value: {
+        open: () => {
+          const req: any = { result: null };
+          setTimeout(() => req.onsuccess?.(), 0);
+          return req;
+        },
+      },
+    });
+
+    const { encryptValue, decryptValue } = await import("./crypto.js");
+    expect(await encryptValue("test")).toBeNull();
+    expect(await decryptValue("test")).toBeNull();
+  });
+
+  it("handles IndexedDB error events properly", async () => {
+    Object.defineProperty(globalThis, "indexedDB", {
+      configurable: true,
+      writable: true,
+      value: {
+        open: () => {
+          const req: any = { error: new Error("IDB open failed") };
+          setTimeout(() => req.onerror?.(), 0);
+          return req;
+        },
+      },
+    });
+
+    const { encryptValue } = await import("./crypto.js");
+    await expect(encryptValue("test")).rejects.toThrow("IDB open failed");
+  });
 });

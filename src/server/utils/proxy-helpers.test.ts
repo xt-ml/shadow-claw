@@ -657,5 +657,114 @@ describe("proxy-helpers", () => {
 
       expect(res.status).toHaveBeenCalledWith(200);
     });
+
+    it("handles fetch error before and after headers sent in streaming proxy", async () => {
+      const errSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+      // Before headers sent
+      const res1 = {
+        headersSent: false,
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn(),
+        end: jest.fn(),
+      } as any;
+      (global.fetch as any).mockRejectedValueOnce(new Error("Network dead"));
+
+      await handleStreamingProxyRequest({} as any, res1, {
+        targetUrl: "https://example.com/stream",
+        headers: {},
+      });
+      expect(res1.status).toHaveBeenCalledWith(500);
+
+      // After headers sent
+      const res2 = {
+        headersSent: true,
+        end: jest.fn(),
+      } as any;
+      (global.fetch as any).mockRejectedValueOnce(new Error("Stream abort"));
+
+      await handleStreamingProxyRequest({} as any, res2, {
+        targetUrl: "https://example.com/stream",
+        headers: {},
+      });
+      expect(res2.end).toHaveBeenCalled();
+
+      errSpy.mockRestore();
+    });
+  });
+
+  describe("parseLooseFunctionCallArgs and parseLooseToolCallInput", () => {
+    it("parses booleans, numbers, nulls, and strings in parseLooseFunctionCallArgs", () => {
+      expect(parseLooseFunctionCallArgs("")).toEqual({});
+      const parsed = parseLooseFunctionCallArgs(
+        'enabled=true, disabled=false, none=null, count=42, price=19.99, text="hello, world", unquoted=plain, invalidpart, =nokey',
+      );
+      expect(parsed).toEqual({
+        enabled: true,
+        disabled: false,
+        none: null,
+        count: 42,
+        price: 19.99,
+        text: "hello, world",
+        unquoted: "plain",
+      });
+    });
+
+    it("parses booleans, numbers, and strings in parseLooseToolCallInput", () => {
+      expect(parseLooseToolCallInput("   ")).toEqual({});
+      const parsed = parseLooseToolCallInput(
+        'active: true, inactive: false, total: 100, delta: -5.5, label: "test val", invalid, :nokey',
+      );
+      expect(parsed).toEqual({
+        active: true,
+        inactive: false,
+        total: 100,
+        delta: -5.5,
+        label: "test val",
+      });
+    });
+  });
+
+  describe("additional network helper branches", () => {
+    it("tests comprehensive isPrivateOrLoopback hostnames", () => {
+      expect(isPrivateOrLoopback("::1")).toBe(true);
+      expect(isPrivateOrLoopback("127.0.0.1")).toBe(true);
+      expect(isPrivateOrLoopback("10.0.0.1")).toBe(true);
+      expect(isPrivateOrLoopback("192.168.1.1")).toBe(true);
+      expect(isPrivateOrLoopback("172.16.0.1")).toBe(true);
+      expect(isPrivateOrLoopback("172.31.255.255")).toBe(true);
+      expect(isPrivateOrLoopback("169.254.169.254")).toBe(true);
+
+      // Public / outside ranges
+      expect(isPrivateOrLoopback("172.15.0.1")).toBe(false);
+      expect(isPrivateOrLoopback("172.32.0.1")).toBe(false);
+      expect(isPrivateOrLoopback("8.8.8.8")).toBe(false);
+      expect(isPrivateOrLoopback("example.com")).toBe(false);
+    });
+
+    it("falls back to regex redaction when redactSensitiveUrl receives invalid URL", () => {
+      const redacted = redactSensitiveUrl(
+        "http://[invalid-url]/file/bot12345:ABCDE/pic.png",
+      );
+      expect(redacted).toContain("/file/bot[REDACTED]/");
+
+      const botRedacted = redactSensitiveUrl(
+        "http://[invalid-url]/bot12345:ABCDE/method",
+      );
+      expect(botRedacted).toContain("/bot[REDACTED]/");
+    });
+
+    it("handles fetchWithTimeout non-AbortError and zero timeout", async () => {
+      (global.fetch as any).mockResolvedValueOnce({ ok: true, status: 200 });
+      const res = await fetchWithTimeout("https://example.com", {}, 0);
+      expect(res.status).toBe(200);
+
+      (global.fetch as any).mockRejectedValueOnce(
+        new TypeError("Protocol error"),
+      );
+      await expect(
+        fetchWithTimeout("https://example.com", {}, 1000),
+      ).rejects.toThrow("Protocol error");
+    });
   });
 });

@@ -240,5 +240,50 @@ describe("src/cli/tools/version.ts", () => {
         await rm(tempDir, { recursive: true, force: true });
       }
     });
+
+    it("detects lifecycle event from process.env", async () => {
+      const prevCmd = process.env.npm_command;
+      const prevEvent = process.env.npm_lifecycle_event;
+      const tempDir = await mkdtemp(path.join(os.tmpdir(), "env-lifecycle-"));
+      try {
+        process.env.npm_command = "version";
+        process.env.npm_lifecycle_event = "version";
+        await writeFile(
+          path.join(tempDir, "package.json"),
+          JSON.stringify({ name: "env-lifecycle-pkg", version: "3.0.0" }),
+          "utf8",
+        );
+        const result = await runVersion([], { rootDir: tempDir });
+        expect(result.version).toBe("3.0.0");
+      } finally {
+        process.env.npm_command = prevCmd;
+        process.env.npm_lifecycle_event = prevEvent;
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it("filters out leading flags to find targetArg", async () => {
+      const tempDir = await mkdtemp(path.join(os.tmpdir(), "leading-flags-"));
+      try {
+        await writeFile(
+          path.join(tempDir, "package.json"),
+          JSON.stringify({ name: "flag-test", version: "1.0.0" }),
+          "utf8",
+        );
+        const result = await runVersion(["--silent", "1.0.1"], {
+          rootDir: tempDir,
+          execOptions: { cwd: tempDir, stdio: "pipe" },
+        });
+        expect(result.version).toBe("1.0.1");
+      } finally {
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    });
+
+    it("throws error for unrecognized invalid semver string", async () => {
+      await expect(
+        runVersion(["bad-semver"], { stdio: "pipe" }),
+      ).rejects.toThrow("Invalid version string");
+    });
   });
 });

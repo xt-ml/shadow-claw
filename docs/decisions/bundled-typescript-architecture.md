@@ -15,11 +15,14 @@ Migrate the entire codebase to **TypeScript (`.ts`)** compiled and bundled with 
 
 - **TypeScript** — strict type-checking across the board, shared interfaces via feature-local `*types.ts` modules (for example `src/subsystems/worker/types.ts`), typed messages for the worker protocol
 - **Rolldown** — produces single-file bundles for frontend, worker, service workers, server, and Electron. Handles Node polyfills via `rollup-plugin-polyfill-node` + aliasing
-- **Multiple tsconfig files** — distinct TypeScript configurations for each runtime context:
-  - `tsconfig.json` — frontend app (browser, DOM)
-  - `tsconfig.agent.worker.json` — worker runtime (WebWorker)
-  - `tsconfig.service.worker.json` — service workers (ServiceWorker)
-  - `tsconfig.server.json` — server (Node.js)
+- **Multiple tsconfig files** — distinct TypeScript configurations for each runtime context in `configs/tsconfig/` (with a root solution-style `tsconfig.json` referencing them):
+  - `configs/tsconfig/app.json` — frontend app (browser, DOM)
+  - `configs/tsconfig/worker.json` — worker runtime (WebWorker)
+  - `configs/tsconfig/service-worker.json` — service workers (ServiceWorker)
+  - `configs/tsconfig/server.json` — server (Node.js)
+  - `configs/tsconfig/cli.json` — CLI tools (Node.js)
+  - `configs/tsconfig/lib.json` — library declaration emit
+  - `configs/tsconfig/test.json` — test environment
 - **Jest custom resolver (`jest-ts-resolver.cjs`)** — maps `.js` imports to `.ts` files in the test environment, so TypeScript's recommended convention of writing `import from "./foo.js"` works without `@ts-ignore`
 - **esbuild for TypeScript transpilation** inside Rolldown (via `rollup-plugin-esbuild`) — faster than `ts-loader` or `tsc` for bundling
 - **Co-located component assets** — HTML templates and CSS stylesheets move into component subdirectories with the TypeScript source, co-located for clarity
@@ -37,7 +40,7 @@ Migrate the entire codebase to **TypeScript (`.ts`)** compiled and bundled with 
 ### Disadvantages
 
 - **Build step required** — `npm run build` before running. Dev loop is now: edit → build → refresh.
-- **Rolldown config complexity** — `rolldown.config.mjs` is ~300 lines managing six separate bundles, plugin configuration, and asset copying
+- **Rolldown config complexity** — `configs/rolldown/rolldown.config.mjs` manages separate bundles, plugin configuration, and asset copying
 - **TypeScript can be strict** — some areas use `as any` to bridge JavaScript interop
 - **Large initial migration** — the `.mjs` → `.ts` migration touched every source file
 

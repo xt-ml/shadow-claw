@@ -609,7 +609,7 @@ describe("worker/tools/fetch-url", () => {
     );
 
     // HttpError instance thrown during fetch
-    const { HttpError } = await import("../utils/HttpError.js");
+    const { HttpError } = await import("../../../utils/http-error.js");
     deps.fetchImpl = jest.fn(async () => {
       throw new HttpError(
         503,

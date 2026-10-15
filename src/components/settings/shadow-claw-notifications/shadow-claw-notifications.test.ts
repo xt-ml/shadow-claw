@@ -22,11 +22,11 @@ jest.unstable_mockModule("../../../ui/toast.js", () => ({
   showError: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../../db/setConfig.js", () => ({
+jest.unstable_mockModule("../../../db/set-config.js", () => ({
   setConfig: jest.fn<any>().mockResolvedValue(undefined),
 }));
 
-jest.unstable_mockModule("../../../db/getConfig.js", () => ({
+jest.unstable_mockModule("../../../db/get-config.js", () => ({
   getConfig: jest.fn<any>().mockResolvedValue(undefined),
 }));
 
@@ -326,5 +326,130 @@ describe("shadow-claw-notifications", () => {
     await new Promise((r) => setTimeout(r, 50));
 
     document.body.removeChild(el);
+  });
+
+  it("handles 410 expired subscription, json error response, and custom payload", async () => {
+    const { showError } = await import("../../../ui/toast.js");
+    const el = new ShadowClawNotifications();
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 50));
+
+    el._subscriptions = [
+      { id: 42, endpoint: "https://expired.push/42", created_at: "now" },
+    ];
+    el._selectedId = 42;
+
+    const input = el.shadowRoot?.querySelector(
+      '[data-input="notification-text"]',
+    ) as HTMLInputElement;
+    if (input) {
+      input.value = "Custom message";
+    }
+
+    // 410 response
+    global.fetch = jest.fn<any>().mockResolvedValue({
+      ok: false,
+      status: 410,
+    });
+    await el.handleSendNotification();
+    expect(showError).toHaveBeenCalledWith(
+      "Subscription expired and was removed.",
+    );
+
+    // non-410 with json error - re-populate subscriptions and re-select since loadSubscriptions resets both
+    el._subscriptions = [
+      { id: 42, endpoint: "https://expired.push/42", created_at: "now" },
+    ];
+    el._selectedId = 42;
+    global.fetch = jest.fn<any>().mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: () => Promise.resolve({ error: "Payload malformed" }),
+    });
+    await el.handleSendNotification();
+    expect(showError).toHaveBeenCalledWith("Failed to send: Payload malformed");
+
+    // send with missing sub in array
+    el._selectedId = 999;
+    await el.handleSendNotification();
+
+    // send with null selectedId
+    el._selectedId = null;
+    await el.handleSendNotification();
+
+    document.body.removeChild(el);
+  });
+
+  it("handles empty subscription list with backend unavailable and missing list query", async () => {
+    const el = new ShadowClawNotifications();
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 50));
+
+    el._subscriptions = [];
+    el._backendAvailable = false;
+    el.renderSubscriptionList();
+
+    const empty = el.shadowRoot?.querySelector("shadow-claw-empty-state");
+    expect(empty?.getAttribute("message")).toContain(
+      "Backend services unavailable",
+    );
+
+    // missing list query
+    const fakeRoot = document.createElement("div");
+    Object.defineProperty(el, "shadowRoot", {
+      value: fakeRoot,
+      configurable: true,
+    });
+    el.renderSubscriptionList();
+
+    document.body.removeChild(el);
+  });
+
+  it("handles static host without proxy url in loadSubscriptions", async () => {
+    const el = new ShadowClawNotifications();
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 50));
+
+    const symbols = Object.getOwnPropertySymbols(window.location);
+    const impl = symbols[0] ? (window.location as any)[symbols[0]] : null;
+    const originalHost = impl?._relevantDocument?._URL?.host;
+
+    try {
+      if (impl?._relevantDocument?._URL) {
+        impl._relevantDocument._URL.host = "test.github.io";
+      }
+
+      await el.loadSubscriptions();
+      expect(el._backendAvailable).toBe(false);
+      expect(el._subscriptions).toEqual([]);
+    } finally {
+      if (impl?._relevantDocument?._URL && originalHost) {
+        impl._relevantDocument._URL.host = originalHost;
+      }
+      document.body.removeChild(el);
+    }
+  });
+
+  it("guards against null shadowRoot across methods and throws in connectedCallback", async () => {
+    const el = new ShadowClawNotifications();
+    Object.defineProperty(el, "shadowRoot", {
+      value: null,
+      configurable: true,
+    });
+
+    await expect(el.connectedCallback()).rejects.toThrow(
+      "shadowRoot not found",
+    );
+    el.bindEventListeners();
+    el.renderSubscriptionList();
+    el.updateActionButtons();
+    el.updateToggle();
+    await el.handleSendNotification();
+    await el.loadProxyConfig();
+    await el.loadSubscriptions();
+
+    // handleDeleteSubscription with null selectedId
+    el._selectedId = null;
+    await el.handleDeleteSubscription();
   });
 });

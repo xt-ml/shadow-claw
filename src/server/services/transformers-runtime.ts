@@ -21,13 +21,13 @@ import { parsePositiveInteger } from "../utils/proxy-helpers.js";
 import {
   normalizeMessagesForChatTemplate,
   renderChatTemplate,
-} from "../../subsystems/providers/utils/chatTemplate.js";
+} from "../../subsystems/providers/utils/chat-template.js";
 import {
   createFileModelCacheFetch,
   patchFileCacheForResume,
   modelDownloadEvents,
   DownloadProgressEvent,
-} from "../../subsystems/providers/utils/createFileModelCacheFetch.js";
+} from "../../subsystems/providers/utils/create-file-model-cache-fetch.js";
 
 const DEFAULT_USER_AGENT =
   process.env.SHADOWCLAW_USER_AGENT || "ShadowClaw/1.0";

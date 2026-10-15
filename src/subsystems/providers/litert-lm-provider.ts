@@ -16,9 +16,9 @@
 
 import { sanitizeModelOutput } from "../../content/chat-template-sanitizer.js";
 import { ShadowClawDatabase } from "../../db/db.js";
-import { createLogMessage } from "../../worker/utils/createLogMessage.js";
-import { createToolActivityMessage } from "../../worker/utils/createToolActivityMessage.js";
-import { executeTool } from "../../worker/utils/executeTool.js";
+import { createLogMessage } from "../../worker/utils/create-log-message.js";
+import { createToolActivityMessage } from "../../worker/utils/create-tool-activity-message.js";
+import { executeTool } from "../../worker/utils/execute-tool.js";
 import { setPostHandler } from "../../worker/utils/post.js";
 import { ToolDefinition } from "../tools/tools.js";
 
@@ -65,7 +65,7 @@ import {
   DEFAULT_CHUNK_SIZE,
   type ModelProgressCallback as LiteRtProgressCallback,
 } from "./utils/types.js";
-import { loadModelStream } from "./utils/loadModelStream.js";
+import { loadModelStream } from "./utils/load-model-stream.js";
 
 /**
  * Persistent Cache Storage bucket for downloaded `.litertlm` model weights.

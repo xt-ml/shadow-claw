@@ -1,0 +1,52 @@
+import { applyBasePath, buildRoutePath } from "../../../core/app-routes.js";
+import { applyRoute } from "./apply-route.js";
+import { historyState } from "./history-state.js";
+import { supportsNavigationApi } from "./supports-navigation-api.js";
+
+import type { ShadowClawAppRoute } from "../../../core/app-routes.js";
+import type { ShadowClawDatabase } from "../../../db/types.js";
+import type { FileViewerStore } from "../../../stores/file-viewer.js";
+import type { OrchestratorStore } from "../../../stores/orchestrator.js";
+import type { ShadowClaw } from "../shadow-claw.js";
+
+export async function navigateToRoute(
+  shadow: ShadowRoot,
+  shadowClaw: ShadowClaw,
+  db: ShadowClawDatabase,
+  fStore: FileViewerStore,
+  oStore: OrchestratorStore,
+  route: ShadowClawAppRoute,
+  options: { replace?: boolean } = { replace: false },
+): Promise<void> {
+  const targetPath = buildRoutePath(route);
+  const finalPath = applyBasePath(targetPath);
+
+  const currentPath =
+    typeof window !== "undefined" && window.location
+      ? `${window.location.pathname}${window.location.search}${window.location.hash}`
+      : "";
+
+  if (currentPath && finalPath === currentPath) {
+    await applyRoute(shadow, shadowClaw, db, fStore, oStore, route);
+    return;
+  }
+
+  if (supportsNavigationApi()) {
+    const nav = (window as any).navigation;
+
+    nav.navigate(finalPath, {
+      history: options.replace ? "replace" : "push",
+    });
+
+    return;
+  }
+
+  if (finalPath !== window.location.pathname) {
+    historyState(globalThis.history, finalPath, {
+      ...options,
+      useTrailingSlash: false,
+    });
+  }
+
+  await applyRoute(shadow, shadowClaw, db, fStore, oStore, route);
+}

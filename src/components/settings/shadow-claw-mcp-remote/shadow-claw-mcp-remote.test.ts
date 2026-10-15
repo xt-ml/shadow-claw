@@ -13,7 +13,7 @@ jest.unstable_mockModule("../../../db/db.js", () => ({
   getDb: mockGetDb,
 }));
 
-jest.unstable_mockModule("../../../db/getConfig.js", () => ({
+jest.unstable_mockModule("../../../db/get-config.js", () => ({
   getConfig: mockGetConfig,
 }));
 
@@ -780,5 +780,87 @@ describe("shadow-claw-mcp-remote", () => {
     expect(spy).toHaveBeenCalled();
     spy.mockRestore();
     document.body.removeChild(el);
+  });
+
+  it("handles null db and shadowRoot guards across methods", async () => {
+    const el = new ShadowClawMcpRemote() as any;
+    el.db = null;
+    expect(await el.saveConnectionForm()).toBeUndefined();
+    expect(await el.testConnection("c1")).toBeUndefined();
+    expect(await el.deleteConnection("c1")).toBeUndefined();
+    expect(await el.reconnectOAuth("c1")).toBeUndefined();
+    expect(await el.render()).toBeUndefined();
+
+    // With db but without slot
+    el.db = {} as any;
+    expect(await el.saveConnectionForm()).toBeUndefined();
+  });
+
+  it("validates custom header authentication in buildCredentialRef", async () => {
+    const el = new ShadowClawMcpRemote() as any;
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    el.db = {} as any;
+    el.showConnectionForm("new");
+
+    const slot = el.shadowRoot.querySelector(
+      '[data-region="connection-form-slot"]',
+    );
+    const headerNameInput = slot.querySelector(
+      '[data-field="custom-header-name"]',
+    );
+    const headerValueInput = slot.querySelector(
+      '[data-field="custom-header-value"]',
+    );
+
+    // Missing header name
+    headerNameInput.value = "";
+    await expect(
+      el.buildCredentialRef(slot, "custom_header", null),
+    ).rejects.toThrow("Header name is required");
+
+    // Header name provided but empty value without existing connection
+    headerNameInput.value = "X-MCP-Token";
+    headerValueInput.value = "";
+    await expect(
+      el.buildCredentialRef(slot, "custom_header", null),
+    ).rejects.toThrow("Header value is required");
+
+    // Header name provided, empty value, but existing connection has encryptedValue
+    const existing = {
+      credentialRef: {
+        authType: "custom_header",
+        encryptedValue: "enc-stored",
+      },
+    };
+    const ref = await el.buildCredentialRef(slot, "custom_header", existing);
+    expect(ref.encryptedValue).toBe("enc-stored");
+    expect(ref.headerName).toBe("X-MCP-Token");
+
+    document.body.removeChild(el);
+  });
+
+  it("handles null shadowRoot and hides connection form when deleting active editing connection", async () => {
+    const el = new ShadowClawMcpRemote() as any;
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    el.db = {} as any;
+
+    // Delete connection while editing it
+    mockDeleteConnection.mockResolvedValue(true);
+    el.editingConnectionId = "conn-edit-me";
+    const hideSpy = jest.spyOn(el, "hideConnectionForm");
+    await el.deleteConnection("conn-edit-me");
+    expect(hideSpy).toHaveBeenCalled();
+
+    // With null shadowRoot
+    Object.defineProperty(el, "shadowRoot", {
+      value: null,
+      configurable: true,
+    });
+    expect(await el.saveConnectionForm()).toBeUndefined();
+    expect(await el.testConnection("conn-1")).toBeUndefined();
+
+    el.remove();
   });
 });

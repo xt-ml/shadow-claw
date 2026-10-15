@@ -1,9 +1,9 @@
 import { InMemoryFs } from "just-bash";
-import { readGroupFileBytes } from "../storage/readGroupFileBytes.js";
-import { writeGroupFile } from "../storage/writeGroupFile.js";
-import { deleteGroupFile } from "../storage/deleteGroupFile.js";
-import { listGroupFiles } from "../storage/listGroupFiles.js";
-import { createGroupDirectory } from "../storage/createGroupDirectory.js";
+import { readGroupFileBytes } from "../storage/read-group-file-bytes.js";
+import { writeGroupFile } from "../storage/write-group-file.js";
+import { deleteGroupFile } from "../storage/delete-group-file.js";
+import { listGroupFiles } from "../storage/list-group-files.js";
+import { createGroupDirectory } from "../storage/create-group-directory.js";
 import type { ShadowClawDatabase } from "../db/types.js";
 
 export class ShadowClawFileSystem extends InMemoryFs {

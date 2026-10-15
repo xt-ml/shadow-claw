@@ -1,6 +1,6 @@
 import { jest } from "@jest/globals";
 
-jest.unstable_mockModule("../../storage/readGroupFileBytes.js", () => ({
+jest.unstable_mockModule("../../storage/read-group-file-bytes.js", () => ({
   readGroupFileBytes: jest.fn(
     async (_db: any, _groupId: string, filePath: string) => {
       if (filePath.includes("error")) {
@@ -12,11 +12,11 @@ jest.unstable_mockModule("../../storage/readGroupFileBytes.js", () => ({
 }));
 
 import { setDB } from "../../db/db.js";
-import { registerBasicFunctions } from "../../ui/a2ui/registries/basicFunctions.js";
+import { registerBasicFunctions } from "../../ui/a2ui/registries/basic-functions.js";
 import { A2UI_BASIC_CATALOG_ID } from "../../ui/a2ui/types.js";
-import { applyDataModelPatches } from "../../ui/a2ui/utils/applyDataModelUpdate.js";
-import { resolveDynamicString } from "../../ui/a2ui/utils/resolveDynamicString.js";
-import { resolveJsonPointer } from "../../ui/a2ui/utils/resolveJsonPointer.js";
+import { applyDataModelPatches } from "../../ui/a2ui/utils/apply-data-model-update.js";
+import { resolveDynamicString } from "../../ui/a2ui/utils/resolve-dynamic-string.js";
+import { resolveJsonPointer } from "../../ui/a2ui/utils/resolve-json-pointer.js";
 
 import type { A2UICreateSurface } from "../../ui/a2ui/types.js";
 
@@ -145,7 +145,7 @@ describe("applyDataModelPatches", () => {
 // ---------------------------------------------------------------------------
 
 // Mock readGroupFileBytes for workspace media resolution
-jest.mock("../../storage/readGroupFileBytes.js", () => ({
+jest.mock("../../storage/read-group-file-bytes.js", () => ({
   readGroupFileBytes: jest.fn(
     async (_db: any, _groupId: string, filePath: string) => {
       if (filePath.includes("error")) {

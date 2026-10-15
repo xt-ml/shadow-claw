@@ -1,4 +1,4 @@
-import { computeSha256 } from "../../../utils/utils.js";
+import { computeSha256 } from "../../../utils/crypto.js";
 import type { RemoteManifest, ResolvedRemoteManifest } from "./types.js";
 
 const WELL_KNOWN_PATH = ".well-known/agent-skills/index.json";

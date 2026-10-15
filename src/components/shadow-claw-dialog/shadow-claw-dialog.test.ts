@@ -107,6 +107,34 @@ describe("shadow-claw-dialog", () => {
     expect(dialog.hasAttribute("open")).toBe(false);
     expect(dialog.returnValue).toBe("closed-val");
 
+    // Close again without returnValue argument
+    el.showModal();
+    expect(dialog.hasAttribute("open")).toBe(true);
+    el.close();
+    expect(dialog.hasAttribute("open")).toBe(false);
+
+    document.body.removeChild(el);
+  });
+
+  it("handles attributeChangedCallback safely before dialog is attached", () => {
+    const el = new ShadowClawDialog();
+    // Prior to connectedCallback/ensureDialog, this._dialog is null
+    expect(() => el.attributeChangedCallback()).not.toThrow();
+    expect(el.open).toBe(false);
+    expect(el.returnValue).toBe("");
+    expect(() => {
+      el.returnValue = "initial";
+    }).not.toThrow();
+  });
+
+  it("ensures dialog is idempotent when called repeatedly", () => {
+    const el = new ShadowClawDialog();
+    document.body.appendChild(el);
+
+    const firstDialog = el.dialog;
+    el.ensureDialog();
+    expect(el.dialog).toBe(firstDialog);
+
     document.body.removeChild(el);
   });
 });

@@ -692,7 +692,7 @@ describe("CLI MCP Engine (createCliMcpEngine)", () => {
 
     afterEach(async () => {
       const { closeSqliteDatabase } =
-        await import("../../db/sqlite/openSqliteDatabase.js").catch(() => ({
+        await import("../../db/sqlite/open-sqlite-database.js").catch(() => ({
           closeSqliteDatabase: () => {},
         }));
       closeSqliteDatabase?.();

@@ -708,7 +708,7 @@ export async function initGitFs(): Promise<{
         }
         if (!opfsRoot) {
           const { getMemoryOpfsRoot } =
-            await import("../../storage/memoryStorage.js");
+            await import("../../storage/memory-storage.js");
           opfsRoot = getMemoryOpfsRoot();
         }
         _fs = makeDirHandleFs(opfsRoot);

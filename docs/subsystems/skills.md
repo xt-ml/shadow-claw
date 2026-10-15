@@ -130,14 +130,14 @@ Skills can be discovered and imported across compatible templates and peer sites
 
 ## Source locations
 
-- `src/subsystems/skills/parseSkill.ts` — frontmatter parsing, validation, and suppression cascading
-- `src/subsystems/skills/parseSkillCommand.ts` — slash command parsing and skill resolution
-- `src/subsystems/skills/discoverSkills.ts` — workspace discovery and resource listing
-- `src/subsystems/skills/activateSkill.ts` — model activation response
+- `src/subsystems/skills/parse-skill.ts` — frontmatter parsing, validation, and suppression cascading
+- `src/subsystems/skills/parse-skill-command.ts` — slash command parsing and skill resolution
+- `src/subsystems/skills/discover-skills.ts` — workspace discovery and resource listing
+- `src/subsystems/skills/activate-skill.ts` — model activation response
 - `src/subsystems/skills/tool.ts` — `activate_skill` tool definition
 - `src/core/orchestrator/utils/enqueue.ts` — slash command detection and execution dispatching
-- `src/worker/utils/toolChain.ts` — shared `executeToolChain` and `$pipe` resolution engine
-- `src/worker/utils/handleMessage.ts` — `execute-skill-tools` worker message handler
+- `src/worker/utils/tool-chain.ts` — shared `executeToolChain` and `$pipe` resolution engine
+- `src/worker/utils/handle-message.ts` — `execute-skill-tools` worker message handler
 - `src/cli/commands/skills-index.ts` — Agent Skills Discovery index generator and CLI command
 - `src/cli/commands/skills-index.test.ts` — Jest test suite for discovery index generation
 - `src/cli/build/build.ts` (invoked via `bin/build.mjs`) — static build pipeline integration and asset synchronization

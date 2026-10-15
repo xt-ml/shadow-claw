@@ -112,8 +112,31 @@ describe("renderModal", () => {
 
     // Clicking the overlay itself
     const clickEvent = new MouseEvent("click", { bubbles: true });
+    Object.defineProperty(clickEvent, "target", { value: overlay });
     overlay.dispatchEvent(clickEvent);
 
     expect(overlay.style.display).toBe("none");
+
+    // Clicking inner content does not close overlay
+    overlay.style.display = "block";
+    const contentClickEvent = new MouseEvent("click", { bubbles: true });
+    Object.defineProperty(contentClickEvent, "target", {
+      value: document.createElement("div"),
+    });
+    overlay.dispatchEvent(contentClickEvent);
+    expect(overlay.style.display).toBe("block");
+
+    // Non-escape keydown does not close overlay
+    const enterEvent = new KeyboardEvent("keydown", { key: "Enter" });
+    overlay.dispatchEvent(enterEvent);
+    expect(overlay.style.display).toBe("block");
+
+    // Without attachModalOverlay
+    const noAttachEl = renderModal(
+      spec,
+      {} as any,
+      { renderComponent: () => null } as any,
+    );
+    expect(noAttachEl).toBeDefined();
   });
 });

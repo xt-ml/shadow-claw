@@ -4,7 +4,7 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { registerMcpRoutes } from "./mcp.js";
 import { McpServer } from "../mcp/mcp-server.js";
-import { getPackageVersion } from "../utils/packageVersion.js";
+import { getPackageVersion } from "../utils/package-version.js";
 
 function makeHttpRequest(options: {
   method?: string;

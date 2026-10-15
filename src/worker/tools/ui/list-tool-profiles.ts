@@ -1,6 +1,6 @@
 import { CONFIG_KEYS } from "../../../config/config.js";
 
-import { getConfig } from "../../../db/getConfig.js";
+import { getConfig } from "../../../db/get-config.js";
 import { ShadowClawDatabase } from "../../../db/types.js";
 
 import { DEFAULT_BUILTIN_PROFILE } from "../../../subsystems/tools/builtin-profiles.js";

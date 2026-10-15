@@ -1,12 +1,12 @@
 import { jest } from "@jest/globals";
 
-jest.unstable_mockModule("../../../storage/readGroupFileBytes.js", () => ({
+jest.unstable_mockModule("../../../storage/read-group-file-bytes.js", () => ({
   readGroupFileBytes: jest.fn(),
 }));
 
 const { executeReadFile } = await import("./read-file.js");
 const { readGroupFileBytes } =
-  await import("../../../storage/readGroupFileBytes.js");
+  await import("../../../storage/read-group-file-bytes.js");
 
 describe("executeReadFile", () => {
   const mockDb: any = {};

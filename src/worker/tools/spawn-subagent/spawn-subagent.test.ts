@@ -44,7 +44,7 @@ describe("executeSpawnSubagentTool", () => {
       ulid: mockUlid,
     }));
 
-    jest.unstable_mockModule("../../../db/getConfig.js", () => ({
+    jest.unstable_mockModule("../../../db/get-config.js", () => ({
       getConfig: mockGetConfig,
     }));
 
@@ -992,5 +992,102 @@ describe("executeSpawnSubagentTool", () => {
     expect(result).toContain(
       "Error: Requested 6 parallel subagents, but the maximum allowed is 5.",
     );
+  });
+
+  it("handles single parallel subagent and long prompt truncation with various workspace_mode values", async () => {
+    mockHandleInvoke.mockImplementation((_db: any, _payload: any) => {
+      const collectors = mockRegisterSubagentCollector.mock.calls;
+      const lastCall = collectors[collectors.length - 1];
+      if (lastCall) {
+        const [collectedGroupId, collectorArr] = lastCall;
+        collectorArr.push({
+          type: "response",
+          payload: { groupId: collectedGroupId, text: "single result" },
+        });
+      }
+      return Promise.resolve();
+    });
+
+    // 1. Single parallel agent (returns result text directly)
+    const singleResult = await executeSpawnSubagentTool(
+      {
+        prompt: "orchestrate",
+        parallel_agents: [{ prompt: "single task" }],
+        workspace_mode: " PARENT ",
+      },
+      "parent-group",
+      makeContext(),
+    );
+    expect(singleResult).toBe("single result");
+
+    // 2. Parallel agents with long prompt > 80 characters
+    const longPrompt = "a".repeat(100);
+    const multiResult = await executeSpawnSubagentTool(
+      {
+        prompt: "orchestrate",
+        parallel_agents: [{ prompt: longPrompt }, { prompt: "short" }],
+        workspace_mode: " ISOLATED ",
+      },
+      "parent-group",
+      makeContext(),
+    );
+    expect(multiResult).toContain("…");
+  });
+
+  it("normalizes various workspace_mode inputs including case, whitespace, invalid, and non-string", async () => {
+    mockHandleInvoke.mockImplementation((_db: any, _payload: any) => {
+      const collectors = mockRegisterSubagentCollector.mock.calls;
+      const lastCall = collectors[collectors.length - 1];
+      if (lastCall) {
+        const [collectedGroupId, collectorArr] = lastCall;
+        collectorArr.push({
+          type: "response",
+          payload: { groupId: collectedGroupId, text: "ok" },
+        });
+      }
+      return Promise.resolve();
+    });
+
+    // 1. Trimmed uppercase parent from config
+    mockGetConfig.mockImplementation(async (_db: any, key: string) => {
+      if (key === "subagent_workspace_mode") return " PARENT ";
+      return undefined;
+    });
+    await executeSpawnSubagentTool({ prompt: "p" }, "grp", makeContext());
+
+    // 2. Trimmed uppercase isolated
+    mockGetConfig.mockImplementation(async (_db: any, key: string) => {
+      if (key === "subagent_workspace_mode") return " ISOLATED ";
+      return undefined;
+    });
+    await executeSpawnSubagentTool({ prompt: "p" }, "grp", makeContext());
+
+    // 3. Trimmed uppercase automatic
+    mockGetConfig.mockImplementation(async (_db: any, key: string) => {
+      if (key === "subagent_workspace_mode") return " AUTOMATIC ";
+      return undefined;
+    });
+    await executeSpawnSubagentTool({ prompt: "p" }, "grp", makeContext());
+
+    // 4. Invalid string
+    mockGetConfig.mockImplementation(async (_db: any, key: string) => {
+      if (key === "subagent_workspace_mode") return "invalid_mode";
+      return undefined;
+    });
+    await executeSpawnSubagentTool({ prompt: "p" }, "grp", makeContext());
+
+    // 5. Non-string value
+    mockGetConfig.mockImplementation(async (_db: any, key: string) => {
+      if (key === "subagent_workspace_mode") return 12345;
+      return undefined;
+    });
+    await executeSpawnSubagentTool({ prompt: "p" }, "grp", makeContext());
+
+    // 6. Null / undefined
+    mockGetConfig.mockImplementation(async (_db: any, key: string) => {
+      if (key === "subagent_workspace_mode") return null;
+      return undefined;
+    });
+    await executeSpawnSubagentTool({ prompt: "p" }, "grp", makeContext());
   });
 });

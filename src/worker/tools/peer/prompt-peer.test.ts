@@ -134,5 +134,121 @@ describe("prompt_peer and list_peers tools", () => {
       const res = await executeListPeers({} as any, {}, "server:main");
       expect(res).toContain("No connected peers found");
     });
+
+    it("handles peers without deviceLabel and errors from listClients", async () => {
+      mockListClients.mockResolvedValueOnce([{ clientId: "peer-nolabel" }]);
+
+      const res = await executeListPeers({} as any, {}, "server:main");
+      expect(res).toBe("Connected peers (1):\n- peer-nolabel");
+
+      // Throws error
+      mockListClients.mockRejectedValueOnce(new Error("Connection refused"));
+      const errRes = await executeListPeers({} as any, {}, "server:main");
+      expect(errRes).toContain("Error listing peers: Connection refused");
+    });
+  });
+
+  describe("executePromptPeer branches", () => {
+    it("strips peer: prefix, applies custom timeout, and handles various data shapes", async () => {
+      // 1. data.text
+      mockSendCommand.mockResolvedValueOnce({
+        success: true,
+        data: { text: "Text response" },
+      });
+      const res1 = await executePromptPeer(
+        {} as any,
+        { peer_id: "peer:my-agent", prompt: "Hello", timeout_seconds: 30 },
+        "server:main",
+      );
+      expect(mockSendCommand).toHaveBeenCalledWith(
+        "my-agent",
+        "send-message",
+        { text: "Hello" },
+        30000,
+      );
+      expect(res1).toBe("Text response");
+
+      // 2. data string
+      mockSendCommand.mockResolvedValueOnce({
+        success: true,
+        data: "Raw string response",
+      });
+      const res2 = await executePromptPeer(
+        {} as any,
+        { peer_id: "agent2", prompt: "Hello" },
+        "server:main",
+      );
+      expect(res2).toBe("Raw string response");
+
+      // 3. data object
+      mockSendCommand.mockResolvedValueOnce({
+        success: true,
+        data: { custom: "payload" },
+      });
+      const res3 = await executePromptPeer(
+        {} as any,
+        { peer_id: "agent3", prompt: "Hello" },
+        "server:main",
+      );
+      expect(res3).toBe(JSON.stringify({ custom: "payload" }));
+
+      // 4. empty data / no text
+      mockSendCommand.mockResolvedValueOnce({
+        success: true,
+        data: "",
+      });
+      const res4 = await executePromptPeer(
+        {} as any,
+        { peer_id: "agent4", prompt: "Hello" },
+        "server:main",
+      );
+      expect(res4).toBe(
+        "Prompt sent successfully (no text response received).",
+      );
+
+      // 5. error without error property
+      mockSendCommand.mockResolvedValueOnce({
+        success: false,
+      });
+      const res5 = await executePromptPeer(
+        {} as any,
+        { peer_id: "agent5", prompt: "Hello" },
+        "server:main",
+      );
+      expect(res5).toContain("Unknown error occurred while prompting peer.");
+
+      // 6. sendCommand throws
+      mockSendCommand.mockRejectedValueOnce(new Error("Timeout"));
+      const res6 = await executePromptPeer(
+        {} as any,
+        { peer_id: "agent6", prompt: "Hello" },
+        "server:main",
+      );
+      expect(res6).toContain("Error prompting peer agent6: Timeout");
+    });
+
+    it("uses globalFactory when setPeerClientFactory is null", async () => {
+      setPeerClientFactory(null);
+      const prevGlobal = (globalThis as any).__peerClientFactory;
+      (globalThis as any).__peerClientFactory = () => ({
+        sendCommand: mockSendCommand,
+        listClients: mockListClients,
+      });
+
+      try {
+        mockSendCommand.mockResolvedValueOnce({
+          success: true,
+          data: "via global",
+        });
+        const res = await executePromptPeer(
+          {} as any,
+          { peer_id: "agent-glob", prompt: "Test" },
+          "server:main",
+        );
+        expect(res).toBe("via global");
+      } finally {
+        (globalThis as any).__peerClientFactory = prevGlobal;
+      }
+    });
   });
 });

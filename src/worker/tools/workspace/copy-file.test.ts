@@ -1,11 +1,11 @@
 import { jest } from "@jest/globals";
 
-jest.unstable_mockModule("../../../storage/copyGroupEntry.js", () => ({
+jest.unstable_mockModule("../../../storage/copy-group-entry.js", () => ({
   copyGroupEntry: jest.fn(),
 }));
 
 const { executeCopyFile } = await import("./copy-file.js");
-const { copyGroupEntry } = await import("../../../storage/copyGroupEntry.js");
+const { copyGroupEntry } = await import("../../../storage/copy-group-entry.js");
 
 describe("executeCopyFile", () => {
   const mockDb: any = {};

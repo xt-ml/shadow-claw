@@ -1,5 +1,5 @@
 import JSZip from "jszip";
-import { getNamespacedItem } from "../../utils/namespacedStorage.js";
+import { getNamespacedItem } from "../../utils/namespaced-storage.js";
 
 import {
   CONFIG_KEYS,
@@ -9,7 +9,7 @@ import {
 } from "../../config/config.js";
 import { decodePathSegment } from "../../core/app-routes.js";
 
-import { shouldInstallE2eBridge } from "../../testing/e2e-bridge.js";
+import { shouldInstallE2eBridge } from "../../core/utils/e2e-bridge.js";
 
 import {
   formatModelAttachmentCapabilitySummary,
@@ -32,15 +32,15 @@ import {
 import { effect } from "../../core/effect.js";
 
 import { getDb } from "../../db/db.js";
-import { exportChatData } from "../../db/exportChatData.js";
-import { getConfig } from "../../db/getConfig.js";
-import { importChatData } from "../../db/importChatData.js";
-import { setConfig } from "../../db/setConfig.js";
+import { exportChatData } from "../../db/export-chat-data.js";
+import { getConfig } from "../../db/get-config.js";
+import { importChatData } from "../../db/import-chat-data.js";
+import { setConfig } from "../../db/set-config.js";
 import { StoredMessage } from "../../db/types.js";
 
 import { setSanitizedHtml } from "../../security/trusted-types.js";
-import { downloadGroupFile } from "../../storage/downloadGroupFile.js";
-import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
+import { downloadGroupFile } from "../../storage/download-group-file.js";
+import { readGroupFileBytes } from "../../storage/read-group-file-bytes.js";
 
 import { chatUiStore } from "../../stores/chat-ui.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
@@ -59,17 +59,14 @@ import {
   showWarning,
 } from "../../ui/toast.js";
 
-import {
-  formatDateForFilename,
-  formatTimestamp,
-  handleSpecialLinkNavigation,
-} from "../../utils/utils.js";
-import { isTruthyConfigValue } from "../../utils/parseBooleanConfig.js";
+import { formatDateForFilename, formatTimestamp } from "../../utils/date.js";
+import { handleSpecialLinkNavigation } from "../../utils/utils.js";
+import { isTruthyConfigValue } from "../../utils/parse-boolean-config.js";
 import { renderTransformersJsBrowserModelOptions } from "../settings/shadow-claw-llm/model-ranking.js";
 
-import { computeTokenDisplayValues } from "./utils/computeTokenDisplayValues.js";
-import { escapeHtml } from "./utils/escapeHtml.js";
-import { getPeerChatDisplayStatus } from "./utils/getPeerChatDisplayStatus.js";
+import { computeTokenDisplayValues } from "./utils/compute-token-display-values.js";
+import { escapeHtml } from "../../utils/html.js";
+import { getPeerChatDisplayStatus } from "./utils/get-peer-chat-display-status.js";
 
 import type { ShadowClawDatabase } from "../../db/types.js";
 import type { AppDialogOptions } from "../../ui/types.js";

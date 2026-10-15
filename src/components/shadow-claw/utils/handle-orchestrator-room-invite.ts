@@ -1,0 +1,56 @@
+import { joinRoomViaLink } from "../../../core/orchestrator/utils/operations/room.js";
+import { RoomInvitePayload } from "../../../subsystems/channels/peer-protocol.js";
+import { showError, showSuccess } from "../../../ui/toast.js";
+import { requestDialog } from "./request-dialog.js";
+import { showPage } from "./show-page.js";
+
+import type { ShadowClawDatabase } from "../../../db/types.js";
+import type { OrchestratorStore } from "../../../stores/orchestrator.js";
+import type { ShowPageContext } from "./show-page.js";
+
+interface RoomInviteContext extends ShowPageContext {
+  orchestrator: any;
+}
+
+export async function handleOrchestratorRoomInvite(
+  doc: Document,
+  shadow: ShadowRoot | null,
+  shadowClaw: RoomInviteContext,
+  db: ShadowClawDatabase | undefined,
+  oStore: OrchestratorStore,
+  invite: RoomInvitePayload | undefined,
+) {
+  if (!db || !invite?.roomId || !invite?.hostPeerId) {
+    return;
+  }
+
+  const from = invite.fromAlias || invite.fromPeerId;
+  const accepted = await requestDialog(doc, shadow, {
+    mode: "confirm",
+    title: "Room invitation",
+    message: `${from} invited you to join "${invite.roomName}".`,
+    confirmLabel: "Join",
+    cancelLabel: "Decline",
+  });
+
+  if (!accepted) {
+    return;
+  }
+
+  try {
+    joinRoomViaLink(
+      shadowClaw.orchestrator,
+      invite.roomId,
+      invite.hostPeerId,
+      invite.roomName,
+    );
+
+    await oStore.switchConversation(db, `room:${invite.roomId}`);
+
+    showPage(shadow, shadowClaw, db, oStore, "chat");
+    showSuccess(`Joined room "${invite.roomName}"`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    showError(`Failed to join room: ${message}`, 6000);
+  }
+}

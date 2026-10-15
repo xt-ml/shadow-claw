@@ -1,6 +1,6 @@
 import type { LocalModelRankCandidate } from "../../types.js";
 import { PROVIDERS } from "../../../config/config.js";
-import { escapeHtml } from "../../../utils/utils.js";
+import { escapeHtml } from "../../../utils/html.js";
 
 function parseModelBillionsFromId(modelId: string): number | null {
   const normalized = modelId.toLowerCase();

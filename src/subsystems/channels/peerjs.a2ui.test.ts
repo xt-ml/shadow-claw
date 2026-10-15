@@ -94,11 +94,11 @@ jest.unstable_mockModule("../../db/db.js", () => ({
   getDb: jest.fn(async () => ({})),
 }));
 
-jest.unstable_mockModule("../../storage/readGroupFileBytes.js", () => ({
+jest.unstable_mockModule("../../storage/read-group-file-bytes.js", () => ({
   readGroupFileBytes: jest.fn(async () => new Uint8Array()),
 }));
 
-jest.unstable_mockModule("../../storage/writeGroupFileBytes.js", () => ({
+jest.unstable_mockModule("../../storage/write-group-file-bytes.js", () => ({
   writeGroupFileBytes: jest.fn(async () => {}),
 }));
 

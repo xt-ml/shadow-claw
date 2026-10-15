@@ -11,8 +11,8 @@ Instead of sending a fixed number of recent messages, the orchestrator estimates
 
 ```mermaid
 flowchart LR
-  A[estimateTokens.ts] --> C[buildDynamicContext.ts]
-  B[truncateToolOutput.ts] --> C
+  A[estimate-tokens.ts] --> C[build-dynamic-context.ts]
+  B[truncate-tool-output.ts] --> C
   C --> D[DynamicContextResult]
   D --> E{usagePercent > 80%?}
   E -->|yes + truncated| F[Auto-compact]
@@ -21,7 +21,7 @@ flowchart LR
 
 ## Token Estimation
 
-**File:** `src/context/estimateTokens.ts`
+**File:** `src/context/estimate-tokens.ts`
 
 Lightweight heuristic: **~4 characters per token** (avoids shipping a full tokenizer).
 
@@ -70,11 +70,11 @@ export function estimateMessageTokens(message: ConversationMessage): number {
 In addition to estimating context consumption before LLM invocation, ShadowClaw tracks live token metrics and prompt caching statistics returned by providers:
 
 - **Token Usage Tracking:** Tracks prompt/input tokens, output/completion tokens, and total token usage per turn.
-- **Cache Hits & Misses:** Captures cache read hits (`cache_read_input_tokens`) and cache creation (`cache_creation_input_tokens`) from Anthropic and AWS Bedrock responses, accumulating them in `StreamAccumulator` (`src/worker/StreamAccumulator/`) and recording them in conversation history.
+- **Cache Hits & Misses:** Captures cache read hits (`cache_read_input_tokens`) and cache creation (`cache_creation_input_tokens`) from Anthropic and AWS Bedrock responses, accumulating them in `StreamAccumulator` (`src/worker/stream-accumulator/`) and recording them in conversation history.
 
 ## Output Truncation
 
-**File:** `src/context/truncateToolOutput.ts`
+**File:** `src/context/truncate-tool-output.ts`
 
 Truncates large tool outputs at **line boundaries** (not mid-line):
 
@@ -109,7 +109,7 @@ export function truncateToolOutput(
 
 ## Dynamic Context Building
 
-**File:** `src/context/buildDynamicContext.ts`
+**File:** `src/context/build-dynamic-context.ts`
 
 ### Algorithm
 
@@ -222,7 +222,7 @@ Context limits are resolved per model family via `getContextLimit(model)` in `sr
 
 ## Hardware-Aware Token Recommendations
 
-`getRecommendedMaxTokens` (`src/components/settings/shadow-claw-llm/utils/getRecommendedMaxTokens.ts`) dynamically calculates recommended max output token budgets:
+`getRecommendedMaxTokens` (`src/components/settings/shadow-claw-llm/utils/get-recommended-max-tokens.ts`) dynamically calculates recommended max output token budgets:
 
 - Evaluates client hardware constraints via `navigator.deviceMemory` (RAM) and `navigator.hardwareConcurrency` (CPU cores).
 - Checks whether the selected model is a deep reasoning model (e.g. `o1`, `o3`, `r1`), provisioning larger default output allowances for internal chain-of-thought tokens.

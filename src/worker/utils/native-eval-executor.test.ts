@@ -1,5 +1,5 @@
 import { nativeEvalExecutor } from "./native-eval-executor.js";
-import { sandboxedEval, setHeadlessEvalExecutor } from "./sandboxedEval.js";
+import { sandboxedEval, setHeadlessEvalExecutor } from "./sandboxed-eval.js";
 
 describe("nativeEvalExecutor", () => {
   it("evaluates javascript expressions in node:vm", async () => {

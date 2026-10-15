@@ -3,16 +3,16 @@ import { getProvider } from "../../../config/config.js";
 import { persistMessageAttachments } from "../../../content/message-attachments.js";
 
 import { listGroups } from "../../../db/groups.js";
-import { saveMessage } from "../../../db/saveMessage.js";
+import { saveMessage } from "../../../db/save-message.js";
 
-import { invokeAgent } from "./invokeAgent.js";
+import { invokeAgent } from "./invoke-agent.js";
 
 import { clearPeerJsTypingState } from "./operations/channel.js";
 import { getApiKeyForRequest } from "./operations/provider.js";
 
-import { parseDirectToolCommand } from "./parseDirectToolCommand.js";
-import { discoverSkills } from "../../../subsystems/skills/discoverSkills.js";
-import { parseSkillCommand } from "../../../subsystems/skills/parseSkillCommand.js";
+import { parseDirectToolCommand } from "./parse-direct-tool-command.js";
+import { discoverSkills } from "../../../subsystems/skills/discover-skills.js";
+import { parseSkillCommand } from "../../../subsystems/skills/parse-skill-command.js";
 
 import type { ShadowClawDatabase } from "../../../db/db.js";
 import type { InboundMessage } from "../../../subsystems/channels/types.js";

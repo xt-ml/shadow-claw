@@ -1,6 +1,6 @@
 import { CONFIG_KEYS } from "../../../config/config.js";
 import { getDb, type ShadowClawDatabase } from "../../../db/db.js";
-import { getConfig } from "../../../db/getConfig.js";
+import { getConfig } from "../../../db/get-config.js";
 import { encryptValue } from "../../../security/crypto.js";
 
 import { reconnectMcpOAuth } from "../../../subsystems/mcp/mcp-reconnect.js";
@@ -15,7 +15,7 @@ import {
 
 import { setSanitizedHtml } from "../../../security/trusted-types.js";
 import { showError, showSuccess } from "../../../ui/toast.js";
-import { escapeHtml } from "../../../utils/utils.js";
+import { escapeHtml } from "../../../utils/html.js";
 
 import { GitAccount } from "../../../subsystems/git/types.js";
 

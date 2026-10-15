@@ -15,7 +15,7 @@ import {
 
 import { setVMBashTimeout } from "../../../core/orchestrator/utils/settings.js";
 import { getDb } from "../../../db/db.js";
-import { getConfig } from "../../../db/getConfig.js";
+import { getConfig } from "../../../db/get-config.js";
 import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { showError, showSuccess, showWarning } from "../../../ui/toast.js";
 

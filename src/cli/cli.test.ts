@@ -694,4 +694,175 @@ slug: "custom-test"
       child.kill("SIGTERM");
     }
   }, 15_000);
+
+  it("executes agent run command end-to-end with mock LLM endpoint", async () => {
+    const http = (await import("node:http")).default;
+    let receivedAuth = "";
+    let receivedBody: any = null;
+
+    const server = http.createServer((req, res) => {
+      receivedAuth = req.headers["authorization"] || "";
+      let body = "";
+      req.on("data", (chunk) => {
+        body += chunk;
+      });
+      req.on("end", () => {
+        try {
+          receivedBody = JSON.parse(body);
+        } catch {}
+
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        });
+        res.write(
+          `data: ${JSON.stringify({
+            id: "gen-cli-mock",
+            choices: [
+              { delta: { content: "Mock CLI Agent Response" }, index: 0 },
+            ],
+          })}\n\n`,
+        );
+        res.write("data: [DONE]\n\n");
+        res.end();
+      });
+    });
+
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const port = (server.address() as any).port;
+    const mockBaseUrl = `http://127.0.0.1:${port}/v1/chat/completions`;
+
+    try {
+      const { stdout } = await execFileAsync(
+        process.execPath,
+        [
+          cliPath,
+          "agent",
+          "run",
+          "Hello world test",
+          "--workspace",
+          tempDir,
+          "--provider",
+          "openrouter",
+          "--api-key",
+          "mock-key-12345",
+          "--base-url",
+          mockBaseUrl,
+          "--no-history",
+          "--tools",
+          "none",
+        ],
+        {
+          env: {
+            ...process.env,
+            OPENROUTER_BASE_URL: mockBaseUrl,
+            OPENROUTER_API_KEY: "mock-key-12345",
+          },
+        },
+      );
+
+      expect(stdout).toContain("Mock CLI Agent Response");
+      expect(receivedAuth).toBe("Bearer mock-key-12345");
+      expect(receivedBody).toBeDefined();
+      const lastMessage =
+        receivedBody.messages?.[receivedBody.messages.length - 1];
+      expect(lastMessage?.content).toBe("Hello world test");
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  }, 20_000);
+
+  it("executes agent run command reading prompt from stdin pipe", async () => {
+    const http = (await import("node:http")).default;
+    const { spawn } = await import("node:child_process");
+    let receivedPrompt = "";
+
+    const server = http.createServer((req, res) => {
+      let body = "";
+      req.on("data", (chunk) => {
+        body += chunk;
+      });
+      req.on("end", () => {
+        try {
+          const parsed = JSON.parse(body);
+          const lastMsg = parsed.messages?.[parsed.messages.length - 1];
+          receivedPrompt = lastMsg?.content || "";
+        } catch {}
+
+        res.writeHead(200, {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        });
+        res.write(
+          `data: ${JSON.stringify({
+            id: "gen-stdin-mock",
+            choices: [
+              { delta: { content: "Piped Response Received" }, index: 0 },
+            ],
+          })}\n\n`,
+        );
+        res.write("data: [DONE]\n\n");
+        res.end();
+      });
+    });
+
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const port = (server.address() as any).port;
+    const mockBaseUrl = `http://127.0.0.1:${port}/v1/chat/completions`;
+
+    try {
+      const child = spawn(
+        process.execPath,
+        [
+          cliPath,
+          "agent",
+          "run",
+          "-",
+          "--workspace",
+          tempDir,
+          "--provider",
+          "openrouter",
+          "--api-key",
+          "mock-key-12345",
+          "--base-url",
+          mockBaseUrl,
+          "--no-history",
+          "--tools",
+          "none",
+        ],
+        {
+          env: {
+            ...process.env,
+            OPENROUTER_BASE_URL: mockBaseUrl,
+            OPENROUTER_API_KEY: "mock-key-12345",
+          },
+          stdio: ["pipe", "pipe", "pipe"],
+        },
+      );
+
+      let stdout = "";
+      child.stdout.on("data", (c) => (stdout += c.toString()));
+
+      child.stdin.write("Piped prompt content from stdin");
+      child.stdin.end();
+
+      await new Promise<void>((resolve, reject) => {
+        child.on("close", (code) => {
+          if (code === 0) resolve();
+          else reject(new Error(`Process exited with code ${code}`));
+        });
+      });
+
+      expect(stdout).toContain("Piped Response Received");
+      expect(receivedPrompt).toContain("Piped prompt content from stdin");
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  }, 20_000);
 });

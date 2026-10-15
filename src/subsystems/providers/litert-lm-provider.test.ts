@@ -1,8 +1,9 @@
 import { jest } from "@jest/globals";
 
-const mockCreateConversation = jest.fn<any>().mockResolvedValue({
-  sendMessage: jest.fn<any>().mockResolvedValue(undefined),
-  sendMessageStreaming: jest.fn<any>().mockImplementation(async function* () {
+const mockSendMessage = jest.fn<any>().mockResolvedValue(undefined);
+const mockSendMessageStreaming = jest
+  .fn<any>()
+  .mockImplementation(async function* () {
     yield {
       content: [
         {
@@ -13,15 +14,22 @@ const mockCreateConversation = jest.fn<any>().mockResolvedValue({
         },
       ],
     };
-  }),
+  });
+
+const mockCreateConversation = jest.fn<any>().mockResolvedValue({
+  sendMessage: mockSendMessage,
+  sendMessageStreaming: mockSendMessageStreaming,
+});
+
+const mockDeleteEngine = jest.fn<any>().mockResolvedValue(undefined);
+const mockEngineCreate = jest.fn<any>().mockResolvedValue({
+  createConversation: mockCreateConversation,
+  delete: mockDeleteEngine,
 });
 
 jest.unstable_mockModule("@litert-lm/core", () => ({
   Engine: {
-    create: jest.fn<any>().mockResolvedValue({
-      createConversation: mockCreateConversation,
-      delete: jest.fn<any>().mockResolvedValue(undefined),
-    }),
+    create: mockEngineCreate,
   },
 }));
 
@@ -692,6 +700,457 @@ describe("LiteRT-LM Provider", () => {
       expect(emitted.some((m) => m.type === "streaming-chunk")).toBe(true);
       expect(emitted.some((m) => m.type === "streaming-done")).toBe(true);
     });
+
+    it("reuses cached engine instance on subsequent invocations with the same model", async () => {
+      Object.defineProperty(global, "navigator", {
+        value: { gpu: {} },
+        configurable: true,
+        writable: true,
+      });
+      Object.defineProperty(global, "WebAssembly", {
+        value: { Suspending: class {} },
+        configurable: true,
+        writable: true,
+      });
+
+      const emit = jest.fn();
+      await invokeWithLiteRtLm(
+        {} as any,
+        "g1",
+        "system",
+        [{ role: "user", content: "hello" }],
+        1000,
+        emit,
+        undefined,
+        "litert-community/gemma-4-E2B-it-litert-lm",
+      );
+
+      const callsBefore = mockEngineCreate.mock.calls.length;
+      await invokeWithLiteRtLm(
+        {} as any,
+        "g2",
+        "system",
+        [{ role: "user", content: "hello again" }],
+        1000,
+        emit,
+        undefined,
+        "litert-community/gemma-4-E2B-it-litert-lm",
+      );
+      expect(mockEngineCreate.mock.calls.length).toBe(callsBefore);
+    });
+
+    it("deletes previous engine when invoking with a different supported model", async () => {
+      Object.defineProperty(global, "navigator", {
+        value: { gpu: {} },
+        configurable: true,
+        writable: true,
+      });
+      Object.defineProperty(global, "WebAssembly", {
+        value: { Suspending: class {} },
+        configurable: true,
+        writable: true,
+      });
+
+      const emit = jest.fn();
+      await invokeWithLiteRtLm(
+        {} as any,
+        "g1",
+        "system",
+        [{ role: "user", content: "hello" }],
+        1000,
+        emit,
+        undefined,
+        "litert-community/gemma-4-E4B-it-litert-lm",
+      );
+      expect(mockDeleteEngine).toHaveBeenCalled();
+    });
+
+    it("emits error when conversation creation fails", async () => {
+      mockCreateConversation.mockRejectedValueOnce(new Error("Engine crash"));
+      const emit = jest.fn();
+      await invokeWithLiteRtLm(
+        {} as any,
+        "g1",
+        "system",
+        [{ role: "user", content: "hello" }],
+        1000,
+        emit,
+        undefined,
+        "litert-community/gemma-4-E2B-it-litert-lm",
+      );
+      expect(emit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "response",
+          payload: expect.objectContaining({
+            text: expect.stringContaining(
+              "⚠️ LiteRT-LM failed to create conversation: Engine crash",
+            ),
+          }),
+        }),
+      );
+    });
+
+    it("replays prior turns non-streaming before generating the response", async () => {
+      const emit = jest.fn();
+      mockSendMessage.mockClear();
+      mockSendMessage.mockRejectedValueOnce(
+        new Error("Transient prior turn failure"),
+      );
+
+      await invokeWithLiteRtLm(
+        {} as any,
+        "g1",
+        "system",
+        [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Turn 1 user request" },
+              { type: "tool_result", tool_use_id: "id_1", content: "result 1" },
+              { type: "unknown" },
+            ],
+          },
+          { role: "assistant", content: "Prior response" },
+          { role: "user", content: "Turn 2 question" },
+        ],
+        1000,
+        emit,
+        undefined,
+        "litert-community/gemma-4-E2B-it-litert-lm",
+      );
+
+      expect(mockSendMessage).toHaveBeenCalledWith(
+        expect.stringContaining(
+          "Turn 1 user request\n[TOOL_RESULT id_1] result 1",
+        ),
+      );
+      expect(emit).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "streaming-done" }),
+      );
+    });
+
+    it("aborts during prior turns when signal is aborted", async () => {
+      const abortController = new AbortController();
+      abortController.abort();
+      const emit = jest.fn();
+
+      await invokeWithLiteRtLm(
+        {} as any,
+        "g1",
+        "system",
+        [
+          { role: "user", content: "first" },
+          { role: "user", content: "second" },
+        ],
+        1000,
+        emit,
+        abortController.signal,
+        "litert-community/gemma-4-E2B-it-litert-lm",
+      );
+      expect(emit).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: "streaming-start" }),
+      );
+    });
+
+    it("handles error during streaming response", async () => {
+      mockSendMessageStreaming.mockImplementationOnce(async function* () {
+        throw new Error("Stream connection lost");
+      });
+      const emit = jest.fn();
+
+      await invokeWithLiteRtLm(
+        {} as any,
+        "g1",
+        "system",
+        [{ role: "user", content: "hello" }],
+        1000,
+        emit,
+        undefined,
+        "litert-community/gemma-4-E2B-it-litert-lm",
+      );
+
+      expect(emit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "response",
+          payload: expect.objectContaining({
+            text: expect.stringContaining(
+              "⚠️ LiteRT-LM generation error: Stream connection lost",
+            ),
+          }),
+        }),
+      );
+    });
+
+    it("handles tool_use envelope with empty tool_calls array", async () => {
+      mockSendMessageStreaming.mockImplementationOnce(async function* () {
+        yield {
+          content: [
+            {
+              text: JSON.stringify({
+                type: "tool_use",
+                tool_calls: [],
+              }),
+            },
+          ],
+        };
+      });
+      const emit = jest.fn();
+
+      await invokeWithLiteRtLm(
+        {} as any,
+        "g1",
+        "system",
+        [{ role: "user", content: "hello" }],
+        1000,
+        emit,
+        undefined,
+        "litert-community/gemma-4-E2B-it-litert-lm",
+        [
+          {
+            name: "any_tool",
+            description: "test",
+            input_schema: { type: "object" },
+          },
+        ],
+      );
+
+      expect(emit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "response",
+          payload: expect.objectContaining({
+            text: "(no response)",
+          }),
+        }),
+      );
+    });
+
+    it("executes tools in agentic loop and sends results to next turn", async () => {
+      let turn = 0;
+      mockSendMessageStreaming.mockImplementation(async function* () {
+        turn++;
+        if (turn === 1) {
+          yield {
+            content: [
+              {
+                text: JSON.stringify({
+                  type: "tool_use",
+                  tool_calls: [
+                    { name: "get_current_time", id: "call_1", input: {} },
+                  ],
+                }),
+              },
+            ],
+          };
+        } else {
+          yield {
+            content: [
+              {
+                text: JSON.stringify({
+                  type: "response",
+                  response: "The time is noon.",
+                }),
+              },
+            ],
+          };
+        }
+      });
+
+      const emitted: any[] = [];
+      const emit = jest.fn((msg) => {
+        emitted.push(msg);
+      });
+
+      await invokeWithLiteRtLm(
+        {} as any,
+        "g1",
+        "",
+        [{ role: "user", content: "what time is it?" }],
+        1000,
+        emit,
+        undefined,
+        "litert-community/gemma-4-E2B-it-litert-lm",
+        [
+          {
+            name: "get_current_time",
+            description: "Gets the current time. More details.",
+            input_schema: {
+              type: "object",
+              properties: { timezone: { type: "string" } },
+            },
+          },
+        ],
+      );
+
+      expect(
+        emitted.some(
+          (m) => m.type === "tool-activity" && m.payload?.status === "running",
+        ),
+      ).toBe(true);
+      expect(
+        emitted.some(
+          (m) => m.type === "tool-activity" && m.payload?.status === "done",
+        ),
+      ).toBe(true);
+      expect(
+        emitted.some(
+          (m) =>
+            m.type === "response" && m.payload?.text === "The time is noon.",
+        ),
+      ).toBe(true);
+    });
+
+    it("handles native format Gemma 4 tool call and handles tool errors gracefully", async () => {
+      let turn = 0;
+      mockSendMessageStreaming.mockImplementation(async function* () {
+        turn++;
+        if (turn === 1) {
+          yield {
+            content: [
+              {
+                text: "<|tool_call>call:non_existent_tool{}<tool_call|>",
+              },
+            ],
+          };
+        } else {
+          yield {
+            content: [
+              {
+                text: "Recovered from error and answered.",
+              },
+            ],
+          };
+        }
+      });
+
+      const emitted: any[] = [];
+      const emit = jest.fn((msg) => {
+        emitted.push(msg);
+      });
+
+      await invokeWithLiteRtLm(
+        {} as any,
+        "g1",
+        "system",
+        [{ role: "user", content: "run tool" }],
+        1000,
+        emit,
+        undefined,
+        "litert-community/gemma-4-E2B-it-litert-lm",
+        [
+          {
+            name: "allowed_tool",
+            description: "An allowed tool",
+            input_schema: { type: "object" },
+          },
+        ],
+      );
+
+      expect(
+        emitted.some(
+          (m) =>
+            m.type === "response" &&
+            m.payload?.text === "Recovered from error and answered.",
+        ),
+      ).toBe(true);
+    });
+
+    it("emits warning when max tool-calling iterations are reached", async () => {
+      mockSendMessageStreaming.mockImplementation(async function* () {
+        yield {
+          content: [
+            {
+              text: JSON.stringify({
+                type: "tool_use",
+                tool_calls: [{ name: "unhandled_tool", input: {} }],
+              }),
+            },
+          ],
+        };
+      });
+
+      const emitted: any[] = [];
+      const emit = jest.fn((msg) => {
+        emitted.push(msg);
+      });
+
+      await invokeWithLiteRtLm(
+        {} as any,
+        "g1",
+        "system",
+        [{ role: "user", content: "loop forever" }],
+        1000,
+        emit,
+        undefined,
+        "litert-community/gemma-4-E2B-it-litert-lm",
+        [
+          {
+            name: "unhandled_tool",
+            description: "test loop",
+            input_schema: { type: "object" },
+          },
+        ],
+      );
+
+      expect(
+        emitted.some(
+          (m) =>
+            m.type === "response" &&
+            m.payload?.text.includes(
+              "reached the maximum number of tool-calling iterations",
+            ),
+        ),
+      ).toBe(true);
+    });
+
+    it("shares in-flight engine promise for concurrent invocations", async () => {
+      const emit = jest.fn();
+      const p1 = invokeWithLiteRtLm(
+        {} as any,
+        "g1",
+        "system",
+        [{ role: "user", content: "concurrent 1" }],
+        1000,
+        emit,
+        undefined,
+        "litert-community/gemma-4-E2B-it-litert-lm",
+      );
+      const p2 = invokeWithLiteRtLm(
+        {} as any,
+        "g2",
+        "system",
+        [{ role: "user", content: "concurrent 2" }],
+        1000,
+        emit,
+        undefined,
+        "litert-community/gemma-4-E2B-it-litert-lm",
+      );
+      await Promise.all([p1, p2]);
+      expect(emit).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "streaming-done" }),
+      );
+    });
+
+    it("handles abort during streaming chunks loop", async () => {
+      const abortController = new AbortController();
+      mockSendMessageStreaming.mockImplementationOnce(async function* () {
+        yield { content: [{ text: "first chunk" }] };
+        abortController.abort();
+        yield { content: [{ text: "second chunk" }] };
+      });
+
+      const emit = jest.fn();
+      await invokeWithLiteRtLm(
+        {} as any,
+        "g1",
+        "system",
+        [{ role: "user", content: "stream abort test" }],
+        1000,
+        emit,
+        abortController.signal,
+        "litert-community/gemma-4-E2B-it-litert-lm",
+      );
+      expect(abortController.signal.aborted).toBe(true);
+    });
   });
 });
 
@@ -739,6 +1198,15 @@ describe("parseModelSpecificToolCall", () => {
 
   it("returns null for empty string", () => {
     expect(parseModelSpecificToolCall("")).toBeNull();
+  });
+
+  it("extracts json block using slice fallback when body has trailing text", () => {
+    const raw =
+      '<|tool_call>call:custom_tool{"key":"val"} trailing text<tool_call|>';
+    const result = parseModelSpecificToolCall(raw);
+    expect(result).not.toBeNull();
+    expect(result!.name).toBe("custom_tool");
+    expect(result!.input).toEqual({ key: "val" });
   });
 });
 

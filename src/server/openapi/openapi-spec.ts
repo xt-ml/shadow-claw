@@ -8,7 +8,7 @@ import { integrationPaths } from "./paths/integrations.js";
 import { proxyPaths } from "./paths/proxies.js";
 import { diagnosticPaths } from "./paths/diagnostics.js";
 import { mcpPaths } from "./paths/mcp.js";
-import { getPackageVersion } from "../utils/packageVersion.js";
+import { getPackageVersion } from "../utils/package-version.js";
 
 export const openApiSpec: OpenApiSpec = {
   openapi: "3.1.0",

@@ -31,8 +31,8 @@ import {
 installCustomElementsRegistryGuard();
 installCustomElementDomGuard();
 
-import { initializeApp } from "./utils/initializeApp.js";
-import { loadAppShell } from "./utils/loadAppShell.js";
+import { initializeApp } from "./utils/initialize-app.js";
+import { loadAppShell } from "./utils/load-app-shell.js";
 import { resumeAudioContext } from "../ui/audio.js";
 
 export {

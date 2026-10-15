@@ -172,4 +172,65 @@ describe("shadow-claw-task-server", () => {
     await el.saveTaskServerUrl();
     await el.render();
   });
+
+  it("handles missing db, missing root, missing input, and non-Error rejections", async () => {
+    const el = new ShadowClawTaskServer();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+
+    // Missing db
+    el.db = null;
+    await el.saveTaskServerEnabled(true);
+    await el.saveTaskServerUrl();
+
+    // Restore db
+    el.db = {} as any;
+
+    // Missing input in shadowRoot
+    el.shadowRoot
+      ?.querySelector('[data-setting="task-server-url-input"]')
+      ?.remove();
+    await el.saveTaskServerUrl();
+
+    // Rejections with non-Error string
+    const { showError } = (await import("../../../ui/toast.js")) as any;
+    mockSetTaskServerEnabled.mockRejectedValueOnce("String error failure");
+    await el.saveTaskServerEnabled(false);
+    expect(showError).toHaveBeenCalledWith(
+      expect.stringContaining("String error failure"),
+      6000,
+    );
+
+    mockSetTaskServerUrl.mockRejectedValueOnce("String url error");
+    const testInput = document.createElement("input");
+    testInput.setAttribute("data-setting", "task-server-url-input");
+    testInput.value = "http://test.com";
+    el.shadowRoot?.appendChild(testInput);
+    await el.saveTaskServerUrl();
+    expect(showError).toHaveBeenCalledWith(
+      expect.stringContaining("String url error"),
+      6000,
+    );
+
+    // Missing shadowRoot in methods
+    const noRootEl = new ShadowClawTaskServer();
+    Object.defineProperty(noRootEl, "shadowRoot", {
+      value: null,
+      configurable: true,
+    });
+    await expect(noRootEl.connectedCallback()).rejects.toThrow(
+      "shadowRoot not found",
+    );
+    expect(() => noRootEl.bindEventListeners()).not.toThrow();
+    await expect(noRootEl.render()).resolves.toBeUndefined();
+    await expect(noRootEl.saveTaskServerUrl()).resolves.toBeUndefined();
+
+    // orchestrator without ensureAllConnections
+    el.orchestrator = {
+      taskServerUrl: "/test",
+      taskServerEnabled: false,
+    } as any;
+    await el.saveTaskServerEnabled(true);
+    await el.saveTaskServerUrl();
+  });
 });

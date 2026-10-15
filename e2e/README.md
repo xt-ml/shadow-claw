@@ -7,7 +7,7 @@ Comprehensive testing guide for ShadowClaw covering the **browser-native E2E tes
 ShadowClaw features a **dual test architecture** tailored to its two runtime modes:
 
 1. **Browser E2E Test Suite (`e2e/`)**: Powered by Playwright using the Page Object Model (POM). Validates frontend user interfaces, Web Components, reactive signals, Web Worker orchestrator loops, sandboxed OPFS/IndexedDB storage, WebVM/just-bash shell emulation, and PWA/Electron workflows.
-2. **Server-Side Headless Agent & CLI Integration Tests (`src/cli/` & `src/`)**: Powered by Jest. Validates the host-native CLI agent participant (`shadow-claw agent run`), WebRTC agent listener and peer orchestration (`shadow-claw agent listen`, `shadow-claw webrtc listen`), peer-to-peer prompting and file transfers (`shadow-claw send-file`, `shadow-claw send --file`), direct tool inspection and execution (`shadow-claw agent tools`, `shadow-claw agent tool`), remote skill and tool discovery and importing (`shadow-claw agent import`), SQLite database storage (`src/db/sqlite/`), Node filesystem handle abstraction (`src/storage/node-fs-handle.ts`), and headless tool capability execution (`src/worker/utils/executeTool.headless.test.ts`).
+2. **Server-Side Headless Agent & CLI Integration Tests (`src/cli/` & `src/`)**: Powered by Jest. Validates the host-native CLI agent participant (`shadow-claw agent run`), WebRTC agent listener and peer orchestration (`shadow-claw agent listen`, `shadow-claw webrtc listen`), peer-to-peer prompting and file transfers (`shadow-claw send-file`, `shadow-claw send --file`), direct tool inspection and execution (`shadow-claw agent tools`, `shadow-claw agent tool`), remote skill and tool discovery and importing (`shadow-claw agent import`), SQLite database storage (`src/db/sqlite/`), Node filesystem handle abstraction (`src/storage/node-fs-handle.ts`), and headless tool capability execution (`src/worker/utils/execute-tool.headless.test.ts`).
 
 ### Browser E2E Directory Structure
 
@@ -25,9 +25,11 @@ e2e/
 │ ├── tasks.page.ts # Task scheduler
 │ └── settings.page.ts # Settings panel
 ├── shared/ # Low-level utilities and helpers
-│ └── index.ts # DB helpers, constants, wait functions
+│ ├── index.ts # DB helpers, constants, wait functions
+│ └── mock-llm.ts # Mock LLM router with multi-turn tool call and streaming support
 ├── fixtures.ts # Shared test fixtures (app, chat, files, tasks, settings, conversations)
-├── \*.test.ts # Test suites
+├── *.test.ts # Test suites
+│ └── agent-tools.test.ts # Multi-turn agent tool execution loop (write_file) and error handling
 │ └── chat.test.ts # Chat interface verification
 │ └── conversations.test.ts # Conversation CRUD + delete-dialog keyboard accessibility
 │ └── files.test.ts # File browser upload + file/folder creation operations
@@ -470,8 +472,8 @@ The build, CLI, prerender, and headless agent test suites live under `src/cli/` 
 - **CLI Commands & Utilities**: `build`, `dev`, `run`, `serve`, `server`, `init`, `clients`, `send` (`src/cli/commands/send.test.ts` covering prompts, file attachments, and remote replies), `send-file` (`src/cli/commands/send-file.test.ts` covering direct P2P transfers and prompt execution), `backup`, `tasks`, `mcp`, `skills:index`, `webrtc` / `webrtc listen` (`src/cli/commands/webrtc-listen.test.ts` covering orchestration loop dispatch, transfer handling, and ping), `peer-id`, `--version`, `agent` (`src/cli/commands/agent.test.ts` covering init, models, tools, skills, tool execution, system prompt overrides and disabling (`--no-system-prompt`, `--system-prompt none`), uncached model download confirmation guards, remote RFC v0.2.0 imports, SIGINT signal handling, and `agent listen`), `agent model` (`src/cli/commands/agent-models.test.ts`), and native AI tasks (`src/cli/commands/native-ai-task-handler.test.ts`).
 - **Agent File Attachments (`agent run -f`)**: Repeatable `-f, --file` loading and MIME inference (`src/cli/utils/load-cli-attachments.test.ts`), missing-file errors (`src/cli/commands/agent.test.ts`), and attachment persistence on the saved user message (`src/cli/commands/agent-file-attachments.test.ts`).
 - **Model Download, Browsing & Progress Bar Utilities**: Hugging Face ONNX and Llamafile model querying, interactive paginated and searchable model browsing with in-memory session caching, downloading, write stream lifecycle cleanup, and recursive local caching inspection with partial download detection (`src/cli/utils/local-models.test.ts`), terminal progress bar (`src/cli/utils/progress-bar.test.ts`), and cache directory resolution (`src/cli/utils/resolve-cache-dir.test.ts`).
-- **Headless Agent Subsystems**: SQLite database implementation (`src/db/sqlite/*.test.ts`), Node.js filesystem directory handle polyfill (`src/storage/node-fs-handle.test.ts`), headless tool execution, guards, and capability matrix (`src/worker/utils/executeTool.headless.test.ts`, `src/worker/utils/declarativeToolExecutor.test.ts`, `src/worker/utils/guards.test.ts`, `src/worker/tools/builtin-ai/builtin-ai.headless.test.ts`), peer collaboration tools (`src/worker/tools/peer/prompt-peer.test.ts`, `src/worker/tools/workspace/send-file.test.ts`), shared cross-cutting utilities (`src/utils/*.test.ts`), and default provider/model configuration (`src/config/headless.test.ts`).
-- **Host-Native Offline Model Executors & Local Binary Drivers**: In-process Node.js Transformers.js execution (`src/worker/tools/node-transformers-executor.test.ts`, `src/server/services/transformers-runtime.test.ts`), Llamafile and Agentfile manager & executor with LocalBinaryDriver architecture and built-in tool schema catalogs (`src/worker/tools/node-llamafile-executor.test.ts`, `src/server/services/llamafile-manager.test.ts`, `src/server/routes/llamafile.test.ts`), and agent invocation loop with system prompt forwarding in headless mode (`src/worker/utils/handleInvoke.test.ts`).
+- **Headless Agent Subsystems**: SQLite database implementation (`src/db/sqlite/*.test.ts`), Node.js filesystem directory handle polyfill (`src/storage/node-fs-handle.test.ts`), headless tool execution, guards, and capability matrix (`src/worker/utils/execute-tool.headless.test.ts`, `src/worker/utils/declarative-tool-executor.test.ts`, `src/worker/utils/guards.test.ts`, `src/worker/tools/builtin-ai/builtin-ai.headless.test.ts`), peer collaboration tools (`src/worker/tools/peer/prompt-peer.test.ts`, `src/worker/tools/workspace/send-file.test.ts`), shared cross-cutting utilities (`src/utils/*.test.ts`), and default provider/model configuration (`src/config/headless.test.ts`).
+- **Host-Native Offline Model Executors & Local Binary Drivers**: In-process Node.js Transformers.js execution (`src/worker/tools/node-transformers-executor.test.ts`, `src/server/services/transformers-runtime.test.ts`), Llamafile and Agentfile manager & executor with LocalBinaryDriver architecture and built-in tool schema catalogs (`src/worker/tools/node-llamafile-executor.test.ts`, `src/server/services/llamafile-manager.test.ts`, `src/server/routes/llamafile.test.ts`), and agent invocation loop with system prompt forwarding in headless mode (`src/worker/utils/handle-invoke.test.ts`).
 
 ```bash
 NODE_OPTIONS="--no-warnings --experimental-vm-modules" \
@@ -496,17 +498,17 @@ NODE_OPTIONS="--no-warnings --experimental-vm-modules" \
   src/cli/build/build.test.ts \
   src/cli/prerender/dsd-shell/prerender-dsd-shell.test.ts \
   src/cli/prerender/pretty-paths/prerender-pretty-paths.test.ts \
-  src/db/sqlite/openSqliteDatabase.test.ts \
+  src/db/sqlite/open-sqlite-database.test.ts \
   src/storage/node-fs-handle.test.ts \
   src/utils/index.test.ts \
   src/worker/utils/guards.test.ts \
-  src/worker/utils/declarativeToolExecutor.test.ts \
-  src/worker/utils/executeTool.headless.test.ts \
+  src/worker/utils/declarative-tool-executor.test.ts \
+  src/worker/utils/execute-tool.headless.test.ts \
   src/worker/tools/peer/prompt-peer.test.ts \
   src/worker/tools/workspace/send-file.test.ts \
   src/worker/tools/node-transformers-executor.test.ts \
   src/worker/tools/node-llamafile-executor.test.ts \
-  src/worker/utils/handleInvoke.test.ts \
+  src/worker/utils/handle-invoke.test.ts \
   src/config/headless.test.ts
 ```
 
@@ -555,7 +557,7 @@ to storage feature gates.
 
 ## Storage Tests (Feature-Gated)
 
-Storage integration tests (`storage.test.ts`) and migration tests (`migrateLegacyDatabase.test.ts`) verify per-deployment storage namespacing (`namespacedStorage`, `shadowclaw_<namespace>`, `shadow-claw-opfs-<namespace>`) and are **feature-gated** at runtime:
+Storage integration tests (`storage.test.ts`) and migration tests (`migrate-legacy-database.test.ts` and `migrate-legacy-opfs.test.ts`) verify per-deployment storage namespacing (`namespacedStorage`, `shadowclaw_<namespace>`, `shadow-claw-opfs-<namespace>`) and are **feature-gated** at runtime:
 
 - Tests skip if `indexedDB` or `navigator.storage` are unavailable
 - This is intentional — not all browsers/contexts support OPFS

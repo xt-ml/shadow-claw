@@ -2,7 +2,7 @@
 
 > Architecture and roadmap for running local LLMs, downloading model weights and dependencies from Hugging Face, and transitioning between OpenRouter and offline execution.
 
-**Source:** `src/server/services/transformers-runtime.ts` · `src/server/routes/transformers-js.ts` · `src/config/config.ts` · `src/cli/commands/agent.ts` · `src/subsystems/providers/utils/parseLocalModelToolCall.ts` · `src/worker/tools/node-transformers-executor.ts`
+**Source:** `src/server/services/transformers-runtime.ts` · `src/server/routes/transformers-js.ts` · `src/config/config.ts` · `src/cli/commands/agent.ts` · `src/subsystems/providers/utils/parse-local-model-tool-call.ts` · `src/worker/tools/node-transformers-executor.ts`
 
 ---
 
@@ -124,7 +124,7 @@ When running interactive initialization (`npx shadow-claw agent init`), option `
 
 ### 0. Resumable Download Interceptor (`createFileModelCacheFetch`)
 
-Located at `src/subsystems/providers/utils/createFileModelCacheFetch.ts`, this interceptor is installed as `env.fetch` for in-process Transformers.js runs:
+Located at `src/subsystems/providers/utils/create-file-model-cache-fetch.ts`, this interceptor is installed as `env.fetch` for in-process Transformers.js runs:
 
 - `downloadWithResume()` streams each file into `<path>.part` and atomically renames it on completion.
 - Transformers.js `FileCache.put()` is bypassed, so interrupted downloads are no longer deleted.
@@ -163,13 +163,13 @@ Client / CLI Agent
 
 ### 3. Unified Local Model Tool Calling (`parseLocalModelToolCalls`)
 
-Located at `src/subsystems/providers/utils/parseLocalModelToolCall.ts`, this utility standardizes tool invocation formatting, schema normalization, and parsing across local models:
+Located at `src/subsystems/providers/utils/parse-local-model-tool-call.ts`, this utility standardizes tool invocation formatting, schema normalization, and parsing across local models:
 
 - **Defensive Schema Sanitization**: Converts internal tool definitions (`ToolDefinition`) into standard OpenAI-compatible function definitions (`{ type: "function", function: { name, description, parameters } }`), recursively sanitizing nested property definitions (`sanitizePropertySchema`) so all object and array fields include explicit `type` metadata required by strict Jinja chat templates (e.g. Gemma 4).
 - **Tokenizer Template Integration**: Passes sanitized tool schemas directly into the tokenizer's Jinja chat template via `tools: currentTools`, allowing models trained on tool use (such as Qwen and Gemma) to structure tool calls natively.
 - **Multi-Tool Parsing & Grammar Support**: Parses single and multi-tool invocations (`parseLocalModelToolCalls`) across varied model grammars, including Gemma 4 `call:function{...}` syntax with balanced brace extraction, Qwen `<|tool_call>`, `<tool_call>`, `<execute_tool>`, and Markdown JSON code blocks, with `<think>` reasoning block stripping.
-- **Streaming Tool Call Suppression Filter**: Uses `createToolCallStreamFilter` in `src/subsystems/providers/utils/parseLocalModelToolCall.ts` to intercept and buffer token output that matches potential tool-call prefixes. When a tool call is detected, streaming is suppressed so raw tool-call syntax does not leak to stdout or the chat UI; when normal conversational text is detected, buffered tokens are flushed and subsequent tokens stream in real-time.
-- **Chat Template Normalization**: In `normalizeMessagesForChatTemplate` (`src/subsystems/providers/utils/chatTemplate.ts`), stringified assistant tool arguments are parsed to objects, and `tool_call_id` and tool `name` attributes are preserved on `role: "tool"` turns to satisfy Jinja template requirements.
+- **Streaming Tool Call Suppression Filter**: Uses `createToolCallStreamFilter` in `src/subsystems/providers/utils/parse-local-model-tool-call.ts` to intercept and buffer token output that matches potential tool-call prefixes. When a tool call is detected, streaming is suppressed so raw tool-call syntax does not leak to stdout or the chat UI; when normal conversational text is detected, buffered tokens are flushed and subsequent tokens stream in real-time.
+- **Chat Template Normalization**: In `normalizeMessagesForChatTemplate` (`src/subsystems/providers/utils/chat-template.ts`), stringified assistant tool arguments are parsed to objects, and `tool_call_id` and tool `name` attributes are preserved on `role: "tool"` turns to satisfy Jinja template requirements.
 
 ### 4. Llamafile & Agentfile Local Binary Driver Architecture (`LocalBinaryDriver`)
 

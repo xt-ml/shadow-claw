@@ -1,5 +1,5 @@
 import { ShadowClawDatabase } from "../../../db/types.js";
-import { moveGroupEntry } from "../../../storage/moveGroupEntry.js";
+import { moveGroupEntry } from "../../../storage/move-group-entry.js";
 
 export async function executeMoveFile(
   db: ShadowClawDatabase,

@@ -368,4 +368,159 @@ describe("shadow-claw-pdf-viewer", () => {
     viewer.remove();
     expect(viewer._pdfDocument).toBeNull();
   });
+
+  it("clamps zoom scale to [0.5, 4]", async () => {
+    const viewer = new ShadowClawPdfViewer();
+    document.body.appendChild(viewer);
+    viewer.file = {
+      name: "sample.pdf",
+      binaryContent: new Uint8Array([1, 2, 3, 4]),
+    };
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const zoomOutBtn = viewer.shadowRoot?.querySelector(
+      ".pdf-zoom-out",
+    ) as HTMLButtonElement;
+    const zoomInBtn = viewer.shadowRoot?.querySelector(
+      ".pdf-zoom-in",
+    ) as HTMLButtonElement;
+
+    // Zoom out until clamped at 0.5
+    for (let i = 0; i < 10; i++) {
+      zoomOutBtn.click();
+    }
+    await Promise.resolve();
+    expect(viewer._scale).toBe(0.5);
+
+    // Zoom in until clamped at 4
+    for (let i = 0; i < 25; i++) {
+      zoomInBtn.click();
+    }
+    await Promise.resolve();
+    expect(viewer._scale).toBe(4);
+
+    viewer.remove();
+  });
+
+  it("handles canvas 2d context null and page render error", async () => {
+    const viewer = new ShadowClawPdfViewer();
+    document.body.appendChild(viewer);
+
+    viewer.file = {
+      name: "sample.pdf",
+      binaryContent: new Uint8Array([1, 2, 3, 4]),
+    };
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // 1. canvas.getContext returns null
+    (HTMLCanvasElement.prototype.getContext as any) = jest.fn(() => null);
+    await viewer.renderCurrentPage();
+
+    let status = viewer.shadowRoot?.querySelector(".pdf-status");
+    expect(status?.textContent).toBe("Unable to render PDF canvas.");
+
+    // 2. Page render throws non-cancelled error
+    const page: any = {
+      getViewport: () => ({ width: 100, height: 100 }),
+      render: () => ({
+        cancel: jest.fn(),
+        promise: Promise.reject(new Error("Render draw failure")),
+      }),
+    };
+    (HTMLCanvasElement.prototype.getContext as any) = jest.fn(() => ({
+      setTransform: jest.fn(),
+    }));
+    viewer._pdfDocument = {
+      getPage: jest.fn(async () => page),
+      numPages: 1,
+      destroy: jest.fn(),
+    };
+    await viewer.renderCurrentPage();
+
+    status = viewer.shadowRoot?.querySelector(".pdf-status");
+    expect(status?.textContent).toBe("Failed to render PDF page.");
+
+    viewer.remove();
+  });
+
+  it("covers pan start with non-left mouse button and touch without touches[0]", async () => {
+    const viewer = new ShadowClawPdfViewer();
+    document.body.appendChild(viewer);
+    viewer.file = {
+      name: "sample.pdf",
+      binaryContent: new Uint8Array([1, 2, 3, 4]),
+    };
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const wrap = viewer.shadowRoot?.querySelector(
+      ".pdf-canvas-wrap",
+    ) as HTMLElement;
+
+    // Right click (button = 2) should not start panning
+    wrap.dispatchEvent(
+      new MouseEvent("mousedown", { button: 2, clientX: 10, clientY: 10 }),
+    );
+    expect(viewer._isPanning).toBe(false);
+
+    // Touch event with changedTouches fallback
+    const touchEvent = new CustomEvent("touchstart", {
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(touchEvent, "touches", { value: [] });
+    Object.defineProperty(touchEvent, "changedTouches", {
+      value: [{ clientX: 20, clientY: 30 }],
+    });
+    wrap.dispatchEvent(touchEvent);
+    expect(viewer._isPanning).toBe(true);
+
+    // Touch event with empty touches and changedTouches
+    const emptyTouchEvent = new CustomEvent("touchmove", {
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(emptyTouchEvent, "touches", { value: [] });
+    Object.defineProperty(emptyTouchEvent, "changedTouches", { value: [] });
+    globalThis.dispatchEvent(emptyTouchEvent);
+
+    viewer.stopPanning();
+    viewer.remove();
+  });
+
+  it("covers null shadowRoot, missing canvas, and non-HTMLElement wrap guards", async () => {
+    const viewer = new ShadowClawPdfViewer();
+
+    // connectedCallback throws if no shadowRoot
+    Object.defineProperty(viewer, "shadowRoot", {
+      value: null,
+      configurable: true,
+    });
+    await expect(viewer.connectedCallback()).rejects.toThrow(
+      "shadowRoot not found",
+    );
+
+    viewer.bindEvents();
+    viewer.setStatus("msg");
+    viewer.updateControls();
+    viewer.updatePanState();
+    await viewer.loadPdf();
+    await viewer.renderCurrentPage();
+
+    // getRenderScale with <= 0 width
+    expect(viewer.getRenderScale(0)).toBe(viewer._scale);
+
+    // Empty shadowRoot
+    const fakeRoot = document.createElement("div");
+    Object.defineProperty(viewer, "shadowRoot", {
+      value: fakeRoot,
+      configurable: true,
+    });
+    viewer.updateControls();
+    viewer.updatePanState();
+    await viewer.renderCurrentPage();
+  });
 });

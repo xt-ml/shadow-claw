@@ -4,7 +4,7 @@ jest.unstable_mockModule("../../db/db.js", () => ({
   getDb: jest.fn<any>().mockResolvedValue(null),
 }));
 
-jest.unstable_mockModule("../../db/getConfig.js", () => ({
+jest.unstable_mockModule("../../db/get-config.js", () => ({
   getConfig: jest.fn<any>().mockResolvedValue(null),
 }));
 function setLanguageModelMock(
@@ -193,7 +193,7 @@ describe("prompt-api-provider", () => {
 
     setLanguageModelMock(createMock);
 
-    jest.unstable_mockModule("../../worker/utils/executeTool.js", () => ({
+    jest.unstable_mockModule("../../worker/utils/execute-tool.js", () => ({
       executeTool: jest.fn(async (_db, name, _input, _groupId) => {
         emitted.push(`execute:${name}`);
 
@@ -327,7 +327,7 @@ describe("prompt-api-provider", () => {
 
     setLanguageModelMock(createMock);
 
-    jest.unstable_mockModule("../../worker/utils/executeTool.js", () => ({
+    jest.unstable_mockModule("../../worker/utils/execute-tool.js", () => ({
       executeTool: jest.fn(async (_db, _name, input: any, _groupId) => {
         return `toast shown: ${input.message}`;
       }),
@@ -574,7 +574,7 @@ describe("prompt-api-provider", () => {
 
   it("integrates with createModelCacheFetch streaming progress during model download", async () => {
     const { getModelCacheProgressHook } =
-      await import("./utils/createModelCacheFetch.js");
+      await import("./utils/create-model-cache-fetch.js");
 
     const clonePrompt = (jest.fn() as any).mockResolvedValue("summary");
     const cloneDestroy = (jest.fn() as any).mockResolvedValue(undefined);
@@ -738,7 +738,7 @@ describe("prompt-api-provider", () => {
 
     setLanguageModelMock(createMock);
 
-    jest.unstable_mockModule("../../worker/utils/executeTool.js", () => ({
+    jest.unstable_mockModule("../../worker/utils/execute-tool.js", () => ({
       executeTool: jest.fn(
         async (_db, name: string, _input: any, _groupId: string) => {
           if (name === "translate_text") {
@@ -997,6 +997,294 @@ describe("prompt-api-provider streaming events", () => {
     expect(createMock).toHaveBeenCalled();
     const createArg = (createMock.mock.calls[0] as any[])[0];
     expect(createArg?.samplingMode).toBe("creative");
+  });
+
+  it("handles complex message content blocks including attachments and tool results", async () => {
+    const clonePromptStreaming = jest.fn(() => ({
+      [Symbol.asyncIterator]: async function* () {
+        yield JSON.stringify({
+          type: "response",
+          response: "Parsed complex message",
+        });
+      },
+    }));
+
+    const createMock = jest.fn(async () => ({
+      clone: jest.fn(async () => ({
+        promptStreaming: clonePromptStreaming,
+        destroy: jest.fn(),
+      })),
+      destroy: jest.fn(),
+    }));
+
+    setLanguageModelMock(createMock);
+    const { invokeWithPromptApi } = await import("./prompt-api-provider.js");
+    const emitted: any[] = [];
+    const emitFn = jest.fn(async (msg) => {
+      emitted.push(msg);
+    });
+
+    await invokeWithPromptApi(
+      {} as any,
+      "g1",
+      "system prompt",
+      [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Please process attachment" },
+            {
+              type: "attachment",
+              mediaType: "image",
+              fileName: "photo.png",
+              mimeType: "image/png",
+            },
+            {
+              type: "tool_use",
+              name: "fetch_file",
+              input: { path: "photo.png" },
+            },
+            {
+              type: "tool_result",
+              tool_use_id: "call_1",
+              content: "data:image/png;base64,...",
+            },
+            { type: "unknown" },
+          ],
+        },
+        { role: "assistant", content: "Got it" },
+        { role: "user", content: "Now answer." },
+      ],
+      1024,
+      emitFn,
+      null as any,
+      [],
+    );
+
+    expect(
+      emitted.some(
+        (m) =>
+          m.type === "response" && m.payload?.text === "Parsed complex message",
+      ),
+    ).toBe(true);
+  });
+
+  it("throws error when native and polyfill availability are unavailable", async () => {
+    const availabilityMock = (jest.fn() as any).mockResolvedValue(
+      "unavailable",
+    );
+    const createMock = jest.fn();
+    setLanguageModelMock(createMock, availabilityMock);
+
+    const polyfillMod = await import("prompt-api-polyfill");
+    const spy = jest
+      .spyOn(polyfillMod.LanguageModel, "availability")
+      .mockResolvedValue("no" as any);
+
+    try {
+      const { invokeWithPromptApi } = await import("./prompt-api-provider.js");
+
+      await expect(
+        invokeWithPromptApi(
+          {} as any,
+          "g1",
+          "system",
+          [{ role: "user", content: "hi" }],
+          1024,
+          async () => {},
+          null as any,
+          [],
+        ),
+      ).rejects.toThrow(
+        "Prompt API model is unavailable on this device/browser",
+      );
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("parses XML-like tool calls <tool_call> with different input property names", async () => {
+    let turn = 0;
+    const clonePromptStreaming = jest.fn(() => ({
+      [Symbol.asyncIterator]: async function* () {
+        turn++;
+        if (turn === 1) {
+          yield '<tool_call>{"function":{"name":"get_current_time","arguments":{"tz":"UTC"}}}</tool_call>';
+        } else {
+          yield JSON.stringify({
+            type: "response",
+            response: "Current time handled",
+          });
+        }
+      },
+    }));
+
+    const createMock = jest.fn(async () => ({
+      clone: jest.fn(async () => ({
+        promptStreaming: clonePromptStreaming,
+        destroy: jest.fn(),
+      })),
+      destroy: jest.fn(),
+    }));
+
+    setLanguageModelMock(createMock);
+    const { invokeWithPromptApi } = await import("./prompt-api-provider.js");
+    const emitted: any[] = [];
+    const emitFn = jest.fn(async (msg) => {
+      emitted.push(msg);
+    });
+
+    await invokeWithPromptApi(
+      {} as any,
+      "g1",
+      "system",
+      [{ role: "user", content: "what time is it?" }],
+      1024,
+      emitFn,
+      null as any,
+      [
+        {
+          name: "get_current_time",
+          description: "Get current time",
+          input_schema: { type: "object" },
+        },
+      ],
+    );
+
+    expect(
+      emitted.some(
+        (m) => m.type === "tool-activity" && m.payload?.status === "running",
+      ),
+    ).toBe(true);
+    expect(
+      emitted.some(
+        (m) => m.type === "tool-activity" && m.payload?.status === "done",
+      ),
+    ).toBe(true);
+    expect(
+      emitted.some(
+        (m) =>
+          m.type === "response" && m.payload?.text === "Current time handled",
+      ),
+    ).toBe(true);
+  });
+
+  it("extracts structured JSON response embedded in prose", async () => {
+    const clonePromptStreaming = jest.fn(() => ({
+      [Symbol.asyncIterator]: async function* () {
+        yield 'Before text {"type": "response", "response": "Embedded response"} after text';
+      },
+    }));
+
+    const createMock = jest.fn(async () => ({
+      clone: jest.fn(async () => ({
+        promptStreaming: clonePromptStreaming,
+        destroy: jest.fn(),
+      })),
+      destroy: jest.fn(),
+    }));
+
+    setLanguageModelMock(createMock);
+    const { invokeWithPromptApi } = await import("./prompt-api-provider.js");
+    const emitted: any[] = [];
+    const emitFn = jest.fn(async (msg) => {
+      emitted.push(msg);
+    });
+
+    await invokeWithPromptApi(
+      {} as any,
+      "g1",
+      "system",
+      [{ role: "user", content: "hello" }],
+      1024,
+      emitFn,
+      null as any,
+      [],
+    );
+
+    expect(
+      emitted.some(
+        (m) => m.type === "response" && m.payload?.text === "Embedded response",
+      ),
+    ).toBe(true);
+  });
+
+  it("handles tool_use envelope with empty tool_calls array", async () => {
+    const clonePromptStreaming = jest.fn(() => ({
+      [Symbol.asyncIterator]: async function* () {
+        yield JSON.stringify({ type: "tool_use", tool_calls: [] });
+      },
+    }));
+
+    const createMock = jest.fn(async () => ({
+      clone: jest.fn(async () => ({
+        promptStreaming: clonePromptStreaming,
+        destroy: jest.fn(),
+      })),
+      destroy: jest.fn(),
+    }));
+
+    setLanguageModelMock(createMock);
+    const { invokeWithPromptApi } = await import("./prompt-api-provider.js");
+    const emitted: any[] = [];
+    const emitFn = jest.fn(async (msg) => {
+      emitted.push(msg);
+    });
+
+    await invokeWithPromptApi(
+      {} as any,
+      "g1",
+      "system",
+      [{ role: "user", content: "hello" }],
+      1024,
+      emitFn,
+      null as any,
+      [
+        {
+          name: "any_tool",
+          description: "desc",
+          input_schema: { type: "object" },
+        },
+      ],
+    );
+
+    expect(
+      emitted.some(
+        (m) => m.type === "response" && m.payload?.text === "(no response)",
+      ),
+    ).toBe(true);
+  });
+
+  it("handles session destroyed error with warning", async () => {
+    const clonePromptStreaming = jest.fn(() => ({
+      [Symbol.asyncIterator]: async function* () {
+        throw new Error("Session has been destroyed");
+      },
+    }));
+
+    const createMock = jest.fn(async () => ({
+      clone: jest.fn(async () => ({
+        promptStreaming: clonePromptStreaming,
+        destroy: jest.fn(),
+      })),
+      destroy: jest.fn(),
+    }));
+
+    setLanguageModelMock(createMock);
+    const { invokeWithPromptApi } = await import("./prompt-api-provider.js");
+
+    await expect(
+      invokeWithPromptApi(
+        {} as any,
+        "g1",
+        "system",
+        [{ role: "user", content: "hello" }],
+        1024,
+        async () => {},
+        null as any,
+        [],
+      ),
+    ).rejects.toThrow("Session has been destroyed");
   });
 
   describe("fetchPolyfillTotalSizeBytes", () => {

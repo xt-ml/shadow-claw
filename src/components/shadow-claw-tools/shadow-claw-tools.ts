@@ -16,7 +16,7 @@ import type { RemoteManifest } from "../../subsystems/tools/remote/types.js";
 import {
   setWebMcpMode,
   setWebMcpToolsEnabled,
-} from "../../core/orchestrator/utils/syncWebMcpRegistration.js";
+} from "../../core/orchestrator/utils/sync-web-mcp-registration.js";
 
 import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";
 import "../shadow-claw-dialog/shadow-claw-dialog.js";

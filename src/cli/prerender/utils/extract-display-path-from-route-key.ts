@@ -1,4 +1,4 @@
-import { trimSlashes } from "./trim-slashes.js";
+import { trimSlashes } from "../../../utils/normalize-workspace-path.js";
 
 export function extractDisplayPathFromRouteKey(routeKey: string): string {
   const clean = trimSlashes(routeKey);

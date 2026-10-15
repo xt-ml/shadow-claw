@@ -1,4 +1,4 @@
-import { resolveDynamicString } from "../../../../ui/a2ui/utils/resolveDynamicString.js";
+import { resolveDynamicString } from "../../../../ui/a2ui/utils/resolve-dynamic-string.js";
 import { applyWeight } from "./shared.js";
 
 import type { SliderSpec } from "../../../../ui/a2ui/types.js";

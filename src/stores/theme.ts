@@ -3,7 +3,7 @@ import {
   getNamespacedItem,
   getNamespacedStorageKey,
   setNamespacedItem,
-} from "../utils/namespacedStorage.js";
+} from "../utils/namespaced-storage.js";
 
 export type ThemeChoice = "light" | "dark" | "system";
 export type ResolvedTheme = "light" | "dark";

@@ -1,5 +1,5 @@
 import { getProjectRoot } from "../utils/resolve-project-root.js";
-import { argv, chdir, exit, stdin } from "node:process";
+import process, { argv, chdir, stdin } from "node:process";
 import path from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -67,7 +67,7 @@ export async function main(): Promise<void> {
     console.error(
       "If replacement omitted, reads replacement string from stdin pipe.",
     );
-    exit(1);
+    process.exit(1);
   }
 
   await fileSearchReplace(args);
@@ -81,6 +81,6 @@ const isMainModule =
 if (isMainModule) {
   main().catch((error) => {
     console.error(error);
-    exit(1);
+    process.exit(1);
   });
 }

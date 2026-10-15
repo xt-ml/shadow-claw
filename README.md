@@ -124,7 +124,7 @@ npm install && npm run dev  # Dev server → http://localhost:8888
 - **Configurable Multi-Model Routing:** Route queries to Cloud providers (OpenRouter, Anthropic, Gemini, OpenAI, AWS Bedrock), local engines (Ollama, Llamafile, Transformers.js with on-demand Hugging Face model downloading and disk caching), or in-browser WebGPU models (LiteRT-LM).
 - **Dual-Dispatch Sandboxing & Storage:** Client-side compute via sandboxed JavaScript and `just-bash` (or WebVM Alpine Linux) backed by Origin Private File System (OPFS) and IndexedDB; paired with host-native Node filesystem handles and SQLite database persistence on the server side.
 - **PWA & Electron Desktop Parity:** Deployable as a progressive web app with Service Worker and Web Push, or as a native desktop application with full feature parity.
-- **Modular Package Library Exports & Standardized Utilities:** Exposes modular ESM exports declared in `package.json` under `.`, `./cli`, `./cli/*`, `./components`, `./components/*`, `./utils`, and `./utils/*`, compiled via Rolldown with dynamic entry point discovery for reusable components and standardized cross-cutting utilities (`base64`, `coerce`, `delay`, `filename`, `isBinary`, `mime`, `normalizeStringList`, `normalizeWorkspacePath`, `parseBooleanConfig`, `parseStoredStringList`, `ulid`).
+- **Modular Package Library Exports & Standardized Utilities:** Exposes modular ESM exports declared in `package.json` under `.`, `./cli`, `./cli/*`, `./components`, `./components/*`, `./utils`, and `./utils/*`, compiled via Rolldown with dynamic entry point discovery for reusable components and standardized cross-cutting utilities (`base64`, `coerce`, `delay`, `filename`, `is-binary`, `mime`, `normalize-string-list`, `normalize-workspace-path`, `parse-boolean-config`, `parse-stored-string-list`, `ulid`).
 - **Static Publishing, Theming & Slotted Navigation:** Publish documentation portals and knowledge hubs with Declarative Shadow DOM (DSD) SSR, root and sub-route pretty paths, custom stylesheets (`theme.stylesheet`), CSS custom property layout/shell tokens, customizable slotted navigation (`sidebar-nav`, `sidebar`, `sidebar-content`, `sidebar-footer`), and declarative sections. See [Theming Subsystem](docs/subsystems/theming.md).
 - **Control Plane, CLI & Native MCP Server:** Backed by a Node.js service layer and CLI (`shadow-claw`) that provides background cron scheduling, remote backups, direct WebRTC DataChannel connectivity, and a Stateless MCP server featuring both native server management tools and dynamic browser tool relaying to external agent hosts (Claude Desktop, Cursor, Goose).
 
@@ -415,6 +415,12 @@ An interactive documentation platform and demonstration engine for the classic U
 A lightweight, headless weather station, forecasting engine, and outdoor operational advisor powered by the ShadowClaw CLI, Open-Meteo, and Unix stream pipelines, featuring well-known agent skills discovery and automated window scanning.
 
 [![ShadowClaw Agent CLI Weather documentation screenshot](https://xt-ml.github.io/shadow-claw/assets/screenshots/xt-ml.github.io_shadow-claw-agent-cli-weather-1024x768.png)](https://xt-ml.github.io/shadow-claw-agent-cli-weather/)
+
+### [News Summary](https://kherrick.github.io/news-summary/)
+
+A localized news aggregation, automatic deduplication, and topic-centric summarization pipeline powered by ShadowClaw. It monitors configured remote feeds, and compiles clean briefings directly into local markdown snapshots and static HTML.
+
+![News Summary](https://xt-ml.github.io/shadow-claw/assets/screenshots/kherrick.github.io_news-summary-1024x768.png)
 
 ---
 

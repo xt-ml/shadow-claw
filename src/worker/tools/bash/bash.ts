@@ -4,7 +4,7 @@ import {
   CONFIG_KEYS,
 } from "../../../config/config.js";
 
-import { getConfig } from "../../../db/getConfig.js";
+import { getConfig } from "../../../db/get-config.js";
 import type { ShadowClawDatabase } from "../../../db/types.js";
 
 import {
@@ -16,12 +16,12 @@ import {
 } from "../../../shell/vm.js";
 
 import { post } from "../../utils/post.js";
-import { executeViaShellFallback } from "./utils/executeViaShellFallback.js";
-import { getAllowFullInternetAccess } from "../utils/getAllowFullInternetAccess.js";
-import { waitForVMReady } from "./utils/waitForVMReady.js";
+import { executeViaShellFallback } from "./utils/execute-via-shell-fallback.js";
+import { getAllowFullInternetAccess } from "../utils/get-allow-full-internet-access.js";
+import { waitForVMReady } from "./utils/wait-for-vm-ready.js";
 
-import { writeGroupFile } from "../../../storage/writeGroupFile.js";
-import { deleteGroupFile } from "../../../storage/deleteGroupFile.js";
+import { writeGroupFile } from "../../../storage/write-group-file.js";
+import { deleteGroupFile } from "../../../storage/delete-group-file.js";
 import { isHeadlessMode } from "../../../config/headless.js";
 
 export type HeadlessBashExecutor = (options: {

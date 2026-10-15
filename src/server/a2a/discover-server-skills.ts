@@ -17,7 +17,7 @@ import matter from "gray-matter";
 import type { AgentSkill } from "../../subsystems/channels/peer-protocol.js";
 import { setStorageRootFromPath } from "../../storage/node-fs-handle.js";
 import { setHeadlessMode } from "../../config/headless.js";
-import { discoverSkills } from "../../subsystems/skills/discoverSkills.js";
+import { discoverSkills } from "../../subsystems/skills/discover-skills.js";
 import { DEFAULT_GROUP_ID } from "../../config/config.js";
 
 const MAX_DIRECTORIES = 2000;

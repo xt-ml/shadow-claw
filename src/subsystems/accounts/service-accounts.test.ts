@@ -64,11 +64,11 @@ describe("resolveServiceCredentials", () => {
         providerCapabilities[providerId] || null,
     }));
 
-    jest.unstable_mockModule("../../db/getConfig.js", () => ({
+    jest.unstable_mockModule("../../db/get-config.js", () => ({
       getConfig: mockGetConfig,
     }));
 
-    jest.unstable_mockModule("../../db/setConfig.js", () => ({
+    jest.unstable_mockModule("../../db/set-config.js", () => ({
       setConfig: mockSetConfig,
     }));
 

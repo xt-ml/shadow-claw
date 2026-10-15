@@ -6,27 +6,27 @@ jest.unstable_mockModule("../../db/db.js", () => ({
   getDb: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../db/exportChatData.js", () => ({
+jest.unstable_mockModule("../../db/export-chat-data.js", () => ({
   exportChatData: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../db/importChatData.js", () => ({
+jest.unstable_mockModule("../../db/import-chat-data.js", () => ({
   importChatData: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../db/getConfig.js", () => ({
+jest.unstable_mockModule("../../db/get-config.js", () => ({
   getConfig: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../db/setConfig.js", () => ({
+jest.unstable_mockModule("../../db/set-config.js", () => ({
   setConfig: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../storage/readGroupFileBytes.js", () => ({
+jest.unstable_mockModule("../../storage/read-group-file-bytes.js", () => ({
   readGroupFileBytes: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../storage/downloadGroupFile.js", () => ({
+jest.unstable_mockModule("../../storage/download-group-file.js", () => ({
   downloadGroupFile: jest.fn(),
 }));
 

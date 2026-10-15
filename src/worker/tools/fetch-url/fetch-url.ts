@@ -1,6 +1,6 @@
-import { wrapUntrustedContent } from "../../utils/wrapUntrustedContent.js";
-import { HttpError } from "../utils/HttpError.js";
-import { parseAuthMode } from "../utils/parseAuthMode.js";
+import { wrapUntrustedContent } from "../../utils/wrap-untrusted-content.js";
+import { HttpError } from "../../../utils/http-error.js";
+import { parseAuthMode } from "../utils/parse-auth-mode.js";
 
 import type { ShadowClawDatabase } from "../../../db/types.js";
 import type { AccountAuthMode } from "../../../subsystems/accounts/service-accounts.js";

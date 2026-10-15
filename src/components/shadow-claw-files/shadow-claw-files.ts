@@ -1,23 +1,23 @@
 import { CONFIG_KEYS } from "../../config/config.js";
 import { effect } from "../../core/effect.js";
 import { getDb } from "../../db/db.js";
-import { getConfig } from "../../db/getConfig.js";
-import { isTruthyConfigValue } from "../../utils/parseBooleanConfig.js";
+import { getConfig } from "../../db/get-config.js";
+import { isTruthyConfigValue } from "../../utils/parse-boolean-config.js";
 
 import { setSanitizedHtml } from "../../security/trusted-types.js";
-import { copyGroupEntry } from "../../storage/copyGroupEntry.js";
-import { createGroupDirectory } from "../../storage/createGroupDirectory.js";
-import { deleteAllGroupFiles } from "../../storage/deleteAllGroupFiles.js";
-import { deleteGroupDirectory } from "../../storage/deleteGroupDirectory.js";
-import { deleteGroupFile } from "../../storage/deleteGroupFile.js";
-import { downloadAllGroupFilesAsZip } from "../../storage/downloadAllGroupFilesAsZip.js";
-import { downloadGroupDirectoryAsZip } from "../../storage/downloadGroupDirectoryAsZip.js";
-import { downloadGroupFile } from "../../storage/downloadGroupFile.js";
-import { moveGroupEntry } from "../../storage/moveGroupEntry.js";
-import { renameGroupEntry } from "../../storage/renameGroupEntry.js";
-import { restoreAllGroupFilesFromZip } from "../../storage/restoreAllGroupFilesFromZip.js";
-import { uploadGroupFile } from "../../storage/uploadGroupFile.js";
-import { writeGroupFile } from "../../storage/writeGroupFile.js";
+import { copyGroupEntry } from "../../storage/copy-group-entry.js";
+import { createGroupDirectory } from "../../storage/create-group-directory.js";
+import { deleteAllGroupFiles } from "../../storage/delete-all-group-files.js";
+import { deleteGroupDirectory } from "../../storage/delete-group-directory.js";
+import { deleteGroupFile } from "../../storage/delete-group-file.js";
+import { downloadAllGroupFilesAsZip } from "../../storage/download-all-group-files-as-zip.js";
+import { downloadGroupDirectoryAsZip } from "../../storage/download-group-directory-as-zip.js";
+import { downloadGroupFile } from "../../storage/download-group-file.js";
+import { moveGroupEntry } from "../../storage/move-group-entry.js";
+import { renameGroupEntry } from "../../storage/rename-group-entry.js";
+import { restoreAllGroupFilesFromZip } from "../../storage/restore-all-group-files-from-zip.js";
+import { uploadGroupFile } from "../../storage/upload-group-file.js";
+import { writeGroupFile } from "../../storage/write-group-file.js";
 
 import { fileViewerStore } from "../../stores/file-viewer.js";
 import { filesUiStore } from "../../stores/files-ui.js";
@@ -26,7 +26,7 @@ import { orchestratorStore } from "../../stores/orchestrator.js";
 import { showError, showSuccess, showWarning } from "../../ui/toast.js";
 
 import { ulid } from "../../utils/ulid.js";
-import { escapeHtml } from "../../utils/utils.js";
+import { escapeHtml } from "../../utils/html.js";
 
 import "../common/shadow-claw-empty-state/shadow-claw-empty-state.js";
 import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";

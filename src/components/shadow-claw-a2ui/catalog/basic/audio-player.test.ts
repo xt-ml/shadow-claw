@@ -69,4 +69,28 @@ describe("renderAudioPlayer", () => {
     expect(descEl).not.toBeNull();
     expect(descEl?.textContent).toBe("A cool audio clip");
   });
+
+  it("handles fallback audio properties and empty resolved URL", () => {
+    const ctxEmpty = { resolveMediaUrl: () => "" };
+    const elSource = renderAudioPlayer(
+      { component: "AudioPlayer", source: "s.mp3" } as any,
+      { dataModel: {} } as any,
+      ctxEmpty,
+    );
+    expect(elSource.querySelector("audio")?.src).toBe("");
+
+    const elAudioUrl = renderAudioPlayer(
+      { component: "AudioPlayer", audioUrl: "a.mp3" } as any,
+      { dataModel: {} } as any,
+      ctxEmpty,
+    );
+    expect(elAudioUrl.querySelector("audio")?.src).toBe("");
+
+    const elSrc = renderAudioPlayer(
+      { component: "AudioPlayer", src: "src.mp3" } as any,
+      { dataModel: {} } as any,
+      ctxEmpty,
+    );
+    expect(elSrc.querySelector("audio")?.src).toBe("");
+  });
 });

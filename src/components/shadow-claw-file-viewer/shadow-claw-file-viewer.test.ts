@@ -43,11 +43,11 @@ jest.unstable_mockModule("../../stores/orchestrator.js", () => ({
   },
 }));
 
-jest.unstable_mockModule("../../storage/writeGroupFile.js", () => ({
+jest.unstable_mockModule("../../storage/write-group-file.js", () => ({
   writeGroupFile: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../storage/readGroupFileBytes.js", () => ({
+jest.unstable_mockModule("../../storage/read-group-file-bytes.js", () => ({
   readGroupFileBytes: jest.fn(),
 }));
 
@@ -82,8 +82,8 @@ const { renderMarkdown } = await import("../../content/markdown.js");
 const { setSanitizedHtml, toTrustedHtmlPresanitized } =
   await import("../../security/trusted-types.js");
 const { readGroupFileBytes } =
-  await import("../../storage/readGroupFileBytes.js");
-const { writeGroupFile } = await import("../../storage/writeGroupFile.js");
+  await import("../../storage/read-group-file-bytes.js");
+const { writeGroupFile } = await import("../../storage/write-group-file.js");
 const { setAllowedCustomElementHostPatterns } =
   await import("../../security/custom-element-security.js");
 
@@ -2150,7 +2150,7 @@ describe("shadow-claw-file-viewer", () => {
       const { ShadowClawFileViewer } =
         await import("./shadow-claw-file-viewer.js");
       const { writeGroupFile } =
-        await import("../../storage/writeGroupFile.js");
+        await import("../../storage/write-group-file.js");
 
       const component = new ShadowClawFileViewer() as any;
       document.body.appendChild(component);
@@ -2674,6 +2674,1282 @@ describe("shadow-claw-file-viewer", () => {
       (fileViewerStore as any).file = null;
       effectCallback();
       expect(component.lastOpenedFileName).toBe("");
+
+      document.body.removeChild(component);
+    });
+
+    it("handles storage proxy requests and iframe messages comprehensively", async () => {
+      const component = new ShadowClawFileViewer() as any;
+      document.body.appendChild(component);
+      component.db = {};
+      const mockSource = { postMessage: jest.fn() };
+
+      // 1. handleStorageProxyRequest
+      // missing requestId
+      await component.handleStorageProxyRequest(mockSource, "", "setItem", {});
+      expect(mockSource.postMessage).not.toHaveBeenCalled();
+
+      // setItem, removeItem, clear, getAllItems
+      await component.handleStorageProxyRequest(mockSource, "r1", "setItem", {
+        key: "k1",
+        value: "v1",
+      });
+      expect(mockSource.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ requestId: "r1", result: null }),
+        "*",
+      );
+
+      await component.handleStorageProxyRequest(
+        mockSource,
+        "r2",
+        "getAllItems",
+        {},
+      );
+      expect(mockSource.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ requestId: "r2" }),
+        "*",
+      );
+
+      await component.handleStorageProxyRequest(
+        mockSource,
+        "r3",
+        "removeItem",
+        { key: "k1" },
+      );
+      await component.handleStorageProxyRequest(mockSource, "r4", "clear", {});
+
+      // IndexedDB methods: idb-put (with key and without key), idb-get, idb-getAll, idb-delete, idb-clear, idb-deleteDatabase
+      await component.handleStorageProxyRequest(mockSource, "r5", "idb-put", {
+        dbName: "myDb",
+        storeName: "myStore",
+        key: "item1",
+        value: { foo: "bar" },
+      });
+      expect(mockSource.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ requestId: "r5", result: "item1" }),
+        "*",
+      );
+
+      await component.handleStorageProxyRequest(mockSource, "r6", "idb-put", {
+        dbName: "myDb",
+        storeName: "myStore",
+        key: null,
+        value: { auto: true },
+      });
+      expect(mockSource.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ requestId: "r6" }),
+        "*",
+      );
+
+      await component.handleStorageProxyRequest(mockSource, "r7", "idb-get", {
+        dbName: "myDb",
+        storeName: "myStore",
+        key: "item1",
+      });
+
+      await component.handleStorageProxyRequest(
+        mockSource,
+        "r8",
+        "idb-getAll",
+        {
+          dbName: "myDb",
+          storeName: "myStore",
+        },
+      );
+
+      await component.handleStorageProxyRequest(
+        mockSource,
+        "r9",
+        "idb-delete",
+        {
+          dbName: "myDb",
+          storeName: "myStore",
+          key: "item1",
+        },
+      );
+
+      await component.handleStorageProxyRequest(
+        mockSource,
+        "r10",
+        "idb-clear",
+        {
+          dbName: "myDb",
+          storeName: "myStore",
+        },
+      );
+
+      await component.handleStorageProxyRequest(
+        mockSource,
+        "r11",
+        "idb-deleteDatabase",
+        {
+          dbName: "myDb",
+        },
+      );
+
+      // Unknown method throws and catches
+      await component.handleStorageProxyRequest(
+        mockSource,
+        "r12",
+        "invalidMethod",
+        {},
+      );
+      expect(mockSource.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          requestId: "r12",
+          error: expect.stringContaining("Unknown storage proxy method"),
+        }),
+        "*",
+      );
+
+      // 2. handleIframeMessage
+      // null or non-object data
+      component.handleIframeMessage({ data: null } as any);
+      component.handleIframeMessage({ data: "string-data" } as any);
+
+      // shadow-claw-broadcast-result
+      component.broadcastProxy = {
+        handleResultFromIframe: jest.fn(),
+        dispose: jest.fn(),
+      };
+      component.handleIframeMessage({
+        data: {
+          type: "shadow-claw-broadcast-result",
+          channel: "c1",
+          payload: { ok: true },
+        },
+        source: mockSource,
+      } as any);
+      expect(
+        component.broadcastProxy.handleResultFromIframe,
+      ).toHaveBeenCalledWith(mockSource, "c1", { ok: true });
+
+      // shadow-claw-iframe-resize
+      const iframe = document.createElement("iframe");
+      iframe.className = "file-content-iframe";
+      component.shadowRoot.appendChild(iframe);
+      component.previewFrameWindow = null;
+      component.handleIframeMessage({
+        data: { type: "shadow-claw-iframe-resize", height: 450 },
+        source: mockSource,
+      } as any);
+      expect(iframe.style.height).toBe("450px");
+
+      // shadow-claw-storage-proxy with source mismatch vs match
+      component.previewFrameWindow = mockSource;
+      const otherSource = { postMessage: jest.fn() };
+      component.handleIframeMessage({
+        data: {
+          type: "shadow-claw-storage-proxy",
+          requestId: "r99",
+          method: "clear",
+        },
+        source: otherSource,
+      } as any);
+      expect(otherSource.postMessage).not.toHaveBeenCalled();
+
+      component.handleIframeMessage({
+        data: {
+          type: "shadow-claw-storage-proxy",
+          requestId: "r100",
+          method: "clear",
+        },
+        source: mockSource,
+      } as any);
+      await new Promise((r) => setTimeout(r, 20));
+      expect(mockSource.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ requestId: "r100" }),
+        "*",
+      );
+
+      // shadow-claw-file-viewer-link guards
+      component.db = null;
+      component.handleIframeMessage({
+        data: { type: "shadow-claw-file-viewer-link", href: "doc.md" },
+      } as any);
+
+      component.db = {};
+      component.handleIframeMessage({
+        data: { type: "shadow-claw-file-viewer-link", href: 123 },
+      } as any);
+
+      component.previewFrameWindow = mockSource;
+      component.handleIframeMessage({
+        data: { type: "shadow-claw-file-viewer-link", href: "doc.md" },
+        source: otherSource,
+      } as any);
+
+      document.body.removeChild(component);
+    });
+
+    it("handles web share and file sharing branches", async () => {
+      const component = new ShadowClawFileViewer() as any;
+      document.body.appendChild(component);
+      const { showError, showSuccess } = await import("../../ui/toast.js");
+
+      // 1. buildWebShareFile
+      expect(component.buildWebShareFile(null)).toBeNull();
+      expect(component.buildWebShareFile({ binaryContent: null })).toBeNull();
+      expect(
+        component.buildWebShareFile({ binaryContent: new Uint8Array(0) }),
+      ).toBeNull();
+      const f1 = component.buildWebShareFile({
+        binaryContent: new Uint8Array([1, 2, 3]),
+      });
+      expect(f1.name).toBe("shared-file");
+      expect(f1.type).toBe("application/octet-stream");
+
+      // 2. canShareCurrentFile
+      expect(component.canShareCurrentFile(null)).toBe(false);
+      component.isWebShareAvailable = () => false;
+      expect(component.canShareCurrentFile({ kind: "text" })).toBe(false);
+      component.isWebShareAvailable = () => true;
+      expect(component.canShareCurrentFile({ kind: "text" })).toBe(true);
+
+      const origCanShare = Object.getOwnPropertyDescriptor(
+        navigator,
+        "canShare",
+      );
+      Object.defineProperty(navigator, "canShare", {
+        configurable: true,
+        writable: true,
+        value: jest.fn().mockReturnValue(true),
+      });
+      expect(
+        component.canShareCurrentFile({
+          kind: "binary",
+          binaryContent: new Uint8Array([1]),
+        }),
+      ).toBe(true);
+      (navigator as any).canShare = jest.fn().mockReturnValue(false);
+      expect(
+        component.canShareCurrentFile({
+          kind: "binary",
+          binaryContent: new Uint8Array([1]),
+        }),
+      ).toBe(false);
+      (navigator as any).canShare = undefined;
+      expect(
+        component.canShareCurrentFile({
+          kind: "binary",
+          binaryContent: new Uint8Array([1]),
+        }),
+      ).toBe(false);
+
+      // 3. handleShareFile
+      (fileViewerStore as any).file = null;
+      await component.handleShareFile();
+      expect(showError).toHaveBeenCalledWith(
+        expect.stringContaining("not supported"),
+        4500,
+      );
+
+      // text file sharing success
+      const origShare = Object.getOwnPropertyDescriptor(navigator, "share");
+      Object.defineProperty(navigator, "share", {
+        configurable: true,
+        writable: true,
+        value: jest.fn().mockResolvedValue(undefined),
+      });
+      (fileViewerStore as any).file = {
+        name: "test.txt",
+        kind: "text",
+        content: null,
+      };
+      await component.handleShareFile();
+      expect(navigator.share).toHaveBeenCalledWith({
+        title: "test.txt",
+        text: "",
+      });
+      expect(showSuccess).toHaveBeenCalledWith("Shared test.txt");
+
+      // binary file sharing failure on second call and success
+      Object.defineProperty(navigator, "canShare", {
+        configurable: true,
+        writable: true,
+        value: jest.fn().mockReturnValueOnce(true).mockReturnValueOnce(false),
+      });
+      (fileViewerStore as any).file = {
+        name: "test.bin",
+        kind: "binary",
+        binaryContent: new Uint8Array([1, 2]),
+      };
+      await component.handleShareFile();
+      expect(showError).toHaveBeenCalledWith(
+        expect.stringContaining("File sharing is not supported"),
+        4500,
+      );
+
+      (navigator as any).canShare = jest.fn().mockReturnValue(true);
+      await component.handleShareFile();
+      expect(showSuccess).toHaveBeenCalledWith("Shared test.bin");
+
+      // AbortError is ignored
+      (navigator as any).share = jest
+        .fn()
+        .mockRejectedValue(new DOMException("Aborted", "AbortError"));
+      await component.handleShareFile();
+
+      // Normal Error
+      (navigator as any).share = jest
+        .fn()
+        .mockRejectedValue(new Error("Permission denied"));
+      await component.handleShareFile();
+      expect(showError).toHaveBeenCalledWith(
+        expect.stringContaining("Permission denied"),
+        5000,
+      );
+
+      // String error
+      (navigator as any).share = jest.fn().mockRejectedValue("String failure");
+      await component.handleShareFile();
+      expect(showError).toHaveBeenCalledWith(
+        expect.stringContaining("String failure"),
+        5000,
+      );
+
+      if (origShare) {
+        Object.defineProperty(navigator, "share", origShare);
+      } else {
+        delete (navigator as any).share;
+      }
+      if (origCanShare) {
+        Object.defineProperty(navigator, "canShare", origCanShare);
+      } else {
+        delete (navigator as any).canShare;
+      }
+      document.body.removeChild(component);
+    });
+
+    it("handles native and emulated fullscreen branches", async () => {
+      const component = new ShadowClawFileViewer() as any;
+      document.body.appendChild(component);
+      const modal = component.shadowRoot.querySelector(
+        ".file-modal",
+      ) as HTMLElement;
+
+      // canUseNativeFullscreen
+      const dummyEl = document.createElement("div") as any;
+      Object.defineProperty(document, "fullscreenEnabled", {
+        value: true,
+        configurable: true,
+      });
+      dummyEl.webkitRequestFullscreen = jest.fn();
+      (document as any).webkitExitFullscreen = jest.fn();
+      expect(component.canUseNativeFullscreen(dummyEl)).toBe(true);
+
+      Object.defineProperty(document, "fullscreenEnabled", {
+        value: false,
+        configurable: true,
+      });
+      expect(component.canUseNativeFullscreen(dummyEl)).toBe(false);
+
+      // getCurrentFullscreenElement
+      Object.defineProperty(document, "fullscreenElement", {
+        value: null,
+        configurable: true,
+      });
+      (document as any).webkitFullscreenElement = dummyEl;
+      expect(component.getCurrentFullscreenElement()).toBe(dummyEl);
+      (document as any).webkitFullscreenElement = null;
+      expect(component.getCurrentFullscreenElement()).toBeNull();
+
+      // getFullscreenTarget
+      expect(
+        component.getFullscreenTarget(document.createElement("div")),
+      ).toBeNull();
+      const divWithSpan = document.createElement("div");
+      divWithSpan.innerHTML = '<svg class="modal-content"></svg>';
+      expect(component.getFullscreenTarget(divWithSpan)).toBeNull();
+
+      // exitNativeFullscreen & requestNativeFullscreen
+      (document as any).webkitExitFullscreen = jest.fn();
+      const origExit = Object.getOwnPropertyDescriptor(
+        document,
+        "exitFullscreen",
+      );
+      Object.defineProperty(document, "exitFullscreen", {
+        configurable: true,
+        writable: true,
+        value: undefined,
+      });
+      await expect(component.exitNativeFullscreen()).resolves.toBeUndefined();
+      (document as any).webkitExitFullscreen = undefined;
+      await expect(component.exitNativeFullscreen()).rejects.toThrow(
+        "Native fullscreen exit unavailable",
+      );
+      if (origExit) Object.defineProperty(document, "exitFullscreen", origExit);
+
+      dummyEl.requestFullscreen = undefined;
+      dummyEl.webkitRequestFullscreen = jest.fn();
+      await expect(
+        component.requestNativeFullscreen(dummyEl),
+      ).resolves.toBeUndefined();
+      dummyEl.webkitRequestFullscreen = undefined;
+      await expect(component.requestNativeFullscreen(dummyEl)).rejects.toThrow(
+        "Native fullscreen unavailable",
+      );
+
+      // exitFullscreenIfActive
+      await component.exitFullscreenIfActive(null);
+      await component.exitFullscreenIfActive(modal);
+
+      // toggleFullscreenMode emulated fallback
+      const modalContent = modal.querySelector(".modal-content")!;
+      component.canUseNativeFullscreen = () => false;
+      await component.toggleFullscreenMode(modal);
+      expect(modalContent.classList.contains("modal-content--fullscreen")).toBe(
+        true,
+      );
+      await component.toggleFullscreenMode(modal);
+      expect(modalContent.classList.contains("modal-content--fullscreen")).toBe(
+        false,
+      );
+
+      // toggleFullscreenMode with invalid target
+      await component.toggleFullscreenMode(document.createElement("div"));
+
+      // toggleFullscreenMode native fullscreen
+      component.canUseNativeFullscreen = () => true;
+      component.isTargetInFullscreen = jest
+        .fn()
+        .mockReturnValueOnce(false)
+        .mockReturnValueOnce(true)
+        .mockReturnValueOnce(false);
+      component.requestNativeFullscreen = jest
+        .fn()
+        .mockResolvedValue(undefined);
+      component.exitNativeFullscreen = jest.fn().mockResolvedValue(undefined);
+      await component.toggleFullscreenMode(modal);
+      expect(component.requestNativeFullscreen).toHaveBeenCalled();
+      await component.toggleFullscreenMode(modal);
+      expect(component.exitNativeFullscreen).toHaveBeenCalled();
+
+      // toggleFullscreenMode native failure catch
+      component.requestNativeFullscreen = jest
+        .fn()
+        .mockRejectedValue(new Error("Fullscreen denied"));
+      await component.toggleFullscreenMode(modal);
+      expect(modalContent.classList.contains("modal-content--fullscreen")).toBe(
+        true,
+      );
+
+      document.body.removeChild(component);
+    });
+
+    it("handles preview link navigation and workspace link resolution", async () => {
+      const component = new ShadowClawFileViewer() as any;
+      document.body.appendChild(component);
+      component.db = {};
+
+      // 1. handlePreviewLinkClick guards
+      const evDefault = new MouseEvent("click", { cancelable: true });
+      evDefault.preventDefault();
+      await component.handlePreviewLinkClick(evDefault);
+
+      const evButton = new MouseEvent("click", { button: 1 });
+      await component.handlePreviewLinkClick(evButton);
+
+      const evMeta = new MouseEvent("click", { metaKey: true });
+      await component.handlePreviewLinkClick(evMeta);
+
+      const evCtrl = new MouseEvent("click", { ctrlKey: true });
+      await component.handlePreviewLinkClick(evCtrl);
+
+      const evShift = new MouseEvent("click", { shiftKey: true });
+      await component.handlePreviewLinkClick(evShift);
+
+      const evAlt = new MouseEvent("click", { altKey: true });
+      await component.handlePreviewLinkClick(evAlt);
+
+      // not element target
+      await component.handlePreviewLinkClick({
+        target: null,
+        button: 0,
+      } as any);
+
+      // no anchor element
+      const divEl = document.createElement("div");
+      await component.handlePreviewLinkClick({
+        target: divEl,
+        button: 0,
+      } as any);
+
+      // without db
+      const anchorEl = document.createElement("a");
+      anchorEl.href = "/workspace/file.md";
+      component.db = null;
+      await component.handlePreviewLinkClick({
+        target: anchorEl,
+        button: 0,
+      } as any);
+      component.db = {};
+
+      // internal navigation via window.navigation.navigate
+      (fileViewerStore as any).file = {
+        name: "index.md",
+        path: "docs/index.md",
+      };
+      const navMock = { navigate: jest.fn() };
+      Object.defineProperty(window as any, "navigation", {
+        configurable: true,
+        writable: true,
+        value: navMock,
+      });
+      const evInternal = {
+        target: anchorEl,
+        button: 0,
+        preventDefault: jest.fn(),
+      } as any;
+      anchorEl.setAttribute("href", "sub.md");
+      await component.handlePreviewLinkClick(evInternal);
+      expect(navMock.navigate).toHaveBeenCalled();
+
+      // internal navigation fallback to history.pushState
+      delete (window as any).navigation;
+      const pushSpy = jest
+        .spyOn(window.history, "pushState")
+        .mockImplementation(() => {});
+      await component.handlePreviewLinkClick(evInternal);
+      expect(pushSpy).toHaveBeenCalled();
+      pushSpy.mockRestore();
+
+      // external link click
+      const extAnchor = document.createElement("a");
+      extAnchor.setAttribute("href", "https://external.example.com/page");
+      extAnchor.setAttribute("target", "_self");
+      const openSpy = jest.spyOn(window, "open").mockImplementation(() => null);
+      const evExternal = {
+        target: extAnchor,
+        button: 0,
+        preventDefault: jest.fn(),
+      } as any;
+      await component.handlePreviewLinkClick(evExternal);
+      expect(openSpy).toHaveBeenCalledWith(
+        "https://external.example.com/page",
+        "_blank",
+        "noopener,noreferrer",
+      );
+
+      // external custom scheme
+      extAnchor.setAttribute("href", "slack://open?id=123");
+      extAnchor.setAttribute("target", "my-win");
+      await component.handlePreviewLinkClick(evExternal);
+      expect(openSpy).toHaveBeenCalledWith(
+        "slack://open?id=123",
+        "my-win",
+        "noopener,noreferrer",
+      );
+      openSpy.mockRestore();
+
+      // 2. resolveWorkspaceLinkPath
+      expect(component.resolveWorkspaceLinkPath("")).toBeNull();
+      expect(component.resolveWorkspaceLinkPath("#top")).toBeNull();
+      expect(
+        component.resolveWorkspaceLinkPath("ftp://example.com/file"),
+      ).toBeNull();
+      expect(
+        component.resolveWorkspaceLinkPath("https://other.com/file"),
+      ).toBeNull();
+      expect(component.resolveWorkspaceLinkPath("/absolute/path")).toBeNull();
+      expect(
+        component.resolveWorkspaceLinkPath(
+          "../../out-of-bounds",
+          "src/file.ts",
+        ),
+      ).toBeNull();
+      expect(
+        component.resolveWorkspaceLinkPath("a/./b/../c", "src/file.ts"),
+      ).toBe("src/a/c");
+
+      // 3. routeGroupMatches
+      expect(component.routeGroupMatches("main", "main")).toBe(true);
+      expect(component.routeGroupMatches("main", "br:main")).toBe(true);
+      expect(component.routeGroupMatches("br:main", "main")).toBe(true);
+      expect(component.routeGroupMatches("g1", "g2")).toBe(false);
+      expect(component.routeGroupMatches("peer:123", "peer-123")).toBe(true);
+      expect(component.routeGroupMatches("peer:123", "peer:456")).toBe(false);
+
+      document.body.removeChild(component);
+    });
+
+    it("handles binary preview rendering, code highlighting, wrapCodeLines, and theme sync", async () => {
+      const component = new ShadowClawFileViewer() as any;
+      document.body.appendChild(component);
+      const content = document.createElement("div");
+
+      // 1. mimeTypeForImageExt
+      expect(component.mimeTypeForImageExt("png")).toBe("image/png");
+      expect(component.mimeTypeForImageExt("unknown_xyz")).toBe("image/jpeg");
+
+      // 2. renderBinaryPreview
+      // nativeFile
+      const fileNative = {
+        name: "img.png",
+        mimeType: "image/png",
+        nativeFile: new File([""], "img.png"),
+      };
+      component.renderBinaryPreview(content, fileNative);
+      expect(content.querySelector("img")).not.toBeNull();
+
+      // binaryContent empty
+      const fileEmpty = {
+        name: "empty.bin",
+        mimeType: "application/octet-stream",
+        binaryContent: new Uint8Array(0),
+      };
+      component.renderBinaryPreview(content, fileEmpty);
+      expect(content.textContent).toBe("Binary content unavailable.");
+
+      // video
+      const fileVideo = {
+        name: "vid.mp4",
+        mimeType: "video/mp4",
+        binaryContent: new Uint8Array([1, 2, 3]),
+      };
+      component.renderBinaryPreview(content, fileVideo);
+      expect(content.querySelector("video")).not.toBeNull();
+
+      // audio
+      const fileAudio = {
+        name: "aud.mp3",
+        mimeType: "audio/mp3",
+        binaryContent: new Uint8Array([1, 2, 3]),
+      };
+      component.renderBinaryPreview(content, fileAudio);
+      expect(content.querySelector("audio")).not.toBeNull();
+
+      // other mimeType -> iframe
+      const fileOther = {
+        name: "doc.bin",
+        mimeType: "application/pdf",
+        binaryContent: new Uint8Array([1, 2, 3]),
+      };
+      component.renderBinaryPreview(content, fileOther);
+      expect(content.querySelector("iframe")).not.toBeNull();
+
+      // 3. wrapCodeLines
+      const preContainer = document.createElement("div");
+      preContainer.innerHTML = "<pre><code>line1\n\nline3\n</code></pre>";
+      component.wrapCodeLines(preContainer);
+      expect(preContainer.innerHTML).toContain("&nbsp;");
+
+      const preNoTrailing = document.createElement("div");
+      preNoTrailing.innerHTML = "<pre><code>lineA\nlineB</code></pre>";
+      component.wrapCodeLines(preNoTrailing);
+      expect(preNoTrailing.innerHTML).toContain('data-line="2"');
+
+      // 4. stripHtmlFrontmatter
+      expect(component.stripHtmlFrontmatter(null as any)).toBeNull();
+      expect(component.stripHtmlFrontmatter("hello world")).toBe("hello world");
+      expect(component.stripHtmlFrontmatter("---\n---\nbody")).toBe(
+        "---\n---\nbody",
+      );
+      expect(
+        component.stripHtmlFrontmatter("---\ntitle: test\n---\nbody"),
+      ).toBe("body");
+
+      // 5. syncIframeTheme
+      component.previewFrameWindow = null;
+      component.syncIframeTheme();
+      const mockWin = { postMessage: jest.fn() };
+      component.previewFrameWindow = mockWin;
+      document.documentElement.classList.add("dark-mode");
+      component.syncIframeTheme();
+      expect(mockWin.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "shadow-claw-theme-update",
+          theme: "dark",
+        }),
+        "*",
+      );
+
+      document.body.removeChild(component);
+    });
+
+    it("handles anchor navigation, file saving, sending to peer, and workspace link opening", async () => {
+      const component = new ShadowClawFileViewer() as any;
+      document.body.appendChild(component);
+      component.db = {};
+      const { showError, showSuccess } = await import("../../ui/toast.js");
+
+      // 1. handleAnchorNavigation
+      const fileContent = component.shadowRoot.querySelector(
+        ".file-content",
+      ) as HTMLElement;
+      fileContent.innerHTML = `
+        <span class="code-line" data-line="5">five</span>
+        <span class="code-line" data-line="10">ten</span>
+        <div id="section-id">section</div>
+        <a name="section-name">name anchor</a>
+      `;
+
+      expect(component.handleAnchorNavigation("#L5")).toBe(true);
+      expect(component.handleAnchorNavigation("#L5-L10")).toBe(true);
+      expect(component.handleAnchorNavigation("#L99")).toBe(false);
+      expect(component.handleAnchorNavigation("#section-id")).toBe(true);
+      expect(component.handleAnchorNavigation("#section-name")).toBe(true);
+      expect(component.handleAnchorNavigation("#nonexistent")).toBe(false);
+
+      // 2. canDismissViewer
+      component.hasUnsavedChanges = () => false;
+      await expect(component.canDismissViewer()).resolves.toBe(true);
+
+      component.hasUnsavedChanges = () => true;
+      component.requestConfirmation = jest.fn().mockResolvedValue(true);
+      await expect(component.canDismissViewer()).resolves.toBe(true);
+
+      component.requestConfirmation = jest.fn().mockResolvedValue(false);
+      await expect(component.canDismissViewer()).resolves.toBe(false);
+
+      // 3. handleSave
+      (fileViewerStore as any).file = null;
+      await component.handleSave();
+
+      (fileViewerStore as any).file = {
+        name: "doc.txt",
+        path: null,
+        groupId: null,
+      };
+      (orchestratorStore as any).currentPath = ".";
+      const editor = component.shadowRoot.querySelector(
+        ".file-editor",
+      ) as HTMLTextAreaElement;
+      editor.value = "saved text";
+      await component.handleSave();
+      expect(showSuccess).toHaveBeenCalledWith("Saved doc.txt");
+
+      (orchestratorStore as any).currentPath = "subfolder";
+      await component.handleSave();
+      expect(showSuccess).toHaveBeenCalledWith("Saved doc.txt");
+
+      (writeGroupFile as any).mockRejectedValueOnce(new Error("Disk full"));
+      await component.handleSave();
+      expect(showError).toHaveBeenCalledWith("Failed to save file: Disk full");
+
+      (writeGroupFile as any).mockRejectedValueOnce("String disk failure");
+      await component.handleSave();
+      expect(showError).toHaveBeenCalledWith(
+        "Failed to save file: String disk failure",
+      );
+
+      // 4. handleSendFileToPeer
+      (fileViewerStore as any).file = null;
+      await component.handleSendFileToPeer();
+      expect(showError).toHaveBeenCalledWith(
+        "No file is currently open.",
+        4500,
+      );
+
+      (fileViewerStore as any).file = {
+        name: "doc.txt",
+        path: "doc.txt",
+        groupId: "main",
+      };
+      await component.handleSendFileToPeer();
+      expect(showError).toHaveBeenCalledWith(
+        "Can only send files to peers in a peer or room conversation.",
+        4500,
+      );
+
+      (fileViewerStore as any).file = {
+        name: "doc.txt",
+        path: "doc.txt",
+        groupId: "peer:peer1",
+      };
+      await component.handleSendFileToPeer();
+      expect(orchestratorStore.sendFileToPeer).toHaveBeenCalledWith(
+        "doc.txt",
+        "peer:peer1",
+        expect.anything(),
+      );
+
+      (fileViewerStore as any).file = {
+        name: "doc.txt",
+        path: "doc.txt",
+        groupId: "room:room1",
+      };
+      await component.handleSendFileToPeer();
+      expect(orchestratorStore.sendFileToPeer).toHaveBeenCalledWith(
+        "doc.txt",
+        "room:room1",
+        expect.anything(),
+      );
+
+      // 5. openFolderInFilesView
+      component.db = null;
+      await component.openFolderInFilesView("path");
+      component.db = {};
+      await component.openFolderInFilesView("///");
+
+      (window as any).shadowclaw = { ui: { showPage: jest.fn() } };
+      await component.openFolderInFilesView("my/folder");
+      expect((window as any).shadowclaw.ui.showPage).toHaveBeenCalledWith(
+        "files",
+      );
+
+      (orchestratorStore.setCurrentPath as any).mockRejectedValueOnce(
+        new Error("Path invalid"),
+      );
+      await component.openFolderInFilesView("bad/folder");
+      expect(showError).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to open linked folder"),
+        5000,
+      );
+
+      // 6. openWorkspaceLink
+      component.db = null;
+      await component.openWorkspaceLink("href", "base");
+      component.db = {};
+      await component.openWorkspaceLink("", "base");
+
+      // extensionless file
+      (fileViewerStore.openFile as any).mockResolvedValueOnce(undefined);
+      await component.openWorkspaceLink("extensionless", "base/file.md");
+
+      (fileViewerStore.openFile as any).mockRejectedValueOnce(
+        new DOMException("Not found", "NotFoundError"),
+      );
+      await component.openWorkspaceLink("extensionless", "base/file.md");
+
+      (fileViewerStore.openFile as any).mockRejectedValueOnce(
+        new DOMException("Is directory", "TypeMismatchError"),
+      );
+      await component.openWorkspaceLink("extensionless", "base/file.md");
+
+      (fileViewerStore.openFile as any).mockRejectedValueOnce(
+        new Error("General failure"),
+      );
+      await component.openWorkspaceLink("extensionless", "base/file.md");
+      expect(showError).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to open linked file"),
+        5000,
+      );
+
+      // file with extension
+      (fileViewerStore.openFile as any).mockRejectedValueOnce(
+        new Error("File read error"),
+      );
+      await component.openWorkspaceLink("target.txt", "base/file.md");
+      expect(showError).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to open linked file"),
+        5000,
+      );
+
+      // 7. reloadPreviewWithSearchParams guards
+      (fileViewerStore as any).file = null;
+      await component.reloadPreviewWithSearchParams("?q=1");
+
+      (fileViewerStore as any).file = { name: "test.html" };
+      const oldIframe = component.shadowRoot.querySelector(
+        ".file-viewer__iframe",
+      );
+      oldIframe?.remove();
+      await component.reloadPreviewWithSearchParams("?q=1");
+
+      document.body.removeChild(component);
+    });
+
+    it("handles requestCloseViewer when dismiss is confirmed vs prevented", async () => {
+      const component = new ShadowClawFileViewer() as any;
+      document.body.appendChild(component);
+
+      component.canDismissViewer = jest.fn().mockResolvedValue(false);
+      const dismissedFalse = await component.requestCloseViewer();
+      expect(dismissedFalse).toBe(false);
+      expect(fileViewerStore.closeFile).not.toHaveBeenCalled();
+
+      component.canDismissViewer = jest.fn().mockResolvedValue(true);
+      component.exitFullscreenIfActive = jest.fn().mockResolvedValue(undefined);
+      const dismissedTrue = await component.requestCloseViewer();
+      expect(dismissedTrue).toBe(true);
+      expect(component.exitFullscreenIfActive).toHaveBeenCalled();
+      expect(fileViewerStore.closeFile).toHaveBeenCalled();
+
+      document.body.removeChild(component);
+    });
+
+    it("handles renderContent branches for pdf, binary, iframe, and markdown", async () => {
+      const component = new ShadowClawFileViewer() as any;
+      document.body.appendChild(component);
+      const modal = component.shadowRoot.querySelector(
+        ".file-modal",
+      ) as HTMLElement;
+      const content = modal.querySelector(".file-content") as HTMLElement;
+
+      // 1. PDF file
+      const pdfFile = { name: "doc.pdf", kind: "pdf", path: "doc.pdf" };
+      await component.renderPreview(
+        content,
+        pdfFile,
+        component.viewRenderToken,
+      );
+      await new Promise((r) => setTimeout(r, 20));
+
+      // 2. Binary file
+      const binaryFile = {
+        name: "image.png",
+        kind: "binary",
+        path: "image.png",
+        mimeType: "image/png",
+      };
+      await component.renderPreview(
+        content,
+        binaryFile,
+        component.viewRenderToken,
+      );
+
+      // 3. Iframe preview file with load event
+      const htmlFile = {
+        name: "preview.html",
+        kind: "text",
+        path: "preview.html",
+        content: "<h1>Hi</h1>",
+      };
+      await component.renderPreview(
+        content,
+        htmlFile,
+        component.viewRenderToken,
+      );
+      const iframe = content.querySelector("iframe");
+      expect(iframe).not.toBeNull();
+      iframe?.dispatchEvent(new Event("load"));
+
+      // 4. Stale render token
+      const oldToken = component.viewRenderToken - 1;
+      const mdFile = {
+        name: "readme.md",
+        kind: "text",
+        path: "readme.md",
+        content: "# Title",
+      };
+      await component.renderPreview(content, mdFile, oldToken);
+
+      // 5. Markdown preview with script and frontmatter promise
+      const existingScript = document.createElement("script");
+      existingScript.src = "./approved.js";
+      document.head.appendChild(existingScript);
+
+      component.db = {
+        transaction: () => ({
+          objectStore: () => ({
+            get: () => {
+              const req: any = {};
+              setTimeout(() => {
+                req.result = { value: "true" };
+                if (req.onsuccess) req.onsuccess();
+              }, 0);
+              return req;
+            },
+          }),
+        }),
+      };
+      const mdWithScript = {
+        name: "test.md",
+        kind: "text",
+        path: "test.md",
+        content: '<script src="./approved.js"></script><p>Text</p>',
+      };
+      await component.renderPreview(
+        content,
+        mdWithScript,
+        component.viewRenderToken,
+      );
+
+      existingScript.remove();
+      document.body.removeChild(component);
+    });
+
+    it("handles image resolving branches", async () => {
+      const component = new ShadowClawFileViewer() as any;
+      document.body.appendChild(component);
+
+      // resolveMarkdownImages when db is null
+      component.db = null;
+      const div = document.createElement("div");
+      await component.resolveMarkdownImages(div, "file.md");
+
+      // resolveMarkdownImages with no images
+      component.db = {};
+      await component.resolveMarkdownImages(div, "file.md");
+
+      // resolveMarkdownImages with various image src attributes
+      div.innerHTML = `
+        <img src="" />
+        <img src="data:image/png;base64,123" />
+        <img src="blob:http://localhost/abc" />
+        <img src="#anchor" />
+        <img src="resolved.png" />
+        <img src="unreadable.png" />
+      `;
+      component.getWorkspaceRouteTarget = jest.fn((src: string) => {
+        if (src === "resolved.png")
+          return { groupId: "test-group", path: "resolved.png" };
+        if (src === "unreadable.png")
+          return { groupId: "test-group", path: "unreadable.png" };
+        return null;
+      });
+      (readGroupFileBytes as jest.Mock).mockImplementation(
+        (_db: any, _gid: any, path: any) => {
+          if (path === "resolved.png") {
+            return Promise.resolve(new Uint8Array([137, 80, 78, 71]));
+          }
+          return Promise.reject(new Error("File unreadable"));
+        },
+      );
+
+      await component.resolveMarkdownImages(div, "file.md");
+      const imgs = div.querySelectorAll("img");
+      expect(imgs[4].src).toContain("data:image/png");
+      expect(imgs[5].getAttribute("src")).toBe("unreadable.png");
+
+      // resolveRelativeImagesInHtml
+      component.db = null;
+      expect(
+        await component.resolveRelativeImagesInHtml(
+          "<img src='a.png'>",
+          "f.html",
+        ),
+      ).toBe("<img src='a.png'>");
+      component.db = {};
+      expect(await component.resolveRelativeImagesInHtml("", "f.html")).toBe(
+        "",
+      );
+      expect(
+        await component.resolveRelativeImagesInHtml(
+          "<div>No img</div>",
+          "f.html",
+        ),
+      ).toContain("<div>No img</div>");
+
+      const htmlWithImgs = `
+        <img src="" />
+        <img src="data:image/png;base64,xyz" />
+        <img src="relative.jpg" />
+        <img src="fail.jpg" />
+      `;
+      component.getWorkspaceRouteTarget = jest.fn((src: string) => {
+        if (src === "relative.jpg")
+          return { groupId: "test-group", path: "relative.jpg" };
+        if (src === "fail.jpg")
+          return { groupId: "test-group", path: "fail.jpg" };
+        return null;
+      });
+      (readGroupFileBytes as jest.Mock).mockImplementation(
+        (_db: any, _gid: any, path: any) => {
+          if (path === "relative.jpg") {
+            return Promise.resolve(new Uint8Array([255, 216, 255]));
+          }
+          return Promise.reject(new Error("File missing"));
+        },
+      );
+      const resolvedHtml = await component.resolveRelativeImagesInHtml(
+        htmlWithImgs,
+        "dir/f.html",
+      );
+      expect(resolvedHtml).toContain("data:image/jpeg");
+
+      document.body.removeChild(component);
+    });
+
+    it("handles getWorkspaceRouteTarget candidates and filtering branches", () => {
+      const component = new ShadowClawFileViewer() as any;
+      (orchestratorStore as any).activeGroupId = "main-group";
+
+      // 1. empty target
+      expect(component.getWorkspaceRouteTarget("")).toBeNull();
+
+      // 2. dotPrefixedFilesPath starting with files/
+      expect(
+        component.getWorkspaceRouteTarget("./files/group1/doc.txt"),
+      ).toBeDefined();
+
+      // 3. nested /files/ in absolute path
+      expect(
+        component.getWorkspaceRouteTarget("/workspace/files/group1/doc.txt"),
+      ).toBeDefined();
+
+      // 4. resolveRouteGroupId returning null
+      component.resolveRouteGroupId = jest.fn().mockReturnValue(null);
+      expect(
+        component.getWorkspaceRouteTarget("/files/group1/doc.txt"),
+      ).toBeNull();
+
+      // 5. allowCrossGroup: false and resolvedGroupId !== activeGroupId
+      component.resolveRouteGroupId = jest.fn().mockReturnValue("other-group");
+      expect(
+        component.getWorkspaceRouteTarget("/files/group1/doc.txt", {
+          allowCrossGroup: false,
+        }),
+      ).toBeNull();
+      expect(
+        component.getWorkspaceRouteTarget("/files/group1/doc.txt", {
+          allowCrossGroup: true,
+        }),
+      ).toEqual({
+        groupId: "other-group",
+        path: "doc.txt",
+      });
+    });
+
+    it("handles handleIframeMessage file-viewer-link navigation and gameSave branches", () => {
+      const component = new ShadowClawFileViewer() as any;
+      component.db = {};
+      component.reloadPreviewWithSearchParams = jest.fn();
+
+      // 1. gameSave param via handleIframeMessage
+      const msgEventGameSave = {
+        data: {
+          type: "shadow-claw-file-viewer-link",
+          href: "/files/test-group/page?gameSave=123",
+        },
+        source: window,
+      } as any;
+      component.handleIframeMessage(msgEventGameSave);
+      expect(component.reloadPreviewWithSearchParams).toHaveBeenCalledWith(
+        "?gameSave=123",
+      );
+
+      // 2. external non-internal link via handleIframeMessage
+      const openSpy = jest.spyOn(window, "open").mockImplementation(() => null);
+      const msgEventExternal = {
+        data: {
+          type: "shadow-claw-file-viewer-link",
+          href: "https://example.com/external",
+        },
+        source: window,
+      } as any;
+      component.handleIframeMessage(msgEventExternal);
+      expect(openSpy).toHaveBeenCalledWith(
+        "https://example.com/external",
+        "_blank",
+        "noopener,noreferrer",
+      );
+      openSpy.mockRestore();
+
+      // 3. internal link with window.navigation via handleIframeMessage
+      const mockNavigate = jest.fn();
+      Object.defineProperty(window, "navigation", {
+        configurable: true,
+        writable: true,
+        value: { navigate: mockNavigate },
+      });
+      const msgEventInternal = {
+        data: { type: "shadow-claw-file-viewer-link", href: "/chat" },
+        source: window,
+      } as any;
+      component.handleIframeMessage(msgEventInternal);
+      expect(mockNavigate).toHaveBeenCalled();
+
+      // 4. internal link with pushState fallback
+      delete (window as any).navigation;
+      const pushStateSpy = jest.spyOn(window.history, "pushState");
+      component.handleIframeMessage(msgEventInternal);
+      expect(pushStateSpy).toHaveBeenCalled();
+      pushStateSpy.mockRestore();
+
+      // 5. mismatching source when previewFrameWindow is set
+      component.previewFrameWindow = {} as any;
+      component.handleIframeMessage({
+        data: { type: "shadow-claw-file-viewer-link", href: "/chat" },
+        source: window,
+      } as any);
+
+      // 6. non-matching message types or null db
+      component.handleIframeMessage({ data: { type: "other-type" } } as any);
+      component.db = null;
+      component.handleIframeMessage({
+        data: { type: "shadow-claw-file-viewer-link", href: "/chat" },
+      } as any);
+    });
+
+    it("handles UI event listeners and updateView edit/binary branches", async () => {
+      const component = new ShadowClawFileViewer() as any;
+      document.body.appendChild(component);
+      const root = component.shadowRoot;
+
+      // 1. shareDeviceBtn click removes open from shareDropdown
+      const shareDropdown = root.querySelector(
+        ".share-dropdown",
+      ) as HTMLDetailsElement;
+      const shareDeviceBtn = root.querySelector(
+        ".modal-share-device-btn",
+      ) as HTMLElement;
+      if (shareDropdown && shareDeviceBtn) {
+        shareDropdown.setAttribute("open", "true");
+        component.handleShareFile = jest.fn();
+        shareDeviceBtn.click();
+        expect(shareDropdown.hasAttribute("open")).toBe(false);
+        expect(component.handleShareFile).toHaveBeenCalled();
+      }
+
+      // 2. root click outside shareDropdown closes it
+      if (shareDropdown) {
+        shareDropdown.setAttribute("open", "true");
+        shareDropdown.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        expect(shareDropdown.hasAttribute("open")).toBe(true);
+
+        const outsideDiv = document.createElement("div");
+        root.appendChild(outsideDiv);
+        outsideDiv.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+        expect(shareDropdown.hasAttribute("open")).toBe(false);
+      }
+
+      // 3. editBtn click toggles isFileEditMode
+      const editBtn = root.querySelector(
+        ".modal-edit-btn",
+      ) as HTMLButtonElement;
+      if (editBtn) {
+        editBtn.click();
+        expect(component.isFileEditMode).toBe(true);
+        editBtn.click();
+        expect(component.isFileEditMode).toBe(false);
+      }
+
+      // 4. updateView when isFileEditMode is true, no language, dirty editor
+      (fileViewerStore as any).file = {
+        name: "Makefile",
+        kind: "text",
+        path: "Makefile",
+        content: "all:\n\techo hi",
+      };
+      component.isFileEditMode = true;
+      component.isEditorDirty = true;
+      await component.updateView();
+      const editor = root.querySelector(".file-editor") as HTMLTextAreaElement;
+      expect(editor.getAttribute("language")).toBeNull();
+
+      // 5. updateView when isFileEditMode is false and file is binary
+      (fileViewerStore as any).file = {
+        name: "data.bin",
+        kind: "binary",
+        path: "data.bin",
+        mimeType: "application/octet-stream",
+      };
+      component.isFileEditMode = false;
+      await component.updateView();
+      const content = root.querySelector(".file-content") as HTMLElement;
+      expect(content.textContent).toContain(
+        "Binary file (application/octet-stream)",
+      );
+
+      // 6. syncIframeTheme with custom properties
+      document.documentElement.style.setProperty(
+        "--custom-test-theme-prop",
+        "#ff0000",
+      );
+      const postMessageSpy = jest.fn();
+      component.previewFrameWindow = { postMessage: postMessageSpy };
+      component.syncIframeTheme();
+      expect(postMessageSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "shadow-claw-theme-update",
+          customProperties: expect.objectContaining({
+            "--custom-test-theme-prop": "#ff0000",
+          }),
+        }),
+        "*",
+      );
 
       document.body.removeChild(component);
     });

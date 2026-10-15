@@ -1,6 +1,6 @@
 import { CONFIG_KEYS } from "./config.js";
 import { decryptValue, encryptValue } from "../security/crypto.js";
-import { writeFileHandle } from "../storage/writeFileHandle.js";
+import { writeFileHandle } from "../storage/write-file-handle.js";
 
 export type ConfigEntryRecord = { key: string; value: unknown };
 export type PasswordPathSegment = string | number;

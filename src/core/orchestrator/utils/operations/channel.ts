@@ -1,9 +1,9 @@
 import { CONFIG_KEYS, DEFAULT_GROUP_ID } from "../../../../config/config.js";
-import { getConfig as _defaultGetConfig } from "../../../../db/getConfig.js";
-import { setConfig as _defaultSetConfig } from "../../../../db/setConfig.js";
+import { getConfig as _defaultGetConfig } from "../../../../db/get-config.js";
+import { setConfig as _defaultSetConfig } from "../../../../db/set-config.js";
 import { encryptValue } from "../../../../security/crypto.js";
 import { orchestratorStore } from "../../../../stores/orchestrator.js";
-import { normalizeStringList } from "../../../../utils/normalizeStringList.js";
+import { normalizeStringList } from "../../../../utils/normalize-string-list.js";
 
 import type { MessageAttachment } from "../../../../content/types.js";
 import type { ShadowClawDatabase } from "../../../../db/db.js";

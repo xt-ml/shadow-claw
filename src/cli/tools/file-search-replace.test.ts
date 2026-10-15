@@ -101,4 +101,25 @@ describe("fileSearchReplace", () => {
       await fs.rm(tempDir, { recursive: true, force: true });
     }
   });
+
+  it("main() logs usage and exits with 1 when fewer than 2 arguments are given", async () => {
+    const origArgv = [...process.argv];
+    const errSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const exitSpy = jest.spyOn(process, "exit").mockImplementation((() => {
+      throw new Error("process.exit(1)");
+    }) as any);
+
+    try {
+      process.argv = ["node", "file-search-replace.js"];
+      await expect(main()).rejects.toThrow("process.exit(1)");
+      expect(errSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Usage: node file-search-replace"),
+      );
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    } finally {
+      process.argv = origArgv;
+      errSpy.mockRestore();
+      exitSpy.mockRestore();
+    }
+  });
 });

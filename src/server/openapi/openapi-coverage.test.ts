@@ -6,7 +6,7 @@ import { createApp } from "../app.js";
 import { createControlPlane } from "../control-plane.js";
 import { registerMcpRoutes } from "../routes/mcp.js";
 import { openApiSpec } from "./openapi-spec.js";
-import { getPackageVersion } from "../utils/packageVersion.js";
+import { getPackageVersion } from "../utils/package-version.js";
 import type { ServerConfig } from "../config.js";
 
 const REST_METHODS = new Set(["get", "post", "put", "delete", "patch"]);

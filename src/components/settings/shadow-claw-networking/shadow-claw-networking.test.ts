@@ -229,4 +229,68 @@ describe("shadow-claw-networking", () => {
 
     document.body.removeChild(el);
   });
+
+  it("covers missing shadowRoot, missing db, non-Error exceptions, and null element guards", async () => {
+    const { showError } = await import("../../../ui/toast.js");
+    const { setUseProxy, setProxyUrl } =
+      await import("../../../core/orchestrator/utils/settings.js");
+
+    const el = new ShadowClawNetworking();
+
+    // connectedCallback throws if no shadowRoot
+    Object.defineProperty(el, "shadowRoot", {
+      value: null,
+      configurable: true,
+    });
+    await expect(el.connectedCallback()).rejects.toThrow(
+      "shadowRoot not found",
+    );
+
+    // bindEventListeners with null shadowRoot
+    el.bindEventListeners();
+
+    // render with null shadowRoot
+    el.orchestrator = createOrchestratorStub() as any;
+    await el.render();
+
+    // saveProxyUrl with null shadowRoot
+    el.db = {} as any;
+    await el.saveProxyUrl();
+
+    // Restore shadowRoot stub
+    const fakeRoot = document.createElement("div");
+    Object.defineProperty(el, "shadowRoot", {
+      value: fakeRoot,
+      configurable: true,
+    });
+
+    // saveProxyUrl with missing input element
+    await el.saveProxyUrl();
+
+    // Missing db guards
+    el.db = null;
+    await el.onProxyToggle(true);
+    await el.saveProxyUrl();
+
+    // Non-error rejections
+    el.db = {} as any;
+    (setUseProxy as any).mockRejectedValueOnce("string failure");
+    await el.onProxyToggle(true);
+    expect(showError).toHaveBeenCalledWith(
+      "Error saving proxy setting: string failure",
+      6000,
+    );
+
+    const fakeInput = document.createElement("input");
+    fakeInput.setAttribute("data-setting", "proxy-url-input");
+    fakeInput.value = "http://example.com";
+    fakeRoot.appendChild(fakeInput);
+
+    (setProxyUrl as any).mockRejectedValueOnce("string error url");
+    await el.saveProxyUrl();
+    expect(showError).toHaveBeenCalledWith(
+      "Error saving proxy URL: string error url",
+      6000,
+    );
+  });
 });

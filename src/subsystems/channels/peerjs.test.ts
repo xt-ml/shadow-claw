@@ -102,11 +102,11 @@ jest.unstable_mockModule("../../db/db.js", () => ({
   getDb: jest.fn(async () => ({})),
 }));
 
-jest.unstable_mockModule("../../storage/readGroupFileBytes.js", () => ({
+jest.unstable_mockModule("../../storage/read-group-file-bytes.js", () => ({
   readGroupFileBytes: jest.fn(async () => new Uint8Array([1, 2, 3])),
 }));
 
-jest.unstable_mockModule("../../storage/writeGroupFileBytes.js", () => ({
+jest.unstable_mockModule("../../storage/write-group-file-bytes.js", () => ({
   writeGroupFileBytes: jest.fn(async () => {}),
 }));
 
@@ -116,7 +116,7 @@ jest.unstable_mockModule("../../utils/utils.js", () => ({
 
 const { PeerJsChannel, transferProgressSignal } = await import("./peerjs.js");
 const { writeGroupFileBytes } =
-  (await import("../../storage/writeGroupFileBytes.js")) as any;
+  (await import("../../storage/write-group-file-bytes.js")) as any;
 
 function flushMicrotasks(): Promise<void> {
   return new Promise((r) => setTimeout(r, 10));

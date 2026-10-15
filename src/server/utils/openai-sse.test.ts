@@ -2,6 +2,7 @@
 import { jest } from "@jest/globals";
 import {
   writeOpenAiDeltaChunk,
+  writeOpenAiReasoningDeltaChunk,
   writeOpenAiToolCallChunk,
   writeOpenAiDoneChunk,
   sendStreamingProxyError,
@@ -33,6 +34,18 @@ describe("openai-sse", () => {
     });
   });
 
+  describe("writeOpenAiReasoningDeltaChunk", () => {
+    it("writes a delta chunk with reasoning", () => {
+      writeOpenAiReasoningDeltaChunk(res, "deepseek-r1", "Thinking steps...");
+      expect(res.write).toHaveBeenCalledWith(
+        expect.stringContaining('"reasoning":"Thinking steps..."'),
+      );
+      expect(res.write).toHaveBeenCalledWith(
+        expect.stringContaining('"model":"deepseek-r1"'),
+      );
+    });
+  });
+
   describe("writeOpenAiToolCallChunk", () => {
     it("writes a tool call chunk", () => {
       writeOpenAiToolCallChunk(res, "test-model", {
@@ -46,6 +59,24 @@ describe("openai-sse", () => {
         expect.stringContaining('"arguments":"{\\"a\\":1}"'),
       );
     });
+
+    it("handles custom index and null input in tool call chunk", () => {
+      writeOpenAiToolCallChunk(
+        res,
+        "test-model",
+        {
+          name: "no-input-tool",
+          input: null as any,
+        },
+        2,
+      );
+      expect(res.write).toHaveBeenCalledWith(
+        expect.stringContaining('"index":2'),
+      );
+      expect(res.write).toHaveBeenCalledWith(
+        expect.stringContaining('"arguments":"{}"'),
+      );
+    });
   });
 
   describe("writeOpenAiDoneChunk", () => {
@@ -55,6 +86,13 @@ describe("openai-sse", () => {
         expect.stringContaining('"finish_reason":"stop"'),
       );
       expect(res.write).toHaveBeenCalledWith("data: [DONE]\n\n");
+    });
+
+    it("uses default stop finish_reason when omitted", () => {
+      writeOpenAiDoneChunk(res, "test-model");
+      expect(res.write).toHaveBeenCalledWith(
+        expect.stringContaining('"finish_reason":"stop"'),
+      );
     });
   });
 

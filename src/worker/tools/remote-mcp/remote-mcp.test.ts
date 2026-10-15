@@ -6,7 +6,7 @@ import {
   type RemoteMcpDeps,
   type RemoteMcpTool,
 } from "./remote-mcp.js";
-import { resolveMcpReauth } from "./utils/resolveMcpReauth.js";
+import { resolveMcpReauth } from "./utils/resolve-mcp-reauth.js";
 
 class MockMcpReauthRequiredError extends Error {
   connectionId: string;

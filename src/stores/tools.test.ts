@@ -9,11 +9,11 @@ const mockParseDeclarativeTool = jest.fn();
 const mockImportRemoteArtifacts = jest.fn();
 const mockFetchDiscoveryManifest = jest.fn();
 
-jest.unstable_mockModule("../db/getConfig.js", () => ({
+jest.unstable_mockModule("../db/get-config.js", () => ({
   getConfig: mockGetConfig,
 }));
 
-jest.unstable_mockModule("../db/setConfig.js", () => ({
+jest.unstable_mockModule("../db/set-config.js", () => ({
   setConfig: mockSetConfig,
 }));
 
@@ -28,7 +28,7 @@ jest.unstable_mockModule("../subsystems/tools/remote/discovery.js", () => ({
 }));
 
 jest.unstable_mockModule(
-  "../subsystems/tools/remote/importArtifacts.js",
+  "../subsystems/tools/remote/import-artifacts.js",
   () => ({
     importRemoteArtifacts: mockImportRemoteArtifacts,
   }),

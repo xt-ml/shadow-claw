@@ -16,7 +16,7 @@ import { McpServer } from "../mcp/mcp-server.js";
 import { registerBuiltInTools } from "../mcp/tools/built-in-tools.js";
 import { createClientToolRelay } from "../mcp/tools/client-tool-relay.js";
 import { getOrCreateControlToken } from "../client-registry.js";
-import { getPackageVersion } from "../utils/packageVersion.js";
+import { getPackageVersion } from "../utils/package-version.js";
 
 export interface McpRouteOptions {
   mcpServer?: McpServer;

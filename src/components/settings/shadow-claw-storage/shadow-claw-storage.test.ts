@@ -13,28 +13,31 @@ jest.unstable_mockModule("../../../ui/toast.js", () => ({
   showToast: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../../db/getConfig.js", () => ({
+jest.unstable_mockModule("../../../db/get-config.js", () => ({
   getConfig: jest.fn<any>().mockResolvedValue(undefined),
 }));
 
-jest.unstable_mockModule("../../../db/setConfig.js", () => ({
+jest.unstable_mockModule("../../../db/set-config.js", () => ({
   setConfig: jest.fn<any>().mockResolvedValue(undefined),
 }));
 
-jest.unstable_mockModule("../../../storage/isPersistent.js", () => ({
+jest.unstable_mockModule("../../../storage/is-persistent.js", () => ({
   isPersistent: jest.fn<any>().mockResolvedValue(false),
 }));
 
 jest.unstable_mockModule(
-  "../../../storage/requestPersistentStorage.js",
+  "../../../storage/request-persistent-storage.js",
   () => ({
     requestPersistentStorage: jest.fn<any>().mockResolvedValue(true),
   }),
 );
 
-jest.unstable_mockModule("../../../storage/selectStorageDirectory.js", () => ({
-  selectStorageDirectory: jest.fn<any>().mockResolvedValue(true),
-}));
+jest.unstable_mockModule(
+  "../../../storage/select-storage-directory.js",
+  () => ({
+    selectStorageDirectory: jest.fn<any>().mockResolvedValue(true),
+  }),
+);
 
 jest.unstable_mockModule("../../../db/db.js", () => ({
   getDb: jest.fn<any>().mockResolvedValue({
@@ -49,7 +52,7 @@ jest.unstable_mockModule("../../../db/db.js", () => ({
   }),
 }));
 
-jest.unstable_mockModule("../../../storage/getStorageEstimate.js", () => ({
+jest.unstable_mockModule("../../../storage/get-storage-estimate.js", () => ({
   getStorageEstimate: jest
     .fn<any>()
     .mockResolvedValue({ usage: 1024, quota: 10240 }),
@@ -79,8 +82,8 @@ jest.unstable_mockModule("../../../stores/orchestrator.js", () => ({
 }));
 
 const { CONFIG_KEYS } = await import("../../../config/config.js");
-const { getConfig } = await import("../../../db/getConfig.js");
-const { setConfig } = await import("../../../db/setConfig.js");
+const { getConfig } = await import("../../../db/get-config.js");
+const { setConfig } = await import("../../../db/set-config.js");
 const { showSuccess } = await import("../../../ui/toast.js");
 const { ShadowClawStorage } = await import("./shadow-claw-storage.js");
 
@@ -157,7 +160,7 @@ describe("shadow-claw-storage", () => {
     el.updateStorageInfo = jest.fn();
 
     const { requestPersistentStorage } =
-      await import("../../../storage/requestPersistentStorage.js");
+      await import("../../../storage/request-persistent-storage.js");
     (requestPersistentStorage as jest.Mock<any>).mockResolvedValueOnce(true);
 
     await el.handleRequestPersistent();
@@ -199,7 +202,7 @@ describe("shadow-claw-storage", () => {
 
   it("handles handleChangeStorageDir success and errors", async () => {
     const { selectStorageDirectory } =
-      await import("../../../storage/selectStorageDirectory.js");
+      await import("../../../storage/select-storage-directory.js");
     const { showError } = await import("../../../ui/toast.js");
 
     const el = new ShadowClawStorage() as any;
@@ -226,7 +229,7 @@ describe("shadow-claw-storage", () => {
   it("handles errors during storage operations", async () => {
     const { showError } = await import("../../../ui/toast.js");
     const { requestPersistentStorage } =
-      await import("../../../storage/requestPersistentStorage.js");
+      await import("../../../storage/request-persistent-storage.js");
     const { resetStorageDirectory } =
       await import("../../../storage/storage.js");
     const { orchestratorStore } =
@@ -353,6 +356,11 @@ describe("shadow-claw-storage", () => {
 
     grantBtn?.dispatchEvent(new Event("click"));
 
+    handleReqSpy.mockRestore();
+    handleChangeSpy.mockRestore();
+    handleResetStorageSpy.mockRestore();
+    handleResetConfigSpy.mockRestore();
+
     // Early returns when db is null
     el.db = null;
     await el.handleChangeStorageDir();
@@ -363,5 +371,173 @@ describe("shadow-claw-storage", () => {
     await el.updateStorageInfo();
 
     document.body.removeChild(el);
+  });
+
+  it("covers setupEffects branches with local and opfs status variants", async () => {
+    const { orchestratorStore } =
+      await import("../../../stores/orchestrator.js");
+    const el = new ShadowClawStorage();
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Status: local + needs permission
+    (orchestratorStore as any).storageStatus = {
+      type: "local",
+      permission: "prompt",
+    };
+    el.setupEffects();
+
+    const root = el.shadowRoot!;
+    const statusBadge = root.querySelector(
+      '[data-info="storage-status-badge"]',
+    ) as HTMLElement;
+    const grantBtn = root.querySelector(
+      '[data-action="grant-storage-permission"]',
+    ) as HTMLElement;
+    expect(statusBadge?.textContent).toBe("NEEDS PERMISSION");
+    expect(grantBtn?.style.display).toBe("inline-block");
+
+    // Click grantBtn with db present
+    el.db = {} as any;
+    grantBtn?.click();
+    expect(orchestratorStore.grantStorageAccess).toHaveBeenCalledWith(el.db);
+
+    // Status: local + granted
+    (orchestratorStore as any).storageStatus = {
+      type: "local",
+      permission: "granted",
+    };
+    el.setupEffects();
+    expect(statusBadge?.textContent).toBe("CONNECTED");
+    expect(grantBtn?.style.display).toBe("none");
+
+    // Status: null
+    (orchestratorStore as any).storageStatus = null;
+    el.setupEffects();
+
+    document.body.removeChild(el);
+  });
+
+  it("covers updateStorageInfo with local handle, zero quota, persistent true, and catch", async () => {
+    const { isPersistent } = await import("../../../storage/is-persistent.js");
+    const { getStorageEstimate } =
+      await import("../../../storage/get-storage-estimate.js");
+
+    (getConfig as any).mockImplementation((_db: any, key: string) => {
+      if (key === CONFIG_KEYS.STORAGE_HANDLE) {
+        return Promise.resolve("local-handle-id");
+      }
+      return Promise.resolve(undefined);
+    });
+    (isPersistent as any).mockResolvedValue(true);
+    (getStorageEstimate as any).mockResolvedValue({ usage: 0, quota: 0 });
+
+    const el = new ShadowClawStorage();
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 50));
+
+    await el.updateStorageInfo();
+
+    const root = el.shadowRoot!;
+    const typeEl = root.querySelector('[data-info="storage-type"]');
+    const persistentBadge = root.querySelector(
+      '[data-info="storage-persistent-badge"]',
+    ) as HTMLElement;
+    const persistentBtn = root.querySelector(
+      '[data-action="request-persistent"]',
+    ) as HTMLButtonElement;
+
+    expect(typeEl?.textContent).toBe("Local Directory");
+    expect(persistentBadge?.style.display).toBe("inline-block");
+    expect(persistentBtn?.disabled).toBe(true);
+
+    // Error in updateStorageInfo
+    (getStorageEstimate as any).mockRejectedValueOnce(
+      new Error("Estimate failure"),
+    );
+    await el.updateStorageInfo();
+
+    document.body.removeChild(el);
+  });
+
+  it("handles non-Error exceptions across all actions", async () => {
+    const { showError } = await import("../../../ui/toast.js");
+    const { selectStorageDirectory } =
+      await import("../../../storage/select-storage-directory.js");
+    const { requestPersistentStorage } =
+      await import("../../../storage/request-persistent-storage.js");
+    const { resetStorageDirectory } =
+      await import("../../../storage/storage.js");
+    const { orchestratorStore } =
+      await import("../../../stores/orchestrator.js");
+
+    const el = new ShadowClawStorage() as any;
+    el.db = {};
+    el.updateStorageInfo = jest.fn();
+    el.requestConfirmation = jest.fn().mockResolvedValue(true);
+
+    // selectStorageDirectory returns false
+    (selectStorageDirectory as jest.Mock<any>).mockResolvedValueOnce(false);
+    await el.handleChangeStorageDir();
+
+    // String exceptions
+    (selectStorageDirectory as jest.Mock<any>).mockRejectedValueOnce(
+      "string dir error",
+    );
+    await el.handleChangeStorageDir();
+    expect(showError).toHaveBeenCalledWith(
+      "Failed to change storage location: string dir error",
+      6000,
+    );
+
+    (requestPersistentStorage as jest.Mock<any>).mockRejectedValueOnce(
+      "string persist error",
+    );
+    await el.handleRequestPersistent();
+    expect(showError).toHaveBeenCalledWith(
+      "Storage request failed: string persist error",
+      6000,
+    );
+
+    (
+      orchestratorStore.resetSiteConfigSeed as jest.Mock<any>
+    ).mockRejectedValueOnce("string reset error");
+    await el.handleResetSiteConfig();
+    expect(showError).toHaveBeenCalledWith(
+      "Failed to reset site config: string reset error",
+      6000,
+    );
+
+    (resetStorageDirectory as jest.Mock<any>).mockRejectedValueOnce(
+      "string storage reset error",
+    );
+    await el.handleResetStorageDir();
+    expect(showError).toHaveBeenCalledWith(
+      "Failed to reset storage location: string storage reset error",
+      6000,
+    );
+
+    (setConfig as jest.Mock<any>).mockRejectedValueOnce("string ulid error");
+    await el.onUploadAppendUlidToggle(false);
+    expect(showError).toHaveBeenCalledWith(
+      "Error saving unique ID file upload setting: string ulid error",
+      6000,
+    );
+  });
+
+  it("guards against null shadowRoot across connectedCallback, bindEventListeners, and updateStorageInfo", async () => {
+    const el = new ShadowClawStorage();
+    Object.defineProperty(el, "shadowRoot", {
+      value: null,
+      configurable: true,
+    });
+
+    await expect(el.connectedCallback()).rejects.toThrow(
+      "shadowRoot not found",
+    );
+    el.bindEventListeners();
+    el.setupEffects();
+    el.db = {} as any;
+    await el.updateStorageInfo();
   });
 });

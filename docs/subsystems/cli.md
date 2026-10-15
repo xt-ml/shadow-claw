@@ -263,7 +263,7 @@ In headless mode, model inference does not require an external browser tab or ru
 
 - **Transformers.js Local (`node-transformers-executor.ts`)**: Runs ONNX models directly in the Node.js process using `@huggingface/transformers` (device: CPU/q4). Downloads missing files automatically on-demand with progress reporting on `stderr`.
 - **Llamafile Local (`node-llamafile-executor.ts`)**: Downloads and spawns host-native Llamafile binaries on dynamic ports, verifies health, streams tokens, and terminates cleanly when finished.
-- **Built-in AI Tasks (`executeNativeAiTask.ts`)**: Headless agent dispatches task-based tools (`translate_text`, `summarize_text`, `rewrite_text`, `proofread_text`, `detect_language`, etc.) directly to in-process local model executors (`node-transformers-executor.ts` / `node-llamafile-executor.ts`) or configured providers without requiring an external HTTP server.
+- **Built-in AI Tasks (`execute-native-ai-task.ts`)**: Headless agent dispatches task-based tools (`translate_text`, `summarize_text`, `rewrite_text`, `proofread_text`, `detect_language`, etc.) directly to in-process local model executors (`node-transformers-executor.ts` / `node-llamafile-executor.ts`) or configured providers without requiring an external HTTP server.
 
 #### Standard Input (stdin), Piping & Output Redirection
 

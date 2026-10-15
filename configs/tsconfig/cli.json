@@ -1,0 +1,14 @@
+{
+  "extends": "./base.json",
+  "compilerOptions": {
+    "outDir": "../../out/cli",
+    "rootDir": "../../src",
+    "lib": ["ESNext"],
+    "types": ["node", "jest"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "noEmit": true
+  },
+  "include": ["../../src/cli/**/*.ts", "../jest/jest-mock-fix.d.ts"]
+}

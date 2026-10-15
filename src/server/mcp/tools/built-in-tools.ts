@@ -12,7 +12,7 @@ import {
   getRegisteredPushClients,
   type PushClientRecord,
 } from "../../../subsystems/notifications/push-routes.js";
-import { getPackageVersion } from "../../utils/packageVersion.js";
+import { getPackageVersion } from "../../utils/package-version.js";
 
 export function buildSendNotificationTool(
   pushClients: Array<

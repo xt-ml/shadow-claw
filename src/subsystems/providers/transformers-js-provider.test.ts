@@ -74,11 +74,11 @@ describe("Transformers.js Provider", () => {
       .fn()
       .mockImplementation(() => mockWorkerInstance);
 
-    jest.unstable_mockModule("../../db/getConfig.js", () => ({
+    jest.unstable_mockModule("../../db/get-config.js", () => ({
       getConfig: mockGetConfig,
     }));
 
-    jest.unstable_mockModule("../../worker/utils/executeTool.js", () => ({
+    jest.unstable_mockModule("../../worker/utils/execute-tool.js", () => ({
       executeTool: mockExecuteTool,
     }));
 

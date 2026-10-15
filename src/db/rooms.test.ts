@@ -1,10 +1,10 @@
 import { jest } from "@jest/globals";
 
-jest.unstable_mockModule("./getConfig.js", () => ({
+jest.unstable_mockModule("./get-config.js", () => ({
   getConfig: jest.fn(),
 }));
 
-jest.unstable_mockModule("./setConfig.js", () => ({
+jest.unstable_mockModule("./set-config.js", () => ({
   setConfig: jest.fn(),
 }));
 
@@ -17,8 +17,8 @@ jest.unstable_mockModule("../utils/ulid.js", () => ({
   ulid: jest.fn(() => "ROOMID01"),
 }));
 
-const { getConfig } = await import("./getConfig.js");
-const { setConfig } = await import("./setConfig.js");
+const { getConfig } = await import("./get-config.js");
+const { setConfig } = await import("./set-config.js");
 const { createGroup, getGroupMetadata } = await import("./groups.js");
 const {
   ROOM_PREFIX,

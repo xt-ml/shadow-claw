@@ -1,5 +1,5 @@
 import { ShadowClawDatabase } from "../../../db/types.js";
-import { copyGroupEntry } from "../../../storage/copyGroupEntry.js";
+import { copyGroupEntry } from "../../../storage/copy-group-entry.js";
 
 export async function executeCopyFile(
   db: ShadowClawDatabase,

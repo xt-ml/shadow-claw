@@ -48,7 +48,7 @@ describe("ollama-routes", () => {
     global.fetch = globalFetchMock as any;
 
     // Mock dependencies
-    jest.unstable_mockModule("../../worker/utils/withRetry.js", () => ({
+    jest.unstable_mockModule("../../utils/retry.js", () => ({
       withRetry: withRetryMock,
       isRetryableHttpError: jest.fn(),
     }));

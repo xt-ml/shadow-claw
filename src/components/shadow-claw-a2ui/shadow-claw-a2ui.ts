@@ -8,14 +8,14 @@
  * `{ "$dataModel": "/key" }` is still supported for backward compatibility.
  */
 import { getDb } from "../../db/db.js";
-import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
+import { readGroupFileBytes } from "../../storage/read-group-file-bytes.js";
 import { chatUiStore } from "../../stores/chat-ui.js";
-import { globalComponentRegistry } from "../../ui/a2ui/registries/ComponentRegistry.js";
-import { globalFunctionRegistry } from "../../ui/a2ui/registries/FunctionRegistry.js";
-import { registerBasicFunctions } from "../../ui/a2ui/registries/basicFunctions.js";
-import { applyDataModelUpdate } from "../../ui/a2ui/utils/applyDataModelUpdate.js";
-import { buildItemDataScope } from "../../ui/a2ui/utils/buildItemDataScope.js";
-import { normaliseComponentsToMap } from "../../ui/a2ui/utils/normaliseComponentsToMap.js";
+import { globalComponentRegistry } from "../../ui/a2ui/registries/component-registry.js";
+import { globalFunctionRegistry } from "../../ui/a2ui/registries/function-registry.js";
+import { registerBasicFunctions } from "../../ui/a2ui/registries/basic-functions.js";
+import { applyDataModelUpdate } from "../../ui/a2ui/utils/apply-data-model-update.js";
+import { buildItemDataScope } from "../../ui/a2ui/utils/build-item-data-scope.js";
+import { normaliseComponentsToMap } from "../../ui/a2ui/utils/normalise-components-to-map.js";
 
 import { renderAudioPlayer } from "./catalog/basic/audio-player.js";
 import { renderButton } from "./catalog/basic/button.js";

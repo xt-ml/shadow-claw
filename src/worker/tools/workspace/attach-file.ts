@@ -1,10 +1,13 @@
 import { ShadowClawDatabase } from "../../../db/types.js";
-import { readGroupFile } from "../../../storage/readGroupFile.js";
+import { readGroupFile } from "../../../storage/read-group-file.js";
 
-import { escapeMarkdownLabel } from "./utils/escapeMarkdownLabel.js";
 import { isImagePath } from "../../../utils/mime.js";
-import { hasPathTraversal } from "../../../utils/hasPathTraversal.js";
-import { normalizeWorkspacePath } from "../../../utils/normalizeWorkspacePath.js";
+import { hasPathTraversal } from "../../../utils/has-path-traversal.js";
+import { normalizeWorkspacePath } from "../../../utils/normalize-workspace-path.js";
+
+export function escapeMarkdownLabel(label: string): string {
+  return label.replace(/[\[\]\\]/g, "\\$&");
+}
 
 export async function executeAttachFile(
   db: ShadowClawDatabase,

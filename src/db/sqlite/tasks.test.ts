@@ -23,20 +23,20 @@ describe("SQLite tasks dual-dispatch", () => {
   beforeEach(async () => {
     tmpDir = await mkdtemp(path.join(tmpdir(), "sc-tasks-test-"));
     const { openSqliteDatabase, closeSqliteDatabase } =
-      await import("./openSqliteDatabase.js");
+      await import("./open-sqlite-database.js");
     closeSqliteDatabase();
     db = openSqliteDatabase(path.join(tmpDir, "test.db"));
   });
 
   afterEach(async () => {
-    const { closeSqliteDatabase } = await import("./openSqliteDatabase.js");
+    const { closeSqliteDatabase } = await import("./open-sqlite-database.js");
     closeSqliteDatabase();
     await rm(tmpDir, { recursive: true, force: true });
   });
 
   it("saveTask + getAllTasks round-trips a task", async () => {
-    const { saveTask } = await import("../saveTask.js");
-    const { getAllTasks } = await import("../getAllTasks.js");
+    const { saveTask } = await import("../save-task.js");
+    const { getAllTasks } = await import("../get-all-tasks.js");
     const task = baseTask();
     await saveTask(db, task);
     const all = await getAllTasks(db);
@@ -47,8 +47,8 @@ describe("SQLite tasks dual-dispatch", () => {
   });
 
   it("saveTask overwrites an existing task (upsert)", async () => {
-    const { saveTask } = await import("../saveTask.js");
-    const { getAllTasks } = await import("../getAllTasks.js");
+    const { saveTask } = await import("../save-task.js");
+    const { getAllTasks } = await import("../get-all-tasks.js");
     const task = baseTask();
     await saveTask(db, task);
     await saveTask(db, { ...task, prompt: "Updated prompt" });
@@ -58,8 +58,8 @@ describe("SQLite tasks dual-dispatch", () => {
   });
 
   it("getTask returns the task by ID", async () => {
-    const { saveTask } = await import("../saveTask.js");
-    const { getTask } = await import("../getTask.js");
+    const { saveTask } = await import("../save-task.js");
+    const { getTask } = await import("../get-task.js");
     await saveTask(db, baseTask());
     const task = await getTask(db, "task-001");
     expect(task).toBeDefined();
@@ -67,15 +67,15 @@ describe("SQLite tasks dual-dispatch", () => {
   });
 
   it("getTask returns undefined for unknown ID", async () => {
-    const { getTask } = await import("../getTask.js");
+    const { getTask } = await import("../get-task.js");
     const task = await getTask(db, "does-not-exist");
     expect(task).toBeUndefined();
   });
 
   it("deleteTask removes a task", async () => {
-    const { saveTask } = await import("../saveTask.js");
-    const { deleteTask } = await import("../deleteTask.js");
-    const { getAllTasks } = await import("../getAllTasks.js");
+    const { saveTask } = await import("../save-task.js");
+    const { deleteTask } = await import("../delete-task.js");
+    const { getAllTasks } = await import("../get-all-tasks.js");
     await saveTask(db, baseTask());
     await deleteTask(db, "task-001");
     const all = await getAllTasks(db);
@@ -83,8 +83,8 @@ describe("SQLite tasks dual-dispatch", () => {
   });
 
   it("getEnabledTasks returns only enabled tasks", async () => {
-    const { saveTask } = await import("../saveTask.js");
-    const { getEnabledTasks } = await import("../getEnabledTasks.js");
+    const { saveTask } = await import("../save-task.js");
+    const { getEnabledTasks } = await import("../get-enabled-tasks.js");
     await saveTask(db, { ...baseTask(), id: "t1", enabled: true });
     await saveTask(db, { ...baseTask(), id: "t2", enabled: false });
     const enabled = await getEnabledTasks(db);
@@ -92,9 +92,9 @@ describe("SQLite tasks dual-dispatch", () => {
   });
 
   it("updateTaskLastRun sets the lastRun timestamp", async () => {
-    const { saveTask } = await import("../saveTask.js");
-    const { updateTaskLastRun } = await import("../updateTaskLastRun.js");
-    const { getTask } = await import("../getTask.js");
+    const { saveTask } = await import("../save-task.js");
+    const { updateTaskLastRun } = await import("../update-task-last-run.js");
+    const { getTask } = await import("../get-task.js");
     await saveTask(db, baseTask());
     const ts = Date.now();
     await updateTaskLastRun(db, "task-001", ts);
@@ -103,15 +103,15 @@ describe("SQLite tasks dual-dispatch", () => {
   });
 
   it("updateTaskLastRun is a no-op for unknown task ID", async () => {
-    const { updateTaskLastRun } = await import("../updateTaskLastRun.js");
+    const { updateTaskLastRun } = await import("../update-task-last-run.js");
     await expect(
       updateTaskLastRun(db, "ghost", 12345),
     ).resolves.toBeUndefined();
   });
 
   it("task.tools (array) round-trips through JSON serialization", async () => {
-    const { saveTask } = await import("../saveTask.js");
-    const { getTask } = await import("../getTask.js");
+    const { saveTask } = await import("../save-task.js");
+    const { getTask } = await import("../get-task.js");
     const tools = [{ name: "bash", input: { command: "echo hi" } }];
     await saveTask(db, { ...baseTask(), tools, type: "tools" });
     const task = await getTask(db, "task-001");
@@ -119,7 +119,7 @@ describe("SQLite tasks dual-dispatch", () => {
   });
 
   it("getAllTasks returns empty array when no tasks", async () => {
-    const { getAllTasks } = await import("../getAllTasks.js");
+    const { getAllTasks } = await import("../get-all-tasks.js");
     const all = await getAllTasks(db);
     expect(all).toEqual([]);
   });

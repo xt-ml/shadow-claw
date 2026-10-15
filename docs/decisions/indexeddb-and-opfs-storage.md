@@ -37,15 +37,15 @@ The DB layer is broken into small, focused modules (one function per file):
 
 ```text
 src/db/
-├── db.ts              openDatabase(), getDb() singleton
-├── openDatabase.ts    Schema migrations
-├── saveMessage.ts     Insert/update message
-├── getRecentMessages.ts  Paginated message fetch
-├── groups.ts          Conversation group CRUD
-├── setConfig.ts       Persist config value
-├── getConfig.ts       Read config value
-├── saveTask.ts        Persist scheduled task
-├── getAllTasks.ts      List all tasks
+├── db.ts                  openDatabase(), getDb() singleton
+├── open-database.ts        Schema migrations
+├── save-message.ts         Insert/update message
+├── get-recent-messages.ts  Paginated message fetch
+├── groups.ts              Conversation group CRUD
+├── set-config.ts           Persist config value
+├── get-config.ts           Read config value
+├── save-task.ts            Persist scheduled task
+├── get-all-tasks.ts        List all tasks
 ... (one module per operation)
 ```
 
@@ -83,7 +83,7 @@ When a local directory is selected:
 
 - It's stored as a `FileSystemDirectoryHandle` in IndexedDB
 - OPFS is bypassed entirely for that group's workspace
-- The write path (`writeFileHandle.ts`) works identically regardless of backend
+- The write path (`write-file-handle.ts`) works identically regardless of backend
 
 ## Trade-offs
 
@@ -136,12 +136,12 @@ To prevent storage state leakage when multiple instances are deployed under subp
    Derived automatically from subpath routing (`getAppBasePath()`) or explicit overrides (`window.__SHADOWCLAW_DEPLOY_ID__` / `process.env.SHADOWCLAW_DEPLOY_ID`).
 2. **IndexedDB Scope (`getDbName()`):**
    Computes database names as `shadowclaw-${namespace}` (falling back to legacy `"shadowclaw"` when unnamespaced).
-3. **Automated Legacy Migration (`migrateLegacyDatabase.ts` & `migrateLegacyOpfs.ts`):**
+3. **Automated Legacy Migration (`migrate-legacy-database.ts` & `migrate-legacy-opfs.ts`):**
    When booting a namespaced deployment for the first time, ShadowClaw checks if data was previously stored under `"shadowclaw"`.
    - **IndexedDB**: Copies all object stores into the new namespaced database in a single non-destructive pass, setting `DB_MIGRATED_FROM_LEGACY`.
    - **OPFS**: Recursively copies all legacy workspace directories and files from `"shadowclaw"` into `"shadowclaw-${namespace}"` (with Safari worker write fallback), setting `OPFS_MIGRATED_FROM_LEGACY`.
      The legacy storage is left intact as a fallback seed.
-4. **Namespaced `localStorage` (`namespacedStorage.ts`):**
+4. **Namespaced `localStorage` (`namespaced-storage.ts`):**
    Key pattern `shadowclaw:${namespace}:${key}` with automatic one-time copy-on-read from legacy unprefixed keys.
 5. **Isolation Assurance:**
    - **Electron Desktop**: Uses a dedicated Chromium profile and user data directory (`~/.config/shadowclaw`), guaranteeing storage isolation regardless of origin.

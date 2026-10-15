@@ -4,8 +4,8 @@ import {
   installCustomElementDomGuard,
   installCustomElementsRegistryGuard,
 } from "../security/custom-element-security.js";
-import { getNamespacedItem } from "../utils/namespacedStorage.js";
-import { getPrerenderSkeletonDefault } from "../utils/prerenderSkeletonDefault.js";
+import { getNamespacedItem } from "../utils/namespaced-storage.js";
+import { getPrerenderSkeletonDefault } from "../utils/prerender-skeleton-default.js";
 
 export function handleGithubPages404Redirects() {
   const redirect = sessionStorage.getItem(

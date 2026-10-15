@@ -2,7 +2,7 @@
 
 > Seamless OS-level share sheet integration receiving files, URLs, and text directly into ShadowClaw conversations and workspace storage.
 
-**Source:** `manifest.json` · `src/service-worker/share-target.ts` · `src/share-target/pending-shares.ts` · `src/components/shadow-claw/utils/processPendingSharedPayloads.ts`
+**Source:** `manifest.json` · `src/service-worker/share-target.ts` · `src/share-target/pending-shares.ts` · `src/components/shadow-claw/utils/process-pending-shared-payloads.ts`
 
 ---
 
@@ -19,7 +19,7 @@ sequenceDiagram
   participant OS as OS Share Sheet
   participant SW as Service Worker (share-target.ts)
   participant IDB as IndexedDB (pendingShares)
-  participant App as Application UI (processPendingSharedPayloads.ts)
+  participant App as Application UI (process-pending-shared-payloads.ts)
   participant OPFS as OPFS Workspace Storage
 
   OS->>SW: POST /share/share-target.html (multipart/form-data)

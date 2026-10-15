@@ -4,8 +4,8 @@ import {
   DEFAULT_SUBAGENT_WORKSPACE_MODE,
 } from "../../../config/config.js";
 
-import { getConfig } from "../../../db/getConfig.js";
-import { runSingleSubagent } from "./utils/runSingleSubagent.js";
+import { getConfig } from "../../../db/get-config.js";
+import { runSingleSubagent } from "./utils/run-single-subagent.js";
 
 import type { ToolDefinition } from "../../../subsystems/tools/types.js";
 import type { InvokePayload } from "../../../subsystems/worker/types.js";

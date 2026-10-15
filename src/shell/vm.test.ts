@@ -25,7 +25,7 @@ import {
 } from "./vm.js";
 
 import { DEFAULT_VM_NETWORK_RELAY_URL } from "../config/config.js";
-import { openDatabase } from "../db/openDatabase.js";
+import { openDatabase } from "../db/open-database.js";
 
 type VMExecResult = {
   stdout: string;
@@ -640,7 +640,7 @@ describe("vm wrapper", () => {
       const context = { db, groupId: "test-sync-group" };
 
       // Seed host files into workspaceDir
-      const { getGroupDir } = await import("../storage/getGroupDir.js");
+      const { getGroupDir } = await import("../storage/get-group-dir.js");
       const dir = await getGroupDir(db, "test-sync-group");
       const fileHandle = await dir.getFileHandle("hello.txt", { create: true });
       const writable = await (fileHandle as any).createWritable();
@@ -706,7 +706,7 @@ describe("vm wrapper", () => {
       const context = { db, groupId: "test-flush-group" };
 
       // Seed a host file first so it exists
-      const { getGroupDir } = await import("../storage/getGroupDir.js");
+      const { getGroupDir } = await import("../storage/get-group-dir.js");
       const dir = await getGroupDir(db, "test-flush-group");
       const hostFile = await dir.getFileHandle("to-delete.txt", {
         create: true,
@@ -767,7 +767,7 @@ describe("vm wrapper", () => {
     it("boots VM in 9p mode using mock V86 module", async () => {
       await shutdownVM();
       setVMBootModePreference("9p");
-      const testHost = new URL("../testing", import.meta.url).href.replace(
+      const testHost = new URL("./__fixtures__", import.meta.url).href.replace(
         /\/+$/,
         "",
       );
@@ -792,7 +792,7 @@ describe("vm wrapper", () => {
     it("boots VM in ext2 mode using mock V86 module", async () => {
       await shutdownVM();
       setVMBootModePreference("ext2");
-      const testHost = new URL("../testing", import.meta.url).href.replace(
+      const testHost = new URL("./__fixtures__", import.meta.url).href.replace(
         /\/+$/,
         "",
       );
@@ -890,7 +890,7 @@ describe("vm wrapper", () => {
     it("executes command via real executeCommand, strips ANSI codes, and handles timeout recovery", async () => {
       await shutdownVM();
       setVMBootModePreference("9p");
-      const testHost = new URL("../testing", import.meta.url).href.replace(
+      const testHost = new URL("./__fixtures__", import.meta.url).href.replace(
         /\/+$/,
         "",
       );
@@ -915,7 +915,7 @@ describe("vm wrapper", () => {
       await shutdownVM();
       setVMBootModePreference("9p");
       const missingHost = new URL(
-        "../testing/assets_missing_v86",
+        "./__fixtures__/assets_missing_v86",
         import.meta.url,
       ).href.replace(/\/+$/, "");
       setVMBootHostPreference(missingHost);

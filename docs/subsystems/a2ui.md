@@ -51,21 +51,21 @@ src/ui/a2ui/
 ├── a2ui.test.ts                # Module-level integration tests
 ├── types.test.ts               # Type guard / constant tests
 ├── registries/
-│   ├── CatalogRegistry.ts      # Registry of catalog definitions (UAX #31 validation)
-│   ├── ComponentRegistry.ts    # Registry of component render callbacks
-│   ├── FunctionRegistry.ts     # Registry of callable functions with boundary enforcement
-│   └── basicFunctions.ts       # Registers all Basic catalog functions into globalFunctionRegistry
+│   ├── catalog-registry.ts     # Registry of catalog definitions (UAX #31 validation)
+│   ├── component-registry.ts   # Registry of component render callbacks
+│   ├── function-registry.ts    # Registry of callable functions with boundary enforcement
+│   └── basic-functions.ts      # Registers all Basic catalog functions into globalFunctionRegistry
 └── utils/
-    ├── applyDataModelUpdate.ts  # Spec §updateDataModel: single path+value JSON Pointer write
-    ├── buildItemDataScope.ts    # Spec §builtins: @index / @item per-item scope
-    ├── evaluateCheckRule.ts     # Spec §checks: CheckRule validation evaluation
-    ├── formatA2UIActionPrompt.ts # [A2UI ACTION] prompt builder
-    ├── normaliseComponentsToMap.ts # Flat array → keyed Record for O(1) render lookup
-    ├── resolveChildIds.ts       # Spec §DataDrivenChildren: static IDs + template expansion
-    ├── resolveDynamicBoolean.ts # Dynamic boolean resolution (PathRef / literal / fn call)
-    ├── resolveDynamicNumber.ts  # Dynamic number resolution
-    ├── resolveDynamicString.ts  # Dynamic string resolution (PathRef / $dataModel / fn call)
-    └── resolveJsonPointer.ts   # RFC 6901 JSON Pointer read
+    ├── apply-data-model-update.ts  # Spec §updateDataModel: single path+value JSON Pointer write
+    ├── build-item-data-scope.ts    # Spec §builtins: @index / @item per-item scope
+    ├── evaluate-check-rule.ts      # Spec §checks: CheckRule validation evaluation
+    ├── format-a2ui-action-prompt.ts # [A2UI ACTION] prompt builder
+    ├── normalise-components-to-map.ts # Flat array → keyed Record for O(1) render lookup
+    ├── resolve-child-ids.ts        # Spec §DataDrivenChildren: static IDs + template expansion
+    ├── resolve-dynamic-boolean.ts  # Dynamic boolean resolution (PathRef / literal / fn call)
+    ├── resolve-dynamic-number.ts   # Dynamic number resolution
+    ├── resolve-dynamic-string.ts   # Dynamic string resolution (PathRef / $dataModel / fn call)
+    └── resolve-json-pointer.ts    # RFC 6901 JSON Pointer read
 ```
 
 The catalog renderers live under `src/components/shadow-claw-a2ui/catalog/basic/`:

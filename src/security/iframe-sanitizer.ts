@@ -1,7 +1,7 @@
 import DOMPurify from "dompurify";
 import { CONFIG_KEYS } from "../config/config.js";
 import { getDb } from "../db/db.js";
-import { getConfig } from "../db/getConfig.js";
+import { getConfig } from "../db/get-config.js";
 
 export const DEFAULT_ALLOWED_IFRAME_HOST_PATTERNS: string[] = [
   "youtube.com",

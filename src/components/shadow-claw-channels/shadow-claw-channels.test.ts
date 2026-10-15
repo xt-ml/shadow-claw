@@ -64,4 +64,28 @@ describe("shadow-claw-channels", () => {
 
     document.body.removeChild(el);
   });
+
+  it("throws when connectedCallback is invoked without shadowRoot", async () => {
+    const el = new ShadowClawChannels();
+    Object.defineProperty(el, "shadowRoot", {
+      value: null,
+      configurable: true,
+    });
+    await expect(el.connectedCallback()).rejects.toThrow(
+      "shadowRoot not found",
+    );
+  });
+
+  it("handles render when shadowRoot is missing or back button is absent", async () => {
+    const el = new ShadowClawChannels();
+    Object.defineProperty(el, "shadowRoot", {
+      value: null,
+      configurable: true,
+    });
+    await expect(el.render()).resolves.toBeUndefined();
+
+    const el2 = new ShadowClawChannels();
+    el2.shadowRoot?.querySelector('[data-action="back-to-settings"]')?.remove();
+    await expect(el2.render()).resolves.toBeUndefined();
+  });
 });

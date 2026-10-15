@@ -266,5 +266,44 @@ describe("model-ranking", () => {
         compareLocalModelCandidates(normal, thinking, "local"),
       ).toBeLessThan(0);
     });
+
+    it("penalizes non-onnx models and models > 1.5B in transformers_js_browser", () => {
+      const onnxSmall = {
+        id: "model-onnx-1.0b",
+        supportsTools: true,
+        contextLength: 4096,
+      };
+      const nonOnnxLarge = {
+        id: "model-pytorch-2.0b",
+        supportsTools: true,
+        contextLength: 4096,
+      };
+
+      expect(
+        compareLocalModelCandidates(
+          onnxSmall,
+          nonOnnxLarge,
+          "transformers_js_browser",
+        ),
+      ).toBeLessThan(0);
+    });
+
+    it("handles invalid Gemma style numbers in parseModelBillionsFromId", () => {
+      const invalidGemma = {
+        id: "google/gemma-e0b-it",
+        supportsTools: true,
+        contextLength: 4096,
+      };
+      const validGemma = {
+        id: "google/gemma-e2b-it",
+        supportsTools: true,
+        contextLength: 4096,
+      };
+
+      // Both should compare gracefully without error
+      expect(
+        typeof compareLocalModelCandidates(invalidGemma, validGemma, "local"),
+      ).toBe("number");
+    });
   });
 });

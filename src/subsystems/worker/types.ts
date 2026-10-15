@@ -148,6 +148,7 @@ export interface InvokePayload {
   messages: ConversationMessage[];
   model: string;
   provider?: any;
+  baseUrl?: string;
   providerHeaders?: Record<string, string>;
   providerRuntimeOverrides?: {
     bedrock_proxy?: {

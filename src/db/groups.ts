@@ -4,8 +4,8 @@
  */
 
 import { DEFAULT_GROUP_ID } from "../config/config.js";
-import { getConfig } from "./getConfig.js";
-import { setConfig } from "./setConfig.js";
+import { getConfig } from "./get-config.js";
+import { setConfig } from "./set-config.js";
 import { ulid } from "../utils/ulid.js";
 import type { GroupMeta, ShadowClawDatabase } from "./types.js";
 

@@ -3,7 +3,7 @@
 > ShadowClaw streams LLM responses token-by-token via Server-Sent Events (SSE)
 > when the provider supports it, rendering a live-updating chat bubble.
 
-**Source:** `src/worker/StreamAccumulator/StreamAccumulator.ts` · `src/worker/parseSSEStream.ts` · `src/worker/utils/handleInvoke.ts` · `src/stores/orchestrator.ts` · `src/server/proxy.ts`
+**Source:** `src/worker/stream-accumulator/stream-accumulator.ts` · `src/worker/parse-sse-stream.ts` · `src/worker/utils/handle-invoke.ts` · `src/stores/orchestrator.ts` · `src/server/proxy.ts`
 
 ## Three Gates
 
@@ -50,7 +50,7 @@ sequenceDiagram
 
 ## SSE Parser
 
-**File:** `src/worker/parseSSEStream.ts`
+**File:** `src/worker/parse-sse-stream.ts`
 
 Async generator that reads a `ReadableStream<Uint8Array>` and yields parsed JSON objects:
 
@@ -70,7 +70,7 @@ Handles:
 
 ## Stream Accumulator
 
-**File:** `src/worker/StreamAccumulator/StreamAccumulator.ts`
+**File:** `src/worker/stream-accumulator/stream-accumulator.ts`
 
 Accumulates text and tool-use events from parsed SSE chunks into a unified response.
 

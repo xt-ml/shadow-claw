@@ -3,7 +3,7 @@ import { DEFAULT_GROUP_ID } from "../../../../config/config.js";
 
 const mockDefaultSetConfig = jest.fn() as any;
 
-jest.unstable_mockModule("../../../../db/setConfig.js", () => ({
+jest.unstable_mockModule("../../../../db/set-config.js", () => ({
   setConfig: mockDefaultSetConfig,
 }));
 

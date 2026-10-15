@@ -50,7 +50,7 @@ const mockGetPeerJsConfig = jest.fn(() => ({
 }));
 const mockConfigurePeerJs = jest.fn();
 jest.unstable_mockModule(
-  "../../../core/orchestrator/utils/configurePeerJs.js",
+  "../../../core/orchestrator/utils/configure-peer-js.js",
   () => ({
     configurePeerJs: mockConfigurePeerJs,
   }),
@@ -122,7 +122,8 @@ jest.unstable_mockModule("../../../utils/ulid.js", () => ({
 const { ShadowClawPeerJs } = await import("./shadow-claw-peerjs.js");
 const { orchestratorStore } =
   (await import("../../../stores/orchestrator.js")) as any;
-const { showSuccess } = (await import("../../../ui/toast.js")) as any;
+const { showSuccess, showError } =
+  (await import("../../../ui/toast.js")) as any;
 
 describe("shadow-claw-peerjs", () => {
   beforeEach(() => {
@@ -508,6 +509,566 @@ describe("shadow-claw-peerjs", () => {
       '[data-info="peerjs-trusted-ids-status"]',
     );
     expect(status?.textContent).toContain("Bob");
+
+    document.body.removeChild(el);
+  });
+
+  it("throws error in connectedCallback if shadowRoot is missing", async () => {
+    const el = new ShadowClawPeerJs();
+    Object.defineProperty(el, "shadowRoot", {
+      get: () => null,
+      configurable: true,
+    });
+    await expect(el.connectedCallback()).rejects.toThrow(
+      "shadowRoot not found",
+    );
+  });
+
+  it("handles bindEventListeners null shadowRoot and empty ID input", async () => {
+    const el = new ShadowClawPeerJs() as any;
+    document.body.appendChild(el);
+    await el.connectedCallback();
+
+    // null root guard
+    Object.defineProperty(el, "shadowRoot", {
+      get: () => null,
+      configurable: true,
+    });
+    el.bindEventListeners();
+    delete (el as any).shadowRoot;
+
+    // click add-trusted-peer with empty id
+    const root = el.shadowRoot!;
+    const idInput = root.querySelector(
+      '[data-setting="peerjs-new-trusted-id-input"]',
+    ) as HTMLInputElement;
+    const addBtn = root.querySelector('[data-action="add-trusted-peer"]');
+    if (idInput && addBtn) {
+      idInput.value = "";
+      addBtn.dispatchEvent(new Event("click"));
+    }
+
+    // typing in peer ID input triggers updateQrCode
+    const peerInput = root.querySelector(
+      '[data-setting="peerjs-my-peer-id-input"]',
+    );
+    peerInput?.dispatchEvent(new Event("input"));
+
+    // action buttons trigger bound event handlers
+    root
+      .querySelector('[data-action="save-peerjs-config"]')
+      ?.dispatchEvent(new Event("click"));
+    root
+      .querySelector('[data-action="generate-peer-id"]')
+      ?.dispatchEvent(new Event("click"));
+    root
+      .querySelector('[data-action="copy-peer-id"]')
+      ?.dispatchEvent(new Event("click"));
+    root
+      .querySelector('[data-action="copy-peer-url"]')
+      ?.dispatchEvent(new Event("click"));
+    root
+      .querySelector('[data-action="create-room"]')
+      ?.dispatchEvent(new Event("click"));
+    root
+      .querySelector('[data-action="copy-room-url"]')
+      ?.dispatchEvent(new Event("click"));
+
+    document.body.removeChild(el);
+  });
+
+  it("handles createRoom validation, exceptions, and null guards", async () => {
+    const el = new ShadowClawPeerJs() as any;
+    document.body.appendChild(el);
+    await el.connectedCallback();
+
+    // 1. Empty room name
+    const input = el.shadowRoot?.querySelector(
+      '[data-setting="room-new-name-input"]',
+    ) as HTMLInputElement;
+    if (input) input.value = "   ";
+    el.createRoom();
+    expect(showError).toHaveBeenCalledWith("Enter a room name.", 3000);
+
+    // 2. createRoom throws Error
+    if (input) input.value = "Room Error";
+    mockCreateRoom.mockImplementationOnce(() => {
+      throw new Error("Boom room");
+    });
+    el.createRoom();
+    expect(showError).toHaveBeenCalledWith(
+      "Failed to create room: Boom room",
+      5000,
+    );
+
+    // 3. createRoom throws non-Error
+    if (input) input.value = "Room String Error";
+    mockCreateRoom.mockImplementationOnce(() => {
+      throw "Raw error";
+    });
+    el.createRoom();
+    expect(showError).toHaveBeenCalledWith(
+      "Failed to create room: Raw error",
+      5000,
+    );
+
+    // 4. null root or orchestrator guard
+    el.orchestrator = null;
+    jest.spyOn(el, "getOrchestrator").mockReturnValue(null);
+    el.createRoom();
+
+    document.body.removeChild(el);
+  });
+
+  it("handles invitePeerToRoom success, failure, and null orchestrator", async () => {
+    const el = new ShadowClawPeerJs() as any;
+    document.body.appendChild(el);
+    await el.connectedCallback();
+
+    const { inviteToRoom } =
+      await import("../../../core/orchestrator/utils/operations/room.js");
+    const room = { roomId: "r1", name: "Room 1" };
+
+    // 1. Success
+    (inviteToRoom as jest.Mock<any>).mockReturnValueOnce(true);
+    el.invitePeerToRoom(room, "peer-123456789");
+    expect(showSuccess).toHaveBeenCalledWith(
+      'Invited peer-123 to "Room 1".',
+      2500,
+    );
+
+    // 2. Failure
+    (inviteToRoom as jest.Mock<any>).mockReturnValueOnce(false);
+    el.invitePeerToRoom(room, "peer-123");
+    expect(showError).toHaveBeenCalledWith(
+      "Failed to invite peer (are you the host?).",
+      4000,
+    );
+
+    // 3. Null orchestrator
+    jest.spyOn(el, "getOrchestrator").mockReturnValue(null);
+    el.invitePeerToRoom(room, "peer-123");
+
+    document.body.removeChild(el);
+  });
+
+  it("handles renderRooms empty rooms, member status, open button navigation, and guest leave", async () => {
+    const el = new ShadowClawPeerJs() as any;
+    document.body.appendChild(el);
+    await el.connectedCallback();
+
+    const { listRooms, leaveRoom } =
+      await import("../../../core/orchestrator/utils/operations/room.js");
+
+    // 1. Empty rooms list
+    (listRooms as jest.Mock<any>).mockReturnValueOnce([]);
+    el.renderRooms();
+    const listEl = el.shadowRoot?.querySelector('[data-info="rooms-list"]');
+    expect(listEl?.textContent).toContain("No rooms yet.");
+
+    // 2. Room with member without alias, open navigation, and guest leave
+    const guestRoom = [
+      {
+        roomId: "guest-room-1",
+        name: "Guest Collab",
+        hostPeerId: "other-host",
+        members: [
+          { peerId: "other-host", kind: "human" }, // no alias
+          { peerId: "test-peer-id", alias: "Me", kind: "human" },
+        ],
+      },
+    ];
+    (listRooms as jest.Mock<any>).mockReturnValueOnce(guestRoom);
+    el.renderRooms();
+
+    const card = listEl?.querySelector(".peerjs-room-card");
+    expect(card).not.toBeNull();
+
+    // Open button navigation event
+    const navSpy = jest.fn();
+    document.addEventListener("shadow-claw-navigate", navSpy, { once: true });
+    const openBtn = card?.querySelector(
+      ".save-btn--secondary",
+    ) as HTMLButtonElement;
+    openBtn?.click();
+    expect(navSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        detail: { page: "chat", groupId: "br:guest-room-1" },
+      }),
+    );
+
+    // Leave button for guest
+    const leaveBtn = card?.querySelector(
+      ".save-btn--danger",
+    ) as HTMLButtonElement;
+    expect(leaveBtn?.textContent).toBe("Leave");
+    leaveBtn?.click();
+    expect(leaveRoom).toHaveBeenCalledWith(expect.anything(), "guest-room-1");
+    expect(showSuccess).toHaveBeenCalledWith("Left room.", 2500);
+
+    // 3. Null root and listEl guards
+    Object.defineProperty(el, "shadowRoot", {
+      get: () => null,
+      configurable: true,
+    });
+    el.renderRooms();
+    delete (el as any).shadowRoot;
+
+    const savedList = el.shadowRoot.querySelector('[data-info="rooms-list"]');
+    savedList.remove();
+    el.renderRooms();
+    el.shadowRoot.appendChild(savedList);
+
+    document.body.removeChild(el);
+  });
+
+  it("handles copyPeerId, copyPeerUrl, and copyRoomUrl error paths", async () => {
+    const el = new ShadowClawPeerJs() as any;
+    document.body.appendChild(el);
+    await el.connectedCallback();
+
+    // 1. copyPeerId empty
+    const input = el.shadowRoot?.querySelector(
+      '[data-setting="peerjs-my-peer-id-input"]',
+    ) as HTMLInputElement;
+    if (input) input.value = "";
+    await el.copyPeerId();
+    expect(showError).toHaveBeenCalledWith("No Peer ID to copy.", 3000);
+
+    // 2. copyPeerId clipboard throws
+    if (input) input.value = "peer-id-123";
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: jest.fn<any>().mockRejectedValue(new Error("Clip fail")),
+      },
+    });
+    await el.copyPeerId();
+    expect(showError).toHaveBeenCalledWith("Failed to copy Peer ID.", 3000);
+
+    // 3. copyPeerUrl empty
+    el._currentPeerUrl = "";
+    await el.copyPeerUrl();
+    expect(showError).toHaveBeenCalledWith(
+      "No connection URL available. Enter a Peer ID first.",
+      3000,
+    );
+
+    // 4. copyPeerUrl clipboard throws
+    el._currentPeerUrl = "http://localhost/?peer=123";
+    await el.copyPeerUrl();
+    expect(showError).toHaveBeenCalledWith(
+      "Failed to copy connection URL.",
+      3000,
+    );
+
+    // 5. copyRoomUrl empty
+    el._currentRoomUrl = "";
+    await el.copyRoomUrl();
+    expect(showError).toHaveBeenCalledWith(
+      "Create or select a room first.",
+      3000,
+    );
+
+    // 6. copyRoomUrl clipboard throws
+    el._currentRoomUrl = "http://localhost/?room=456";
+    await el.copyRoomUrl();
+    expect(showError).toHaveBeenCalledWith("Failed to copy room link.", 3000);
+
+    // 7. null root guards
+    Object.defineProperty(el, "shadowRoot", {
+      get: () => null,
+      configurable: true,
+    });
+    await el.copyPeerId();
+    delete (el as any).shadowRoot;
+
+    document.body.removeChild(el);
+  });
+
+  it("handles render with disabled channel, empty trusted peers, and trusted peer button navigation", async () => {
+    const el = new ShadowClawPeerJs() as any;
+    document.body.appendChild(el);
+    await el.connectedCallback();
+
+    mockGetPeerJsConfig.mockReturnValueOnce({
+      enabled: false,
+      myPeerId: "peer-solo",
+      myAlias: "Solo",
+      trustedPeerIds: [],
+      serverHost: "host.local",
+      serverPort: 0,
+      serverPath: "/path",
+      serverSecure: true,
+    });
+
+    await el.render();
+
+    const channelStatus = el.shadowRoot?.querySelector(
+      '[data-info="peerjs-channel-status"]',
+    );
+    expect(channelStatus?.textContent).toContain("PeerJS channel is disabled");
+
+    const trustedStatus = el.shadowRoot?.querySelector(
+      '[data-info="peerjs-trusted-ids-status"]',
+    );
+    expect(trustedStatus?.textContent).toContain(
+      "Accepting connections from any peer.",
+    );
+
+    const portInput = el.shadowRoot?.querySelector(
+      '[data-setting="peerjs-server-port-input"]',
+    ) as HTMLInputElement;
+    expect(portInput.value).toBe("");
+
+    // Test with trustedPeerIds having buttons that dispatch shadow-claw-navigate
+    mockGetPeerJsConfig.mockReturnValueOnce({
+      enabled: true,
+      myPeerId: "peer-solo",
+      myAlias: "Solo",
+      trustedPeerIds: ["peer-trusted-abc"],
+      peerAliases: { "Alice Friend": "peer-trusted-abc" },
+      serverHost: "host.local",
+      serverPort: 8080,
+      serverPath: "/path",
+      serverSecure: false,
+    });
+    // Clear list to trigger population
+    const listEl = el.shadowRoot?.querySelector(
+      '[data-info="peerjs-trusted-peers-list"]',
+    );
+    if (listEl) listEl.innerHTML = "";
+    await el.render();
+
+    const navSpy = jest.fn();
+    document.addEventListener("shadow-claw-navigate", navSpy, { once: true });
+    const peerBtn = el.shadowRoot?.querySelector(
+      '[data-info="peerjs-trusted-ids-status"] button',
+    ) as HTMLButtonElement;
+    expect(peerBtn?.textContent).toBe("Alice Friend");
+    peerBtn?.click();
+    expect(navSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        detail: { page: "chat", groupId: "peer:peer-trusted-abc" },
+      }),
+    );
+
+    // Null guards for render
+    Object.defineProperty(el, "shadowRoot", {
+      get: () => null,
+      configurable: true,
+    });
+    await el.render();
+    delete (el as any).shadowRoot;
+
+    jest.spyOn(el, "getOrchestrator").mockReturnValue(null);
+    await el.render();
+
+    document.body.removeChild(el);
+  });
+
+  it("handles savePeerJsConfig aliases, errors, and null guards", async () => {
+    const el = new ShadowClawPeerJs() as any;
+    document.body.appendChild(el);
+    await el.connectedCallback();
+
+    // Set up trusted peer rows with alias and without alias
+    const root = el.shadowRoot!;
+    const list = root.querySelector(
+      '[data-info="peerjs-trusted-peers-list"]',
+    ) as HTMLElement;
+    list.innerHTML = `
+      <div class="peerjs-trusted-peer-row">
+        <input type="text" data-id="p1" value="p1" />
+        <input type="text" class="alias-input" value="Alias 1" />
+      </div>
+      <div class="peerjs-trusted-peer-row">
+        <input type="text" data-id="p2" value="p2" />
+        <input type="text" class="alias-input" value="" />
+      </div>
+    `;
+
+    // 1. configurePeerJs throws Error
+    mockConfigurePeerJs.mockRejectedValueOnce(new Error("Config failed"));
+    await el.savePeerJsConfig();
+    expect(showError).toHaveBeenCalledWith(
+      "Error saving PeerJS settings: Config failed",
+      6000,
+    );
+
+    // 2. configurePeerJs throws non-Error
+    mockConfigurePeerJs.mockRejectedValueOnce("Server down");
+    await el.savePeerJsConfig();
+    expect(showError).toHaveBeenCalledWith(
+      "Error saving PeerJS settings: Server down",
+      6000,
+    );
+
+    // 3. Null db or orchestrator guard
+    el.db = null;
+    await el.savePeerJsConfig();
+
+    el.db = {};
+    jest.spyOn(el, "getOrchestrator").mockReturnValue(null);
+    await el.savePeerJsConfig();
+
+    // 4. Null root guard
+    jest
+      .spyOn(el, "getOrchestrator")
+      .mockReturnValue(orchestratorStore.orchestrator);
+    Object.defineProperty(el, "shadowRoot", {
+      get: () => null,
+      configurable: true,
+    });
+    await el.savePeerJsConfig();
+    delete (el as any).shadowRoot;
+
+    document.body.removeChild(el);
+  });
+
+  it("handles showRoomQr, updateConnectionStatus, updateQrCode, and trusted peer helpers", async () => {
+    const el = new ShadowClawPeerJs() as any;
+    document.body.appendChild(el);
+    await el.connectedCallback();
+
+    const { default: QRCode } = await import("qrcode");
+
+    // 1. showRoomQr QRCode error and null root
+    const consoleSpy = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    (QRCode.toCanvas as jest.Mock<any>).mockRejectedValueOnce(
+      new Error("QR fail"),
+    );
+    await el.showRoomQr({ roomId: "r-qr", name: "QR Room", hostPeerId: "h1" });
+    expect(consoleSpy).toHaveBeenCalledWith(
+      "Room QR code render error:",
+      expect.any(Error),
+    );
+
+    Object.defineProperty(el, "shadowRoot", {
+      get: () => null,
+      configurable: true,
+    });
+    await el.showRoomQr({ roomId: "r-qr", name: "QR Room", hostPeerId: "h1" });
+    delete (el as any).shadowRoot;
+
+    // 2. updateConnectionStatus with 0 connected peers, null orchestrator, null root
+    orchestratorStore.orchestrator.peerjs.connectedPeersSignal.get.mockReturnValueOnce(
+      [],
+    );
+    await el.updateConnectionStatus();
+    expect(
+      el.shadowRoot.querySelector('[data-info="peerjs-connection-status"]')
+        .textContent,
+    ).toBe("Not connected.");
+
+    jest.spyOn(el, "getOrchestrator").mockReturnValueOnce(null);
+    await el.updateConnectionStatus();
+    expect(
+      el.shadowRoot.querySelector('[data-info="peerjs-connection-status"]')
+        .textContent,
+    ).toBe("Not connected.");
+
+    const statusEl = el.shadowRoot.querySelector(
+      '[data-info="peerjs-connection-status"]',
+    );
+    statusEl.remove();
+    await el.updateConnectionStatus();
+    el.shadowRoot.appendChild(statusEl);
+
+    Object.defineProperty(el, "shadowRoot", {
+      get: () => null,
+      configurable: true,
+    });
+    await el.updateConnectionStatus();
+    delete (el as any).shadowRoot;
+
+    // 3. updateQrCode with empty peerId, QRCode error, and null root
+    const input = el.shadowRoot.querySelector(
+      '[data-setting="peerjs-my-peer-id-input"]',
+    ) as HTMLInputElement;
+    input.value = "";
+    await el.updateQrCode();
+    expect(el._currentPeerUrl).toBe("");
+
+    input.value = "my-valid-peer";
+    (QRCode.toCanvas as jest.Mock<any>).mockRejectedValueOnce(
+      new Error("Canvas fail"),
+    );
+    await el.updateQrCode();
+    expect(consoleSpy).toHaveBeenCalledWith(
+      "PeerJS QR code render error:",
+      expect.any(Error),
+    );
+
+    const qrGroup = el.shadowRoot.querySelector(
+      '[data-info="peerjs-qr-group"]',
+    );
+    const canvas = el.shadowRoot.querySelector(
+      '[data-info="peerjs-qr-canvas"]',
+    );
+    const qrUrlEl = el.shadowRoot.querySelector('[data-info="peerjs-qr-url"]');
+    qrGroup.remove();
+    canvas.remove();
+    qrUrlEl.remove();
+    input.value = "";
+    await el.updateQrCode();
+    input.value = "my-valid-peer";
+    await el.updateQrCode();
+
+    Object.defineProperty(el, "shadowRoot", {
+      get: () => null,
+      configurable: true,
+    });
+    await el.updateQrCode();
+    delete (el as any).shadowRoot;
+
+    consoleSpy.mockRestore();
+
+    // 4. _appendTrustedPeerRow existing id, missing list, null root
+    el._appendTrustedPeerRow("already-there", "A");
+    el._appendTrustedPeerRow("already-there", "A"); // duplicate returns early
+
+    const list = el.shadowRoot.querySelector(
+      '[data-info="peerjs-trusted-peers-list"]',
+    );
+    list.remove();
+    el._appendTrustedPeerRow("no-list", "B");
+    el.shadowRoot.appendChild(list);
+
+    Object.defineProperty(el, "shadowRoot", {
+      get: () => null,
+      configurable: true,
+    });
+    el._appendTrustedPeerRow("null-root", "C");
+    delete (el as any).shadowRoot;
+
+    // 5. _trustedPeerOptions with null cfg and matching aliases
+    jest.spyOn(el, "getOrchestrator").mockReturnValueOnce(null);
+    expect(el._trustedPeerOptions()).toEqual([]);
+
+    mockGetPeerJsConfig.mockReturnValueOnce({
+      trustedPeerIds: ["peer-x", "peer-y"],
+      peerAliases: { "X-Man": "peer-x" },
+    });
+    const opts = el._trustedPeerOptions();
+    expect(opts).toEqual([
+      { id: "peer-x", label: "X-Man (peer-x)" },
+      { id: "peer-y", label: "peer-y" },
+    ]);
+
+    // 6. setupEffects when orchestratorStore.ready is false
+    orchestratorStore.ready = false;
+    el.setupEffects();
+    orchestratorStore.ready = true;
+
+    // 7. generatePeerId when shadowRoot is null
+    Object.defineProperty(el, "shadowRoot", {
+      get: () => null,
+      configurable: true,
+    });
+    el.generatePeerId();
+    delete (el as any).shadowRoot;
 
     document.body.removeChild(el);
   });

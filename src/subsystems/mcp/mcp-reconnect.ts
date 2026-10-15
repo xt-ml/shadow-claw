@@ -3,8 +3,8 @@ import {
   OAUTH_PROVIDER_DEFINITIONS,
 } from "../../config/config.js";
 import { decryptValue, encryptValue } from "../../security/crypto.js";
-import { getConfig } from "../../db/getConfig.js";
-import { setConfig } from "../../db/setConfig.js";
+import { getConfig } from "../../db/get-config.js";
+import { setConfig } from "../../db/set-config.js";
 import { getRemoteMcpConnection } from "./mcp-connections.js";
 import { clearRemoteMcpSession } from "./remote-mcp-client.js";
 

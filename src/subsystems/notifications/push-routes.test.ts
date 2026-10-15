@@ -625,4 +625,130 @@ describe("push-routes", () => {
       );
     });
   });
+
+  describe("additional push-routes error and broadcast branches", () => {
+    it("handles invalid id in DELETE /push/subscription/:id", () => {
+      const app = createMockApp();
+      registerPushRoutes(app as any);
+
+      const res = createMockRes();
+      app.routes.delete["/push/subscription/:id"](
+        { params: { id: "not-a-number" } },
+        res,
+      );
+
+      expect(res.statusCode).toBe(400);
+      expect(res._json).toEqual({ error: "Invalid subscription ID" });
+    });
+
+    it("handles 500 error in POST /push/send when webpush throws generic error", async () => {
+      const app = createMockApp();
+      registerPushRoutes(app as any);
+
+      (store.getSubscription as any).mockReturnValue({
+        id: 1,
+        endpoint: "https://push.example.com",
+        keys_p256dh: "k",
+        keys_auth: "a",
+      });
+
+      const errSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+      (webpush.sendNotification as any).mockRejectedValueOnce(
+        new Error("Fatal push error"),
+      );
+
+      const res = createMockRes();
+      await app.routes.post["/push/send"](
+        createMockReq({ endpoint: "https://push.example.com" }),
+        res,
+      );
+
+      expect(res.statusCode).toBe(500);
+      expect(res._json).toEqual({ error: "Fatal push error" });
+      errSpy.mockRestore();
+    });
+
+    it("handles validation and error branches in POST /push/broadcast", async () => {
+      const app = createMockApp();
+      registerPushRoutes(app as any);
+
+      // Missing body
+      const res1 = createMockRes();
+      await app.routes.post["/push/broadcast"](
+        createMockReq({ title: "Hi" }),
+        res1,
+      );
+      expect(res1.statusCode).toBe(400);
+      expect(res1._json).toEqual({ error: "Missing body" });
+
+      // Successful broadcast with subscriberId
+      (store.getAllSubscriptions as any).mockReturnValue([]);
+      const res2 = createMockRes();
+      await app.routes.post["/push/broadcast"](
+        createMockReq({ body: "Notice", subscriberId: "sub-1" }),
+        res2,
+      );
+      expect(res2.statusCode).toBe(200);
+
+      // Successful broadcast with clientId
+      const res3 = createMockRes();
+      await app.routes.post["/push/broadcast"](
+        createMockReq({ body: "Notice", clientId: "client-1" }),
+        res3,
+      );
+      expect(res3.statusCode).toBe(200);
+
+      // When store throws during broadcast
+      (store.getAllSubscriptions as any).mockImplementationOnce(() => {
+        throw new Error("DB failure");
+      });
+      const res4 = createMockRes();
+      await app.routes.post["/push/broadcast"](
+        createMockReq({ body: "Notice" }),
+        res4,
+      );
+      expect(res4.statusCode).toBe(500);
+      expect(res4._json).toEqual({ error: "DB failure" });
+    });
+
+    it("handles validation and error branches in POST /push/command", async () => {
+      const app = createMockApp();
+      registerPushRoutes(app as any);
+
+      // Missing action
+      const res1 = createMockRes();
+      await app.routes.post["/push/command"](createMockReq({}), res1);
+      expect(res1.statusCode).toBe(400);
+      expect(res1._json).toEqual({ error: "Missing action" });
+
+      // Valid action with custom prompt
+      (store.getAllSubscriptions as any).mockReturnValue([]);
+      const res2 = createMockRes();
+      await app.routes.post["/push/command"](
+        createMockReq({ action: "sync", prompt: "Sync now" }),
+        res2,
+      );
+      expect(res2.statusCode).toBe(200);
+
+      // Valid action without prompt (default message)
+      const res3 = createMockRes();
+      await app.routes.post["/push/command"](
+        createMockReq({ action: "restart" }),
+        res3,
+      );
+      expect(res3.statusCode).toBe(200);
+
+      // Error in broadcast
+      (store.getAllSubscriptions as any).mockImplementationOnce(() => {
+        throw new Error("Broadcast command failure");
+      });
+      const res4 = createMockRes();
+      await app.routes.post["/push/command"](
+        createMockReq({ action: "sync" }),
+        res4,
+      );
+      expect(res4.statusCode).toBe(500);
+      expect(res4._json).toEqual({ error: "Broadcast command failure" });
+    });
+  });
 });

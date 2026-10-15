@@ -13,11 +13,11 @@ const mockDefaultSetConfig =
 const mockSyncProxyConfigToServiceWorker =
   jest.fn<(_state: OrchestratorState) => void>();
 
-jest.unstable_mockModule("../../../db/setConfig.js", () => ({
+jest.unstable_mockModule("../../../db/set-config.js", () => ({
   setConfig: mockDefaultSetConfig,
 }));
 
-jest.unstable_mockModule("./syncProxyConfigToServiceWorker.js", () => ({
+jest.unstable_mockModule("./sync-proxy-config-to-service-worker.js", () => ({
   syncProxyConfigToServiceWorker: mockSyncProxyConfigToServiceWorker,
 }));
 

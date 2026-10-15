@@ -1,8 +1,8 @@
-import { extractConflictPaths } from "./utils/extractConflictPaths.js";
+import { extractConflictPaths } from "./utils/extract-conflict-paths.js";
 import { indent } from "./utils/indent.js";
-import { parseConflictRegions } from "./utils/parseConflictRegions.js";
-import { resolveCorsProxy } from "./utils/resolveCorsProxy.js";
-import { truncateSnippet } from "./utils/truncateSnippet.js";
+import { parseConflictRegions } from "./utils/parse-conflict-regions.js";
+import { resolveCorsProxy } from "./utils/resolve-cors-proxy.js";
+import { truncateSnippet } from "./utils/truncate-snippet.js";
 
 import type { ShadowClawDatabase } from "../../../db/types.js";
 import type { GitToolDeps } from "../../../subsystems/git/types.js";

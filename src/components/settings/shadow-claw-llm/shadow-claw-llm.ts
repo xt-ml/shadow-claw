@@ -8,13 +8,13 @@ import {
 import { effect } from "../../../core/effect.js";
 import { getBedrockSettings } from "../../../core/orchestrator/utils/operations/provider.js";
 import { getDb } from "../../../db/db.js";
-import { getConfig } from "../../../db/getConfig.js";
-import { setConfig } from "../../../db/setConfig.js";
+import { getConfig } from "../../../db/get-config.js";
+import { setConfig } from "../../../db/set-config.js";
 import { setSanitizedHtml } from "../../../security/trusted-types.js";
 import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { showError, showSuccess, showWarning } from "../../../ui/toast.js";
-import { getRecommendedMaxTokens } from "./utils/getRecommendedMaxTokens.js";
-import { fetchTokenizerConfig } from "../../../subsystems/providers/utils/chatTemplate.js";
+import { getRecommendedMaxTokens } from "./utils/get-recommended-max-tokens.js";
+import { fetchTokenizerConfig } from "../../../subsystems/providers/utils/chat-template.js";
 
 import {
   buildLlamafileHelpDialogOptions,
@@ -288,7 +288,7 @@ export class ShadowClawLlm extends ShadowClawElement {
       '[data-setting="bedrock-profile-input"]',
     ) as HTMLInputElement | null;
     const authModeSelect = root.querySelector(
-      '[data-setting="bedrock-auth-mode"]',
+      '[data-setting="bedrock-auth-mode"], [data-setting="bedrock-auth-mode-select"]',
     ) as HTMLSelectElement | null;
 
     if (regionInput) {
@@ -1505,7 +1505,7 @@ export class ShadowClawLlm extends ShadowClawElement {
       return;
     }
 
-    const { getConfig } = await import("../../../db/getConfig.js");
+    const { getConfig } = await import("../../../db/get-config.js");
     const { CONFIG_KEYS } = await import("../../../config/config.js");
 
     const backend =
@@ -1622,7 +1622,7 @@ export class ShadowClawLlm extends ShadowClawElement {
       '[data-setting="bedrock-profile-input"]',
     ) as HTMLInputElement | null;
     const authModeSelect = root.querySelector(
-      '[data-setting="bedrock-auth-mode"]',
+      '[data-setting="bedrock-auth-mode"], [data-setting="bedrock-auth-mode-select"]',
     ) as HTMLSelectElement | null;
 
     if (!regionInput || !profileInput) {
@@ -2156,7 +2156,7 @@ export class ShadowClawLlm extends ShadowClawElement {
     ) as HTMLSelectElement | null;
     const dtypeStrategy = dtypeStrategySelect?.value || "auto";
 
-    const { setConfig } = await import("../../../db/setConfig.js");
+    const { setConfig } = await import("../../../db/set-config.js");
     const { CONFIG_KEYS } = await import("../../../config/config.js");
 
     await setConfig(this.db, CONFIG_KEYS.TRANSFORMERS_JS_BACKEND, backend);

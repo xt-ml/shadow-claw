@@ -1,9 +1,9 @@
 import { jest } from "@jest/globals";
 
-const { getConfig } = await import("./getConfig.js");
+const { getConfig } = await import("./get-config.js");
 const { getDb, setDB } = await import("./db.js");
-const { setConfig } = await import("./setConfig.js");
-const { txPromise, txPromiseAll } = await import("./txPromise.js");
+const { setConfig } = await import("./set-config.js");
+const { txPromise, txPromiseAll } = await import("./tx-promise.js");
 
 describe("DB Core", () => {
   let mockDb;

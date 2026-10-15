@@ -7,8 +7,8 @@
  * roster / host separately under a dedicated config key.
  */
 
-import { getConfig } from "./getConfig.js";
-import { setConfig } from "./setConfig.js";
+import { getConfig } from "./get-config.js";
+import { setConfig } from "./set-config.js";
 import { createGroup, getGroupMetadata } from "./groups.js";
 import { ulid } from "../utils/ulid.js";
 import type { ShadowClawDatabase } from "./types.js";

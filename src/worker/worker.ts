@@ -1,7 +1,7 @@
 import { handleMessage } from "./agent.js";
 import { CONFIG_KEYS, DEFAULT_VM_BOOT_HOST } from "../config/config.js";
-import { getConfig } from "../db/getConfig.js";
-import { openDatabase } from "../db/openDatabase.js";
+import { getConfig } from "../db/get-config.js";
+import { openDatabase } from "../db/open-database.js";
 
 import {
   bootVM,

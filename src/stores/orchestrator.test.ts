@@ -133,27 +133,27 @@ jest.unstable_mockModule("../core/orchestrator/utils/operations/vm.js", () => ({
   syncTerminalWorkspace: mockSyncTerminalWorkspace,
 }));
 
-jest.unstable_mockModule("../db/deleteTask.js", () => ({
+jest.unstable_mockModule("../db/delete-task.js", () => ({
   deleteTask: mockDeleteTask,
 }));
 
-jest.unstable_mockModule("../db/getAllTasks.js", () => ({
+jest.unstable_mockModule("../db/get-all-tasks.js", () => ({
   getAllTasks: mockGetAllTasks,
 }));
 
-jest.unstable_mockModule("../db/getRecentMessages.js", () => ({
+jest.unstable_mockModule("../db/get-recent-messages.js", () => ({
   getRecentMessages: mockGetRecentMessages,
 }));
 
-jest.unstable_mockModule("../db/saveTask.js", () => ({
+jest.unstable_mockModule("../db/save-task.js", () => ({
   saveTask: mockSaveTask,
 }));
 
-jest.unstable_mockModule("../storage/listGroupFiles.js", () => ({
+jest.unstable_mockModule("../storage/list-group-files.js", () => ({
   listGroupFiles: mockListGroupFiles,
 }));
 
-jest.unstable_mockModule("../storage/requestStorageAccess.js", () => ({
+jest.unstable_mockModule("../storage/request-storage-access.js", () => ({
   requestStorageAccess: mockRequestStorageAccess,
 }));
 
@@ -195,47 +195,47 @@ jest.unstable_mockModule("../db/groups.js", () => ({
   updateGroupProviderRuntimeOverrides: mockUpdateGroupProviderRuntimeOverrides,
 }));
 
-jest.unstable_mockModule("../db/clearGroupMessages.js", () => ({
+jest.unstable_mockModule("../db/clear-group-messages.js", () => ({
   clearGroupMessages: mockClearGroupMessages,
 }));
 
-jest.unstable_mockModule("../db/cloneGroupMessages.js", () => ({
+jest.unstable_mockModule("../db/clone-group-messages.js", () => ({
   cloneGroupMessages: mockCloneGroupMessages,
 }));
 
-jest.unstable_mockModule("../db/cloneGroupTasks.js", () => ({
+jest.unstable_mockModule("../db/clone-group-tasks.js", () => ({
   cloneGroupTasks: mockCloneGroupTasks,
 }));
 
-jest.unstable_mockModule("../db/getConfig.js", () => ({
+jest.unstable_mockModule("../db/get-config.js", () => ({
   getConfig: mockGetConfig,
 }));
 
-jest.unstable_mockModule("../db/setConfig.js", () => ({
+jest.unstable_mockModule("../db/set-config.js", () => ({
   setConfig: mockSetConfig,
 }));
 
-jest.unstable_mockModule("../storage/readGroupFile.js", () => ({
+jest.unstable_mockModule("../storage/read-group-file.js", () => ({
   readGroupFile: mockReadGroupFile,
 }));
 
-jest.unstable_mockModule("../storage/writeGroupFile.js", () => ({
+jest.unstable_mockModule("../storage/write-group-file.js", () => ({
   writeGroupFile: mockWriteGroupFile,
 }));
 
-jest.unstable_mockModule("../storage/ensureMainGroupMemory.js", () => ({
+jest.unstable_mockModule("../storage/ensure-main-group-memory.js", () => ({
   ensureMainGroupMemory: mockEnsureMainGroupMemory,
   DEFAULT_MAIN_GROUP_MEMORY_PATH: "MEMORY.md",
   isMainGroupMemorySuppressed: mockIsMainGroupMemorySuppressed,
   setMainGroupMemorySuppressed: mockSetMainGroupMemorySuppressed,
 }));
 
-jest.unstable_mockModule("../storage/ensureMainGroupIndex.js", () => ({
+jest.unstable_mockModule("../storage/ensure-main-group-index.js", () => ({
   ensureMainGroupIndex: mockEnsureMainGroupIndex,
   setMainGroupIndexSuppressed: jest.fn(),
 }));
 
-jest.unstable_mockModule("../storage/staticMainSite.js", () => ({
+jest.unstable_mockModule("../storage/static-main-site.js", () => ({
   seedStaticMainSite: mockSeedStaticMainSite,
   isStaticMainSiteSeeded: mockIsStaticMainSiteSeeded,
   setStaticMainSiteSeeded: mockSetStaticMainSiteSeeded,
@@ -258,20 +258,20 @@ jest.unstable_mockModule("../storage/staticMainSite.js", () => ({
   },
 }));
 
-jest.unstable_mockModule("../storage/copyGroupDirectory.js", () => ({
+jest.unstable_mockModule("../storage/copy-group-directory.js", () => ({
   copyGroupDirectory: mockCopyGroupDirectory,
 }));
 
-jest.unstable_mockModule("../db/deleteMessage.js", () => ({
+jest.unstable_mockModule("../db/delete-message.js", () => ({
   deleteMessage: mockDeleteMessage,
 }));
 
-jest.unstable_mockModule("../db/saveMessage.js", () => ({
+jest.unstable_mockModule("../db/save-message.js", () => ({
   saveMessage: mockSaveMessage,
 }));
 
 const mockReorderTasks = jest.fn() as any;
-jest.unstable_mockModule("../db/reorderTasks.js", () => ({
+jest.unstable_mockModule("../db/reorder-tasks.js", () => ({
   reorderTasks: mockReorderTasks,
 }));
 
@@ -3412,7 +3412,7 @@ describe("OrchestratorStore", () => {
           ...mockDb,
         };
         // Mock getConfig to return last visited page
-        const dbGetConfig = await import("../db/getConfig.js");
+        const dbGetConfig = await import("../db/get-config.js");
         jest
           .spyOn(dbGetConfig, "getConfig")
           .mockImplementation(async (_db: any, key: string) => {
@@ -3469,7 +3469,7 @@ describe("OrchestratorStore", () => {
       try {
         window.history.pushState({}, "", "/");
 
-        const dbGetConfig = await import("../db/getConfig.js");
+        const dbGetConfig = await import("../db/get-config.js");
         jest
           .spyOn(dbGetConfig, "getConfig")
           .mockImplementation(async (_db: any, key: string) => {

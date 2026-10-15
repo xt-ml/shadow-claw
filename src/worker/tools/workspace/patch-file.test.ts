@@ -1,16 +1,16 @@
 import { jest } from "@jest/globals";
 
-jest.unstable_mockModule("../../../storage/readGroupFile.js", () => ({
+jest.unstable_mockModule("../../../storage/read-group-file.js", () => ({
   readGroupFile: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../../storage/writeGroupFile.js", () => ({
+jest.unstable_mockModule("../../../storage/write-group-file.js", () => ({
   writeGroupFile: jest.fn(),
 }));
 
 const { executePatchFile } = await import("./patch-file.js");
-const { readGroupFile } = await import("../../../storage/readGroupFile.js");
-const { writeGroupFile } = await import("../../../storage/writeGroupFile.js");
+const { readGroupFile } = await import("../../../storage/read-group-file.js");
+const { writeGroupFile } = await import("../../../storage/write-group-file.js");
 
 describe("executePatchFile", () => {
   const mockDb: any = {};

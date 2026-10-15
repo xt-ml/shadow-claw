@@ -8,8 +8,8 @@ import {
 
 import { CONFIG_KEYS } from "../../../config/config.js";
 import { getDb } from "../../../db/db.js";
-import { getConfig } from "../../../db/getConfig.js";
-import { setConfig } from "../../../db/setConfig.js";
+import { getConfig } from "../../../db/get-config.js";
+import { setConfig } from "../../../db/set-config.js";
 import { showError, showSuccess } from "../../../ui/toast.js";
 
 import "../../common/shadow-claw-empty-state/shadow-claw-empty-state.js";

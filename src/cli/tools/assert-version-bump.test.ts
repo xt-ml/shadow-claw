@@ -37,6 +37,21 @@ describe("assert-version-bump", () => {
       expect(compareSemver("2.0.0", "1.99.99")).toBe(1);
       expect(compareSemver("1.23.3", "1.23.3")).toBe(0);
       expect(compareSemver("1.23.2", "1.23.3")).toBe(-1);
+      expect(compareSemver("1.2.0", "1.3.0")).toBe(-1);
+      expect(compareSemver("1.3.0", "1.2.0")).toBe(1);
+    });
+
+    it("correctly compares prerelease versions", () => {
+      expect(compareSemver("1.0.0-alpha", "1.0.0")).toBe(-1);
+      expect(compareSemver("1.0.0", "1.0.0-alpha")).toBe(1);
+      expect(compareSemver("1.0.0-alpha", "1.0.0-beta")).toBeLessThan(0);
+      expect(compareSemver("1.0.0-beta", "1.0.0-alpha")).toBeGreaterThan(0);
+      expect(compareSemver("1.0.0-alpha.1", "1.0.0-alpha.1")).toBe(0);
+    });
+
+    it("falls back to localeCompare for unparseable semvers", () => {
+      expect(compareSemver("foo", "bar")).toBeGreaterThan(0);
+      expect(compareSemver("bar", "foo")).toBeLessThan(0);
     });
   });
 
@@ -119,6 +134,16 @@ describe("assert-version-bump", () => {
           wellKnownServerCardVersion: "1.23.4",
           pkgName: "shadow-claw",
           publishedVersion: "1.23.3",
+          silent: true,
+        }),
+      ).resolves.toBeUndefined();
+    });
+
+    it("passes when optional fields are omitted", async () => {
+      await expect(
+        assertVersionBump({
+          localPkgVersion: "1.23.4",
+          pkgName: "shadow-claw",
           silent: true,
         }),
       ).resolves.toBeUndefined();

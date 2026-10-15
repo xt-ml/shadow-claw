@@ -10,7 +10,7 @@ import type { RoomManager } from "../../subsystems/channels/room-manager.js";
 import type { RoomChannel } from "../../subsystems/channels/room.js";
 import type { TaskScheduler } from "../../subsystems/tools/task-scheduler.js";
 import type { Router } from "../router.js";
-import type { EventBus } from "./utils/EventBus.js";
+import type { EventBus } from "./utils/event-bus.js";
 import type { DirectToolCommandPolicy } from "./utils/types.js";
 import type { InboundMessage } from "../../subsystems/channels/types.js";
 

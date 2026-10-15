@@ -192,7 +192,7 @@ jest.unstable_mockModule("../../db/db.js", () => ({
 }));
 
 (globalThis as any)._mockOverrideSkeleton = "true";
-jest.unstable_mockModule("../../db/getConfig.js", () => ({
+jest.unstable_mockModule("../../db/get-config.js", () => ({
   getConfig: jest.fn<any>().mockImplementation((_db: unknown, key: string) => {
     if (key === "assistant_name") {
       return Promise.resolve("ShadowClaw");
@@ -211,7 +211,7 @@ jest.unstable_mockModule("../../db/getConfig.js", () => ({
 (globalThis as any)._mockSetConfig = jest
   .fn<any>()
   .mockResolvedValue(undefined);
-jest.unstable_mockModule("../../db/setConfig.js", () => ({
+jest.unstable_mockModule("../../db/set-config.js", () => ({
   setConfig: (...args: any[]) => (globalThis as any)._mockSetConfig(...args),
 }));
 
@@ -673,7 +673,7 @@ describe("shadow-claw-settings", () => {
   });
 
   it("populates and toggles activity log disk logging", async () => {
-    await import("../../db/setConfig.js");
+    await import("../../db/set-config.js");
     const orchestrator = {
       getAssistantName: jest.fn(),
     };
@@ -1335,5 +1335,844 @@ describe("shadow-claw-settings", () => {
 
     // activateTab for integrations
     await el.activateTab("integrations");
+  });
+
+  it("handles handleTabKeydown with arrows, home, end, and default keys", async () => {
+    const el = new ShadowClawSettings();
+    document.body.appendChild(el);
+    await el.render();
+
+    const root = el.shadowRoot!;
+    const tabButtons = Array.from(
+      root.querySelectorAll<HTMLButtonElement>("[data-tab-target]"),
+    );
+    expect(tabButtons.length).toBeGreaterThan(1);
+
+    const activateSpy = jest
+      .spyOn(el, "activateTab")
+      .mockImplementation(() => {});
+
+    // ArrowRight / ArrowDown moves to next tab
+    const eventRight = { key: "ArrowRight", preventDefault: jest.fn() } as any;
+    el.handleTabKeydown(eventRight, tabButtons[0]);
+    expect(eventRight.preventDefault).toHaveBeenCalled();
+    expect(activateSpy).toHaveBeenCalledWith(tabButtons[1].dataset.tabTarget);
+
+    const eventDown = { key: "ArrowDown", preventDefault: jest.fn() } as any;
+    el.handleTabKeydown(eventDown, tabButtons[0]);
+    expect(eventDown.preventDefault).toHaveBeenCalled();
+
+    // ArrowLeft / ArrowUp wraps to previous / last tab
+    const eventLeft = { key: "ArrowLeft", preventDefault: jest.fn() } as any;
+    el.handleTabKeydown(eventLeft, tabButtons[0]);
+    expect(eventLeft.preventDefault).toHaveBeenCalled();
+    expect(activateSpy).toHaveBeenCalledWith(
+      tabButtons[tabButtons.length - 1].dataset.tabTarget,
+    );
+
+    const eventUp = { key: "ArrowUp", preventDefault: jest.fn() } as any;
+    el.handleTabKeydown(eventUp, tabButtons[1]);
+    expect(eventUp.preventDefault).toHaveBeenCalled();
+    expect(activateSpy).toHaveBeenCalledWith(tabButtons[0].dataset.tabTarget);
+
+    // Home moves to first tab
+    const eventHome = { key: "Home", preventDefault: jest.fn() } as any;
+    el.handleTabKeydown(eventHome, tabButtons[2]);
+    expect(eventHome.preventDefault).toHaveBeenCalled();
+    expect(activateSpy).toHaveBeenCalledWith(tabButtons[0].dataset.tabTarget);
+
+    // End moves to last tab
+    const eventEnd = { key: "End", preventDefault: jest.fn() } as any;
+    el.handleTabKeydown(eventEnd, tabButtons[0]);
+    expect(eventEnd.preventDefault).toHaveBeenCalled();
+    expect(activateSpy).toHaveBeenCalledWith(
+      tabButtons[tabButtons.length - 1].dataset.tabTarget,
+    );
+
+    // Other key returns early without preventDefault
+    const eventTab = { key: "Tab", preventDefault: jest.fn() } as any;
+    el.handleTabKeydown(eventTab, tabButtons[0]);
+    expect(eventTab.preventDefault).not.toHaveBeenCalled();
+
+    // Button not in tabButtons
+    const outsideBtn = document.createElement("button");
+    el.handleTabKeydown(eventRight, outsideBtn);
+
+    // Early return when activeTab is undefined or same tab
+    el.activeTab = "ai";
+    el.activateTab(undefined);
+    expect(el.activeTab).toBe("ai");
+    el.activateTab("ai");
+    expect(el.activeTab).toBe("ai");
+
+    document.body.removeChild(el);
+  });
+
+  it("handles dialog opening, closing, showModal fallback, and promptForPlaintextBackupHandle", async () => {
+    const el = new ShadowClawSettings();
+    document.body.appendChild(el);
+    await el.render();
+
+    // 1. openBackupDialog unchecks plaintext toggle and shows dialog
+    el.openBackupDialog();
+    const backupDialog = el.getDialog(".settings__backup-dialog");
+    expect(backupDialog).toBeTruthy();
+
+    // 2. openRestoreDialog populates filename info
+    el.openRestoreDialog("my-backup.json");
+    const restoreDialog = el.getDialog(".settings__restore-dialog");
+    expect(restoreDialog).toBeTruthy();
+    const info = el.shadowRoot!.querySelector(
+      '[data-info="restore-filename"]',
+    ) as HTMLElement;
+    expect(info.textContent).toBe("Selected file: my-backup.json");
+
+    // 3. openClearDialog
+    el.openClearDialog();
+
+    // 4. closeDialog
+    el.closeDialog(".settings__backup-dialog");
+
+    // 5. showDialog fallback when showModal is undefined
+    const fakeDialog = document.createElement("dialog");
+    delete (fakeDialog as any).showModal;
+    jest.spyOn(el, "getDialog").mockReturnValueOnce(fakeDialog as any);
+    el.showDialog(".test-dialog");
+    expect(fakeDialog.hasAttribute("open")).toBe(true);
+
+    // 6. getDialog with invalid selector or non-dialog element
+    expect(el.getDialog(".non-existent")).toBeNull();
+    const fakeDiv = document.createElement("div");
+    fakeDiv.classList.add("not-a-dialog");
+    el.shadowRoot!.appendChild(fakeDiv);
+    expect(el.getDialog(".not-a-dialog")).toBeNull();
+
+    // 7. promptForPlaintextBackupHandle: showSaveFilePicker missing
+    const origPicker = (globalThis as any).showSaveFilePicker;
+    delete (globalThis as any).showSaveFilePicker;
+    await expect(el.promptForPlaintextBackupHandle()).rejects.toThrow(
+      "Plaintext settings backup requires the File System Access API.",
+    );
+
+    // showSaveFilePicker returns fileHandle
+    const mockFileHandle = { kind: "file", name: "test-backup.json" };
+    (globalThis as any).showSaveFilePicker = jest
+      .fn<any>()
+      .mockResolvedValue(mockFileHandle);
+    const handle = await el.promptForPlaintextBackupHandle();
+    expect(handle).toBe(mockFileHandle);
+
+    // showSaveFilePicker throws AbortError
+    const abortErr = new Error("User canceled");
+    abortErr.name = "AbortError";
+    (globalThis as any).showSaveFilePicker = jest
+      .fn<any>()
+      .mockRejectedValue(abortErr);
+    const aborted = await el.promptForPlaintextBackupHandle();
+    expect(aborted).toBeNull();
+
+    // showSaveFilePicker throws generic error
+    (globalThis as any).showSaveFilePicker = jest
+      .fn<any>()
+      .mockRejectedValue(new Error("Disk error"));
+    await expect(el.promptForPlaintextBackupHandle()).rejects.toThrow(
+      "Disk error",
+    );
+
+    if (origPicker) {
+      (globalThis as any).showSaveFilePicker = origPicker;
+    } else {
+      delete (globalThis as any).showSaveFilePicker;
+    }
+
+    document.body.removeChild(el);
+  });
+
+  it("handles confirmBackup with plaintext toggle, abort, and error paths", async () => {
+    const el = new ShadowClawSettings();
+    el.db = {} as any;
+    document.body.appendChild(el);
+    await el.render();
+
+    const root = el.shadowRoot!;
+    const plaintextToggle = root.querySelector(
+      '[data-setting="include-plaintext-passwords"]',
+    ) as HTMLInputElement;
+
+    // 1. Plaintext backup with abort -> returns early
+    (globalThis as any)._mockWriteSettingsBackupToFileHandle.mockClear();
+    plaintextToggle.checked = true;
+    jest
+      .spyOn(el, "promptForPlaintextBackupHandle")
+      .mockResolvedValueOnce(null);
+    await el.confirmBackup();
+    expect(
+      (globalThis as any)._mockWriteSettingsBackupToFileHandle,
+    ).not.toHaveBeenCalled();
+
+    // 2. Plaintext backup success
+    const mockHandle = { kind: "file" };
+    jest
+      .spyOn(el, "promptForPlaintextBackupHandle")
+      .mockResolvedValueOnce(mockHandle as any);
+    jest
+      .spyOn(el, "getAllConfigEntries")
+      .mockResolvedValueOnce([{ key: "k", value: "v" }]);
+    await el.confirmBackup();
+    expect(
+      (globalThis as any)._mockWriteSettingsBackupToFileHandle,
+    ).toHaveBeenCalledWith(mockHandle, [{ key: "k", value: "v" }], true);
+
+    // 3. Standard download backup success
+    plaintextToggle.checked = false;
+    jest
+      .spyOn(el, "getAllConfigEntries")
+      .mockResolvedValueOnce([{ key: "k2", value: "v2" }]);
+    const origCreateObjectURL = URL.createObjectURL;
+    const origRevokeObjectURL = URL.revokeObjectURL;
+    URL.createObjectURL = jest.fn<any>().mockReturnValue("blob:test");
+    URL.revokeObjectURL = jest.fn<any>();
+    await el.confirmBackup();
+    expect(
+      (globalThis as any)._mockCreateSettingsBackupBlob,
+    ).toHaveBeenCalled();
+    URL.createObjectURL = origCreateObjectURL;
+    URL.revokeObjectURL = origRevokeObjectURL;
+
+    // 4. Error in confirmBackup
+    jest
+      .spyOn(el, "getAllConfigEntries")
+      .mockRejectedValueOnce(new Error("Backup failed"));
+    await el.confirmBackup();
+
+    document.body.removeChild(el);
+  });
+
+  it("handles confirmClear and confirmRestore success and error flows", async () => {
+    const el = new ShadowClawSettings();
+    el.db = {} as any;
+
+    const setTimeoutSpy = jest
+      .spyOn(window, "setTimeout")
+      .mockReturnValue(123 as any);
+
+    // 1. confirmClear success
+    jest.spyOn(el, "replaceConfigEntries").mockResolvedValueOnce(undefined);
+    await el.confirmClear();
+    expect(setTimeoutSpy).toHaveBeenCalled();
+
+    // 2. confirmClear error
+    jest
+      .spyOn(el, "replaceConfigEntries")
+      .mockRejectedValueOnce(new Error("Clear failed"));
+    await el.confirmClear();
+
+    // 3. confirmRestore success
+    el.pendingRestoreFile = {
+      name: "valid.json",
+      text: async () =>
+        JSON.stringify({
+          configEntries: [{ key: "a", value: "1" }],
+          plaintextPasswords: [],
+        }),
+    } as any;
+    (globalThis as any)._mockParseSettingsBackupPayload.mockReturnValueOnce({
+      configEntries: [{ key: "a", value: "1" }],
+      plaintextPasswords: [],
+    });
+    (globalThis as any)._mockReapplyPlaintextPasswords.mockResolvedValueOnce([
+      { key: "a", value: "1" },
+    ]);
+    jest.spyOn(el, "replaceConfigEntries").mockResolvedValueOnce(undefined);
+    await el.confirmRestore();
+
+    // 4. confirmRestore error with non-Error
+    el.pendingRestoreFile = {
+      name: "fail.json",
+      text: async () => {
+        throw "String error restore";
+      },
+    } as any;
+    await el.confirmRestore();
+
+    setTimeoutSpy.mockRestore();
+  });
+
+  it("handles IndexedDB operations in getAllConfigEntries and replaceConfigEntries", async () => {
+    const el = new ShadowClawSettings();
+
+    // 1. getAllConfigEntries IDB success
+    const mockGetAllRequest: any = {
+      result: [{ key: "test_k", value: "test_v" }, null, { key: 123 }],
+    };
+    const mockTxSuccess: any = {
+      objectStore: jest.fn().mockReturnValue({
+        getAll: jest.fn().mockImplementation(() => {
+          setTimeout(() => {
+            if (mockGetAllRequest.onsuccess) mockGetAllRequest.onsuccess();
+          }, 0);
+          return mockGetAllRequest;
+        }),
+      }),
+    };
+    el.db = {
+      transaction: jest.fn().mockReturnValue(mockTxSuccess),
+    } as any;
+
+    const entries = await el.getAllConfigEntries();
+    expect(entries).toEqual([{ key: "test_k", value: "test_v" }]);
+
+    // 2. getAllConfigEntries IDB request.onerror
+    const mockGetAllFail: any = { error: new Error("IDB read failed") };
+    const mockTxFail: any = {
+      objectStore: jest.fn().mockReturnValue({
+        getAll: jest.fn().mockImplementation(() => {
+          setTimeout(() => {
+            if (mockGetAllFail.onerror) mockGetAllFail.onerror();
+          }, 0);
+          return mockGetAllFail;
+        }),
+      }),
+    };
+    el.db = { transaction: jest.fn().mockReturnValue(mockTxFail) } as any;
+    await expect(el.getAllConfigEntries()).rejects.toThrow("IDB read failed");
+
+    // 3. getAllConfigEntries IDB transaction null
+    el.db = { transaction: jest.fn().mockReturnValue(null) } as any;
+    await expect(el.getAllConfigEntries()).rejects.toThrow(
+      "Failed to open read transaction",
+    );
+
+    // 4. replaceConfigEntries IDB success
+    const mockStore = { clear: jest.fn(), put: jest.fn() };
+    const mockWriteTx: any = {
+      objectStore: jest.fn().mockReturnValue(mockStore),
+    };
+    el.db = {
+      transaction: jest.fn().mockImplementation(() => {
+        setTimeout(() => {
+          if (mockWriteTx.oncomplete) mockWriteTx.oncomplete();
+        }, 0);
+        return mockWriteTx;
+      }),
+    } as any;
+
+    await el.replaceConfigEntries([{ key: "x", value: "y" }]);
+    expect(mockStore.clear).toHaveBeenCalled();
+    expect(mockStore.put).toHaveBeenCalledWith({ key: "x", value: "y" });
+
+    // 5. replaceConfigEntries IDB tx.onerror
+    const mockWriteTxErr: any = {
+      objectStore: jest.fn().mockReturnValue(mockStore),
+      error: new Error("IDB write error"),
+    };
+    el.db = {
+      transaction: jest.fn().mockImplementation(() => {
+        setTimeout(() => {
+          if (mockWriteTxErr.onerror) mockWriteTxErr.onerror();
+        }, 0);
+        return mockWriteTxErr;
+      }),
+    } as any;
+    await expect(
+      el.replaceConfigEntries([{ key: "x", value: "y" }]),
+    ).rejects.toThrow("IDB write error");
+
+    // 6. replaceConfigEntries IDB tx.onabort
+    const mockWriteTxAbort: any = {
+      objectStore: jest.fn().mockReturnValue(mockStore),
+      error: new Error("Transaction aborted"),
+    };
+    el.db = {
+      transaction: jest.fn().mockImplementation(() => {
+        setTimeout(() => {
+          if (mockWriteTxAbort.onabort) mockWriteTxAbort.onabort();
+        }, 0);
+        return mockWriteTxAbort;
+      }),
+    } as any;
+    await expect(
+      el.replaceConfigEntries([{ key: "x", value: "y" }]),
+    ).rejects.toThrow("Transaction aborted");
+
+    // 7. replaceConfigEntries IDB transaction null
+    el.db = { transaction: jest.fn().mockReturnValue(null) } as any;
+    await expect(el.replaceConfigEntries([])).rejects.toThrow(
+      "Failed to open write transaction",
+    );
+  });
+
+  it("handles toggle and input change handlers with success and error paths", async () => {
+    const el = new ShadowClawSettings();
+    el.db = {} as any;
+
+    // 1. onActivityLogDiskLoggingToggle
+    await el.onActivityLogDiskLoggingToggle(true);
+    await el.onActivityLogDiskLoggingToggle(false);
+    (globalThis as any)._mockSetConfig.mockRejectedValueOnce(
+      new Error("Log toggle error"),
+    );
+    await el.onActivityLogDiskLoggingToggle(true);
+    (globalThis as any)._mockSetConfig.mockRejectedValueOnce(
+      "String error log",
+    );
+    await el.onActivityLogDiskLoggingToggle(true);
+
+    // 2. onChatSplitViewToggle
+    await el.onChatSplitViewToggle(true);
+    await el.onChatSplitViewToggle(false);
+    (globalThis as any)._mockSetConfig.mockRejectedValueOnce(
+      new Error("Split error"),
+    );
+    await el.onChatSplitViewToggle(true);
+
+    // 3. onOverridePrerenderSkeletonToggle
+    await el.onOverridePrerenderSkeletonToggle(true);
+    await el.onOverridePrerenderSkeletonToggle(false);
+    (globalThis as any)._mockSetConfig.mockRejectedValueOnce(
+      new Error("Prerender error"),
+    );
+    await el.onOverridePrerenderSkeletonToggle(true);
+
+    // 4. onPagesAutoRefreshInputChange
+    await el.onPagesAutoRefreshInputChange(30);
+    await el.onPagesAutoRefreshInputChange(0);
+    (globalThis as any)._mockSetConfig.mockRejectedValueOnce(
+      new Error("Auto refresh error"),
+    );
+    await el.onPagesAutoRefreshInputChange(10);
+
+    // 5. onSidebarHideChatToggle
+    await el.onSidebarHideChatToggle(true);
+    await el.onSidebarHideChatToggle(false);
+    (globalThis as any)._mockSetConfig.mockRejectedValueOnce(
+      new Error("Chat hide error"),
+    );
+    await el.onSidebarHideChatToggle(true);
+
+    // 6. onSidebarHideFilesToggle
+    await el.onSidebarHideFilesToggle(true);
+    await el.onSidebarHideFilesToggle(false);
+    (globalThis as any)._mockSetConfig.mockRejectedValueOnce(
+      new Error("Files hide error"),
+    );
+    await el.onSidebarHideFilesToggle(true);
+
+    // 7. onSidebarHidePagesToggle
+    await el.onSidebarHidePagesToggle(true);
+    await el.onSidebarHidePagesToggle(false);
+    (globalThis as any)._mockSetConfig.mockRejectedValueOnce(
+      new Error("Pages hide error"),
+    );
+    await el.onSidebarHidePagesToggle(true);
+
+    // 8. onSidebarHideTasksToggle
+    await el.onSidebarHideTasksToggle(true);
+    await el.onSidebarHideTasksToggle(false);
+    (globalThis as any)._mockSetConfig.mockRejectedValueOnce(
+      new Error("Tasks hide error"),
+    );
+    await el.onSidebarHideTasksToggle(true);
+
+    // Null db guards
+    el.db = null;
+    await el.onActivityLogDiskLoggingToggle(true);
+    await el.onChatSplitViewToggle(true);
+    await el.onOverridePrerenderSkeletonToggle(true);
+    await el.onPagesAutoRefreshInputChange(15);
+    await el.onSidebarHideChatToggle(true);
+    await el.onSidebarHideFilesToggle(true);
+    await el.onSidebarHidePagesToggle(true);
+    await el.onSidebarHideTasksToggle(true);
+  });
+
+  it("handles saveDomAllowedIframeHosts with various inputs and error cases", async () => {
+    const el = new ShadowClawSettings();
+    el.db = {} as any;
+    document.body.appendChild(el);
+    await el.render();
+
+    const root = el.shadowRoot!;
+    const textarea = root.querySelector(
+      '[data-setting="dom-allowed-iframe-hosts"]',
+    ) as HTMLTextAreaElement;
+    textarea.value = "https://example.com\nhttps://sub.domain.org\n   ";
+
+    const pToggle = root.querySelector(
+      '[data-setting="markdown-frontmatter-pages-toggle"]',
+    ) as HTMLInputElement;
+    const fvToggle = root.querySelector(
+      '[data-setting="markdown-frontmatter-file-viewer-toggle"]',
+    ) as HTMLInputElement;
+    const cToggle = root.querySelector(
+      '[data-setting="markdown-frontmatter-chat-toggle"]',
+    ) as HTMLInputElement;
+    const tToggle = root.querySelector(
+      '[data-setting="markdown-frontmatter-tasks-toggle"]',
+    ) as HTMLInputElement;
+
+    pToggle.checked = false;
+    fvToggle.checked = true;
+    cToggle.checked = false;
+    tToggle.checked = true;
+
+    await el.saveDomAllowedIframeHosts();
+    expect((globalThis as any)._mockSetConfig).toHaveBeenCalledWith(
+      el.db,
+      "allowed_iframe_host_patterns",
+      "https://example.com\nhttps://sub.domain.org",
+    );
+
+    // Error handling
+    (globalThis as any)._mockSetConfig.mockRejectedValueOnce(
+      new Error("Save hosts fail"),
+    );
+    await el.saveDomAllowedIframeHosts();
+
+    (globalThis as any)._mockSetConfig.mockRejectedValueOnce(
+      "String save hosts fail",
+    );
+    await el.saveDomAllowedIframeHosts();
+
+    // Null textarea / null root guards
+    el.db = null;
+    await el.saveDomAllowedIframeHosts();
+
+    document.body.removeChild(el);
+  });
+
+  it("handles populateAssistantSettings fallbacks and variations", async () => {
+    const el = new ShadowClawSettings();
+    el.db = {} as any;
+    document.body.appendChild(el);
+
+    // Mock getConfig to test various raw config types: "1", 1, "true", true, 0, false, null
+    const { getConfig } = (await import("../../db/get-config.js")) as any;
+    getConfig.mockImplementation((_db: any, key: string) => {
+      if (key === "assistant_name") return Promise.resolve("");
+      if (key === "activity_log_disk_logging_enabled")
+        return Promise.resolve(1);
+      if (key === "sidebar_pages_hidden") return Promise.resolve("1");
+      if (key === "sidebar_chat_hidden") return Promise.resolve("true");
+      if (key === "sidebar_tasks_hidden") return Promise.resolve(true);
+      if (key === "sidebar_files_hidden") return Promise.resolve(false);
+      if (key === "pages_auto_refresh_interval") return Promise.resolve(-5); // negative parsed
+      if (key === "allowed_iframe_host_patterns")
+        return Promise.resolve("https://saved.host.com");
+      return Promise.resolve(undefined);
+    });
+
+    await el.populateAssistantSettings();
+
+    const root = el.shadowRoot!;
+    const nameInput = root.querySelector(
+      '[data-setting="assistant-name-input"]',
+    ) as HTMLInputElement;
+    expect(nameInput.value).toBe("ShadowClaw"); // From orchestratorStore
+
+    // When stored is custom bot name
+    getConfig.mockImplementationOnce((_db: any, key: string) => {
+      if (key === "assistant_name") return Promise.resolve("MyCustomBot");
+      return Promise.resolve(undefined);
+    });
+    await el.populateAssistantSettings();
+    expect(nameInput.value).toBe("MyCustomBot");
+
+    // When stored is empty and no orchestrator, fallback to ASSISTANT_NAME ("ShadowClaw")
+    const origOrch = orchestratorStore.orchestrator;
+    const origElOrch = el.orchestrator;
+    el.orchestrator = null;
+    (orchestratorStore as any).orchestrator = null;
+    await el.populateAssistantSettings();
+    expect(nameInput.value).toBe("ShadowClaw");
+    el.orchestrator = origElOrch;
+    (orchestratorStore as any).orchestrator = origOrch;
+
+    const actToggle = root.querySelector(
+      '[data-setting="activity-log-disk-logging-toggle"]',
+    ) as HTMLInputElement;
+    expect(actToggle.checked).toBe(true);
+
+    const pagesToggle = root.querySelector(
+      '[data-setting="sidebar-hide-pages-toggle"]',
+    ) as HTMLInputElement;
+    expect(pagesToggle.checked).toBe(true);
+
+    const autoRefreshInput = root.querySelector(
+      '[data-setting="pages-auto-refresh-input"]',
+    ) as HTMLInputElement;
+    expect(autoRefreshInput.value).toBe("0"); // Clamped from negative
+
+    const hostsTextarea = root.querySelector(
+      '[data-setting="dom-allowed-iframe-hosts"]',
+    ) as HTMLTextAreaElement;
+    expect(hostsTextarea.value).toBe("https://saved.host.com");
+
+    document.body.removeChild(el);
+  });
+
+  it("handles bindSettingsActions restore-input change with file and without file", async () => {
+    const el = new ShadowClawSettings();
+    el.db = {} as any;
+    document.body.appendChild(el);
+    await el.render();
+
+    const root = el.shadowRoot!;
+    const restoreInput = root.querySelector(
+      ".settings__restore-input",
+    ) as HTMLInputElement;
+
+    const restoreSpy = jest
+      .spyOn(el, "openRestoreDialog")
+      .mockImplementation(() => {});
+
+    // 1. Change event with file
+    const file = new File(['{"configEntries":[]}'], "settings-backup.json", {
+      type: "application/json",
+    });
+    Object.defineProperty(restoreInput, "files", {
+      value: [file],
+      writable: true,
+      configurable: true,
+    });
+    restoreInput.dispatchEvent(new Event("change"));
+    expect(restoreSpy).toHaveBeenCalledWith("settings-backup.json");
+    expect(el.pendingRestoreFile).toBe(file);
+
+    // 2. Change event without files
+    Object.defineProperty(restoreInput, "files", {
+      value: [],
+      writable: true,
+      configurable: true,
+    });
+    restoreInput.dispatchEvent(new Event("change"));
+
+    // 3. Click restore-settings button triggers input.click()
+    const clickSpy = jest.spyOn(restoreInput, "click");
+    const restoreBtn = root.querySelector(
+      '[data-action="restore-settings"]',
+    ) as HTMLElement;
+    restoreBtn.click();
+    expect(clickSpy).toHaveBeenCalled();
+
+    document.body.removeChild(el);
+  });
+
+  it("handles change events on all bound setting toggles and inputs in bindSettingsActions", async () => {
+    const el = new ShadowClawSettings();
+    el.db = {} as any;
+    document.body.appendChild(el);
+    await el.render();
+
+    const root = el.shadowRoot!;
+
+    // 1. sidebar-hide-chat-toggle
+    const chatSpy = jest
+      .spyOn(el, "onSidebarHideChatToggle")
+      .mockResolvedValue(undefined as any);
+    const chatToggle = root.querySelector(
+      '[data-setting="sidebar-hide-chat-toggle"]',
+    ) as HTMLInputElement;
+    chatToggle.checked = true;
+    chatToggle.dispatchEvent(new Event("change"));
+    expect(chatSpy).toHaveBeenCalledWith(true);
+
+    // 2. sidebar-hide-tasks-toggle
+    const tasksSpy = jest
+      .spyOn(el, "onSidebarHideTasksToggle")
+      .mockResolvedValue(undefined as any);
+    const tasksToggle = root.querySelector(
+      '[data-setting="sidebar-hide-tasks-toggle"]',
+    ) as HTMLInputElement;
+    tasksToggle.checked = true;
+    tasksToggle.dispatchEvent(new Event("change"));
+    expect(tasksSpy).toHaveBeenCalledWith(true);
+
+    // 3. sidebar-hide-files-toggle
+    const filesSpy = jest
+      .spyOn(el, "onSidebarHideFilesToggle")
+      .mockResolvedValue(undefined as any);
+    const filesToggle = root.querySelector(
+      '[data-setting="sidebar-hide-files-toggle"]',
+    ) as HTMLInputElement;
+    filesToggle.checked = true;
+    filesToggle.dispatchEvent(new Event("change"));
+    expect(filesSpy).toHaveBeenCalledWith(true);
+
+    // 4. chat-split-view-toggle
+    const splitSpy = jest
+      .spyOn(el, "onChatSplitViewToggle")
+      .mockResolvedValue(undefined as any);
+    const splitToggle = root.querySelector(
+      '[data-setting="chat-split-view-toggle"]',
+    ) as HTMLInputElement;
+    splitToggle.checked = true;
+    splitToggle.dispatchEvent(new Event("change"));
+    expect(splitSpy).toHaveBeenCalledWith(true);
+
+    // 5. pages-auto-refresh-input valid number and NaN
+    const refreshSpy = jest
+      .spyOn(el, "onPagesAutoRefreshInputChange")
+      .mockResolvedValue(undefined as any);
+    const refreshInput = root.querySelector(
+      '[data-setting="pages-auto-refresh-input"]',
+    ) as HTMLInputElement;
+    refreshInput.value = "120";
+    refreshInput.dispatchEvent(new Event("change"));
+    expect(refreshSpy).toHaveBeenCalledWith(120);
+
+    refreshInput.value = "invalid";
+    refreshInput.dispatchEvent(new Event("change"));
+    expect(refreshSpy).toHaveBeenCalledWith(0);
+
+    // 6. override-prerender-skeleton-toggle
+    const overrideSpy = jest
+      .spyOn(el, "onOverridePrerenderSkeletonToggle")
+      .mockResolvedValue(undefined as any);
+    const overrideToggle = root.querySelector(
+      '[data-setting="override-prerender-skeleton-toggle"]',
+    ) as HTMLInputElement;
+    overrideToggle.checked = true;
+    overrideToggle.dispatchEvent(new Event("change"));
+    expect(overrideSpy).toHaveBeenCalledWith(true);
+
+    // 7. activity-log-disk-logging-toggle
+    const logSpy = jest
+      .spyOn(el, "onActivityLogDiskLoggingToggle")
+      .mockResolvedValue(undefined as any);
+    const logToggle = root.querySelector(
+      '[data-setting="activity-log-disk-logging-toggle"]',
+    ) as HTMLInputElement;
+    logToggle.checked = true;
+    logToggle.dispatchEvent(new Event("change"));
+    expect(logSpy).toHaveBeenCalledWith(true);
+
+    // 8. sidebar-hide-pages-toggle
+    const pagesSpy = jest
+      .spyOn(el, "onSidebarHidePagesToggle")
+      .mockResolvedValue(undefined as any);
+    const pagesToggle = root.querySelector(
+      '[data-setting="sidebar-hide-pages-toggle"]',
+    ) as HTMLInputElement;
+    pagesToggle.checked = true;
+    pagesToggle.dispatchEvent(new Event("change"));
+    expect(pagesSpy).toHaveBeenCalledWith(true);
+
+    document.body.removeChild(el);
+  });
+
+  it("handles string errors and null shadowRoot guards across methods", async () => {
+    const el = new ShadowClawSettings();
+    el.db = {} as any;
+
+    // 1. String error paths in confirmBackup and confirmClear
+    jest
+      .spyOn(el, "getAllConfigEntries")
+      .mockRejectedValueOnce("String backup error");
+    await el.confirmBackup();
+
+    jest
+      .spyOn(el, "replaceConfigEntries")
+      .mockRejectedValueOnce("String clear error");
+    await el.confirmClear();
+
+    // 2. String error paths in toggles
+    (globalThis as any)._mockSetConfig.mockRejectedValueOnce(
+      "String split error",
+    );
+    await el.onChatSplitViewToggle(true);
+
+    (globalThis as any)._mockSetConfig.mockRejectedValueOnce(
+      "String override error",
+    );
+    await el.onOverridePrerenderSkeletonToggle(true);
+
+    (globalThis as any)._mockSetConfig.mockRejectedValueOnce(
+      "String refresh error",
+    );
+    await el.onPagesAutoRefreshInputChange(10);
+
+    (globalThis as any)._mockSetConfig.mockRejectedValueOnce(
+      "String chat hide error",
+    );
+    await el.onSidebarHideChatToggle(true);
+
+    (globalThis as any)._mockSetConfig.mockRejectedValueOnce(
+      "String files hide error",
+    );
+    await el.onSidebarHideFilesToggle(true);
+
+    (globalThis as any)._mockSetConfig.mockRejectedValueOnce(
+      "String pages hide error",
+    );
+    await el.onSidebarHidePagesToggle(true);
+
+    (globalThis as any)._mockSetConfig.mockRejectedValueOnce(
+      "String tasks hide error",
+    );
+    await el.onSidebarHideTasksToggle(true);
+
+    // 3. Null shadowRoot guards
+    Object.defineProperty(el, "shadowRoot", {
+      value: null,
+      configurable: true,
+    });
+    el.applyTabState();
+    el.bindSettingsActions();
+    el.handleTabKeydown(
+      { key: "ArrowRight", preventDefault: jest.fn() } as any,
+      document.createElement("button"),
+    );
+    expect(el.getDialog(".test")).toBeNull();
+    await el.populateAssistantSettings();
+    await el.render();
+    await el.saveDomAllowedIframeHosts();
+  });
+
+  it("handles boolean config permutations and local storage fallback in populateAssistantSettings", async () => {
+    const el = new ShadowClawSettings();
+    el.db = {} as any;
+    document.body.appendChild(el);
+
+    const { getConfig } = (await import("../../db/get-config.js")) as any;
+    const { setNamespacedItem } =
+      (await import("../../utils/namespaced-storage.js")) as any;
+
+    // Test with raw boolean === true, "true", 1, "1" across all toggles
+    getConfig.mockImplementation((_db: any, key: string) => {
+      if (key === "activity_log_disk_logging_enabled")
+        return Promise.resolve(true);
+      if (key === "sidebar_pages_hidden") return Promise.resolve(true);
+      if (key === "sidebar_chat_hidden") return Promise.resolve(1);
+      if (key === "sidebar_tasks_hidden") return Promise.resolve("1");
+      if (key === "sidebar_files_hidden") return Promise.resolve("true");
+      if (key === "chat_split_view_enabled") return Promise.resolve("true");
+      if (key === "pages_auto_refresh_interval") return Promise.resolve(60); // Positive valid number
+      if (key === "override_prerender_skeleton") return Promise.resolve(null); // Triggers localStorage check
+      if (key === "allowed_iframe_host_patterns") return Promise.resolve("");
+      return Promise.resolve(undefined);
+    });
+
+    // When localStorage has "true"
+    setNamespacedItem("shadow-claw-override-prerender-skeleton", "true");
+    await el.populateAssistantSettings();
+
+    const root = el.shadowRoot!;
+    const refreshInput = root.querySelector(
+      '[data-setting="pages-auto-refresh-input"]',
+    ) as HTMLInputElement;
+    expect(refreshInput.value).toBe("60");
+
+    const overrideToggle = root.querySelector(
+      '[data-setting="override-prerender-skeleton-toggle"]',
+    ) as HTMLInputElement;
+    expect(overrideToggle.checked).toBe(true);
+
+    // When localStorage has "false"
+    setNamespacedItem("shadow-claw-override-prerender-skeleton", "false");
+    await el.populateAssistantSettings();
+    expect(overrideToggle.checked).toBe(false);
+
+    document.body.removeChild(el);
   });
 });

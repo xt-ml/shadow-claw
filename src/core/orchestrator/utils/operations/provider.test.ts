@@ -2,18 +2,18 @@ import { describe, expect, it, jest } from "@jest/globals";
 
 import type { OrchestratorState } from "../../orchestrator-state.js";
 import type { ShadowClawDatabase } from "../../../../db/db.js";
-import type { EventBus } from "../EventBus.js";
+import type { EventBus } from "../event-bus.js";
 import type { ProviderConfig } from "../../../../config/config.js";
 
 const mockGetConfig = jest.fn<(...args: unknown[]) => Promise<unknown>>();
-jest.unstable_mockModule("../../../../db/getConfig.js", () => ({
+jest.unstable_mockModule("../../../../db/get-config.js", () => ({
   getConfig: mockGetConfig,
 }));
 
 const mockDefaultSetConfig = jest
   .fn<(...args: unknown[]) => Promise<void>>()
   .mockResolvedValue(undefined);
-jest.unstable_mockModule("../../../../db/setConfig.js", () => ({
+jest.unstable_mockModule("../../../../db/set-config.js", () => ({
   setConfig: mockDefaultSetConfig,
 }));
 

@@ -1,5 +1,5 @@
 import { CONFIG_KEYS, DEFAULT_GROUP_ID } from "../../../../config/config.js";
-import { setConfig as _defaultSetConfig } from "../../../../db/setConfig.js";
+import { setConfig as _defaultSetConfig } from "../../../../db/set-config.js";
 
 import type { ShadowClawDatabase } from "../../../../db/db.js";
 import type { VMBootMode } from "../../../../shell/vm.js";

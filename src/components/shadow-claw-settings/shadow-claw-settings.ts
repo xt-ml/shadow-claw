@@ -2,7 +2,7 @@ import { ASSISTANT_NAME, CONFIG_KEYS } from "../../config/config.js";
 import {
   getNamespacedItem,
   setNamespacedItem,
-} from "../../utils/namespacedStorage.js";
+} from "../../utils/namespaced-storage.js";
 
 import {
   createSettingsBackupBlob,
@@ -13,8 +13,8 @@ import {
 
 import { setAssistantName } from "../../core/orchestrator/utils/operations/provider.js";
 import { getDb } from "../../db/db.js";
-import { getConfig } from "../../db/getConfig.js";
-import { setConfig } from "../../db/setConfig.js";
+import { getConfig } from "../../db/get-config.js";
+import { setConfig } from "../../db/set-config.js";
 import {
   DEFAULT_ALLOWED_IFRAME_HOST_PATTERNS,
   setAllowedIframeHostPatterns,
@@ -26,9 +26,9 @@ import {
   showSuccess,
   showWarning,
 } from "../../ui/toast.js";
-import { formatDateForFilename } from "../../utils/utils.js";
-import { isTruthyConfigValue } from "../../utils/parseBooleanConfig.js";
-import { getPrerenderSkeletonDefault } from "../../utils/prerenderSkeletonDefault.js";
+import { formatDateForFilename } from "../../utils/date.js";
+import { isTruthyConfigValue } from "../../utils/parse-boolean-config.js";
+import { getPrerenderSkeletonDefault } from "../../utils/prerender-skeleton-default.js";
 
 import type { ConfigEntryRecord } from "../../config/settings-backup.js";
 import type { Orchestrator } from "../../core/orchestrator/orchestrator.js";

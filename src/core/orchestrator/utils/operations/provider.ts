@@ -9,8 +9,8 @@ import {
 } from "../../../../config/config.js";
 
 import type { ProviderConfig } from "../../../../config/config.js";
-import { getConfig } from "../../../../db/getConfig.js";
-import { setConfig as _defaultSetConfig } from "../../../../db/setConfig.js";
+import { getConfig } from "../../../../db/get-config.js";
+import { setConfig as _defaultSetConfig } from "../../../../db/set-config.js";
 import { toolsStore } from "../../../../stores/tools.js";
 import { modelRegistry } from "../../../../subsystems/providers/model-registry.js";
 import { isPromptApiSupported } from "../../../../subsystems/providers/prompt-api-provider.js";
@@ -19,7 +19,7 @@ import type { ShadowClawDatabase } from "../../../../db/db.js";
 import type { LLMProvider } from "../../../../subsystems/providers/types.js";
 import type { ModelDownloadProgressPayload } from "../../../../subsystems/worker/types.js";
 import type { OrchestratorState } from "../../orchestrator-state.js";
-import type { EventBus } from "../EventBus.js";
+import type { EventBus } from "../event-bus.js";
 
 type SetConfigFn = (
   db: ShadowClawDatabase,

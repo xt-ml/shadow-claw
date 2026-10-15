@@ -1,11 +1,11 @@
 import { jest } from "@jest/globals";
 
-jest.unstable_mockModule("../../../storage/listGroupFiles.js", () => ({
+jest.unstable_mockModule("../../../storage/list-group-files.js", () => ({
   listGroupFiles: jest.fn(),
 }));
 
 const { executeListFiles } = await import("./list-files.js");
-const { listGroupFiles } = await import("../../../storage/listGroupFiles.js");
+const { listGroupFiles } = await import("../../../storage/list-group-files.js");
 
 describe("executeListFiles", () => {
   const mockDb: any = {};

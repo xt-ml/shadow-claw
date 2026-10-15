@@ -18,18 +18,17 @@ import { marked } from "marked";
 import {
   createFrontmatterDetailsElement,
   renderFrontmatterMarkup,
-} from "../../../common/utils/frontmatter.mjs";
+} from "../../../utils/frontmatter.js";
 
-import { DEFAULT_MAIN_GROUP_INDEX_CONTENT } from "../../../storage/defaultIndexContent.mjs";
-import { DEFAULT_MAIN_GROUP_MEMORY_CONTENT } from "../../../storage/defaultMemoryContent.mjs";
-import { escapeHtml } from "../utils/escape-html.js";
+import { DEFAULT_MAIN_GROUP_INDEX_CONTENT } from "../../../storage/default-index-content.mjs";
+import { DEFAULT_MAIN_GROUP_MEMORY_CONTENT } from "../../../storage/default-memory-content.mjs";
+import { escapeHtml, escapeJsonForHtmlScript } from "../../../utils/html.js";
 import { sanitizeRenderedHtml } from "../utils/sanitize-rendered-html.js";
-import { toPosixPath } from "../utils/to-posix-path.js";
+import { toPosixPath } from "../../../utils/normalize-workspace-path.js";
 import { normalizePrerenderPagesOption } from "../utils/normalize-prerender-pages-option.js";
-import { escapeJsonForHtmlScript } from "../utils/escape-json-for-html-script.js";
 import { insertBeforeClosingHead } from "../utils/insert-before-closing-head.js";
 import { injectStaticManifestScript } from "../utils/inject-static-manifest-script.js";
-import { isPagePathAllowed } from "../../../utils/isPagePathAllowed.js";
+import { isPagePathAllowed } from "../../../utils/is-page-path-allowed.js";
 
 export { escapeHtml };
 export { sanitizeRenderedHtml };

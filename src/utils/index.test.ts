@@ -43,6 +43,8 @@ describe("src/utils/index", () => {
   it("exports security & path utilities", () => {
     expect(typeof utils.hasPathTraversal).toBe("function");
     expect(typeof utils.normalizeWorkspacePath).toBe("function");
+    expect(typeof utils.toPosixPath).toBe("function");
+    expect(typeof utils.trimSlashes).toBe("function");
   });
 
   it("exports jsonPatch utilities", () => {
@@ -78,8 +80,38 @@ describe("src/utils/index", () => {
 
   it("exports general utilities", () => {
     expect(typeof utils.escapeHtml).toBe("function");
+    expect(typeof utils.unescapeHtml).toBe("function");
+    expect(typeof utils.stripHtml).toBe("function");
+    expect(typeof utils.escapeJsonForHtmlScript).toBe("function");
     expect(typeof utils.sanitizeHtml).toBe("function");
     expect(typeof utils.formatDateForFilename).toBe("function");
     expect(typeof utils.formatTimestamp).toBe("function");
+  });
+
+  it("exports retry and httpError utilities", () => {
+    expect(typeof utils.withRetry).toBe("function");
+    expect(typeof utils.isRetryableHttpError).toBe("function");
+    expect(typeof utils.isRetryableFetchError).toBe("function");
+    expect(typeof utils.HttpError).toBe("function");
+    expect(utils.RETRYABLE_STATUS_CODES instanceof Set).toBe(true);
+  });
+
+  it("exports network utilities", () => {
+    expect(typeof utils.isLoopbackHost).toBe("function");
+    expect(typeof utils.isPrivateIp).toBe("function");
+    expect(typeof utils.isLocalOrPrivateHost).toBe("function");
+    expect(typeof utils.isRemoteEnvironment).toBe("function");
+  });
+
+  it("exports crypto utilities", () => {
+    expect(typeof utils.computeSha256).toBe("function");
+    expect(typeof utils.toArrayBuffer).toBe("function");
+    expect(typeof utils.bufferToHex).toBe("function");
+  });
+
+  it("exports frontmatter utilities", () => {
+    expect(typeof utils.splitFrontmatter).toBe("function");
+    expect(typeof utils.createFrontmatterElement).toBe("function");
+    expect(typeof utils.renderFrontmatterMarkup).toBe("function");
   });
 });

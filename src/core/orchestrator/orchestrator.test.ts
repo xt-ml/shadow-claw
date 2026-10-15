@@ -61,9 +61,9 @@ import {
   saveGroupMetadata,
   updateGroupPinnedProvider,
 } from "../../db/groups.js";
-import { openDatabase } from "../../db/openDatabase.js";
-import { getConfig } from "../../db/getConfig.js";
-import { setConfig } from "../../db/setConfig.js";
+import { openDatabase } from "../../db/open-database.js";
+import { getConfig } from "../../db/get-config.js";
+import { setConfig } from "../../db/set-config.js";
 import { encryptValue } from "../../security/crypto.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { toolsStore } from "../../stores/tools.js";
@@ -79,10 +79,10 @@ import type { ControlPlaneClient } from "../control-plane-client.js";
 import {
   deliverIntermediateResponse,
   deliverResponse,
-} from "./utils/deliverResponse.js";
+} from "./utils/deliver-response.js";
 
 import { enqueue, processQueue } from "./utils/enqueue.js";
-import { handleWorkerMessage } from "./utils/handleWorkerMessage.js";
+import { handleWorkerMessage } from "./utils/handle-worker-message.js";
 
 import {
   initChannelsAndRooms,
@@ -91,7 +91,7 @@ import {
   initLlamafileAndMesh,
   initProviderAndModel,
   initWorkerAndScheduler,
-} from "./utils/initTasks.js";
+} from "./utils/init-tasks.js";
 
 import {
   applyAllChannelRunningStates,
@@ -142,7 +142,7 @@ import {
   syncTerminalWorkspace,
 } from "./utils/operations/vm.js";
 
-import { parseDirectToolCommand } from "./utils/parseDirectToolCommand.js";
+import { parseDirectToolCommand } from "./utils/parse-direct-tool-command.js";
 
 describe("buildSystemPrompt", () => {
   const FETCH_URL_TOOL = "fetch_url";

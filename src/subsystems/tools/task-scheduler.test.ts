@@ -1,16 +1,16 @@
 import { jest } from "@jest/globals";
 
-jest.unstable_mockModule("../../db/getEnabledTasks.js", () => ({
+jest.unstable_mockModule("../../db/get-enabled-tasks.js", () => ({
   getEnabledTasks: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../db/updateTaskLastRun.js", () => ({
+jest.unstable_mockModule("../../db/update-task-last-run.js", () => ({
   updateTaskLastRun: jest.fn(),
 }));
 
 const { TaskScheduler, matchesCron } = await import("./task-scheduler.js");
-const { getEnabledTasks } = await import("../../db/getEnabledTasks.js");
-const { updateTaskLastRun } = await import("../../db/updateTaskLastRun.js");
+const { getEnabledTasks } = await import("../../db/get-enabled-tasks.js");
+const { updateTaskLastRun } = await import("../../db/update-task-last-run.js");
 
 describe("matchesCron", () => {
   it("matches wildcards and exact values", () => {

@@ -1,13 +1,13 @@
 import { Signal } from "signal-polyfill";
 
 import { CONFIG_KEYS } from "../config/config.js";
-import { getConfig } from "../db/getConfig.js";
-import { setConfig } from "../db/setConfig.js";
+import { getConfig } from "../db/get-config.js";
+import { setConfig } from "../db/set-config.js";
 import { TOOL_DEFINITIONS } from "../subsystems/tools/tools.js";
 import { DEFAULT_BUILTIN_PROFILE } from "../subsystems/tools/builtin-profiles.js";
 import { loadDeclarativeTools } from "../subsystems/tools/declarative.js";
 import { fetchDiscoveryManifest } from "../subsystems/tools/remote/discovery.js";
-import { importRemoteArtifacts } from "../subsystems/tools/remote/importArtifacts.js";
+import { importRemoteArtifacts } from "../subsystems/tools/remote/import-artifacts.js";
 import type { DeclarativeToolDefinition } from "../subsystems/tools/declarative.js";
 import type { ShadowClawDatabase } from "../db/types.js";
 import type { ToolDefinition, ToolProfile } from "../subsystems/tools/tools.js";

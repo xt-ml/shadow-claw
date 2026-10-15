@@ -20,7 +20,7 @@ import {
   sendStreamingProxyError,
 } from "../utils/openai-sse.js";
 
-import { parseLocalModelToolCalls } from "../../subsystems/providers/utils/parseLocalModelToolCall.js";
+import { parseLocalModelToolCalls } from "../../subsystems/providers/utils/parse-local-model-tool-call.js";
 
 import type { Express } from "express";
 

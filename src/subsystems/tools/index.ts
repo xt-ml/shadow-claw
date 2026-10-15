@@ -16,7 +16,7 @@ import {
 import { fetch_file, fetch_url, web_search } from "./fetch.js";
 import { javascript } from "./javascript.js";
 import { remote_mcp_call_tool, remote_mcp_list_tools } from "./mcp.js";
-import { list_tool_profiles, manage_tools } from "./manage_tools.js";
+import { list_tool_profiles, manage_tools } from "./manage-tools.js";
 import { update_memory } from "./memory.js";
 import { send_notification, show_toast } from "./notifications.js";
 import { list_components, render_component } from "./a2ui.js";

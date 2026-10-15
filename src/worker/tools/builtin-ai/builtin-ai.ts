@@ -1,5 +1,5 @@
 import { isHeadlessMode } from "../../../config/headless.js";
-import { executeNativeAiTask } from "../../../subsystems/providers/executeNativeAiTask.js";
+import { executeNativeAiTask } from "../../../subsystems/providers/execute-native-ai-task.js";
 import { ulid } from "../../../utils/ulid.js";
 import { post } from "../../utils/post.js";
 

@@ -19,7 +19,7 @@ function renderCodeBlock(text, lang) {
   return `<pre><code${languageClass}>${escapeHtml(text)}</code></pre>`;
 }
 
-function renderHeadingBlock(text, depth) {
+function renderHeadingBlock(text, depth, parseOptions) {
   if (typeof activeRenderer.heading === "function") {
     const token = {
       text,
@@ -35,7 +35,7 @@ function renderHeadingBlock(text, depth) {
               ? tokens.map((tokenItem) => tokenItem.text || "").join("")
               : String(text),
         },
-        options: { headingCounts: new Map() },
+        options: parseOptions || { headingCounts: new Map() },
       },
       token,
       depth,
@@ -102,7 +102,7 @@ exports.marked = {
     }
 
     res = res.replace(/^(#{1,6})\s+(.+)$/gm, (_, hashes, text) => {
-      return renderHeadingBlock(text, hashes.length);
+      return renderHeadingBlock(text, hashes.length, options);
     });
 
     // Handle images: ![alt](url) or ![alt](<url>)

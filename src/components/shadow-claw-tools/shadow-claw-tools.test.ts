@@ -17,7 +17,7 @@ jest.unstable_mockModule("../../core/effect.js", () => ({
 
 const mockSetWebMcpToolsEnabled = jest.fn();
 jest.unstable_mockModule(
-  "../../core/orchestrator/utils/syncWebMcpRegistration.js",
+  "../../core/orchestrator/utils/sync-web-mcp-registration.js",
   () => ({
     setWebMcpToolsEnabled: mockSetWebMcpToolsEnabled,
     setWebMcpMode: jest.fn(),
@@ -861,6 +861,865 @@ describe("shadow-claw-tools", () => {
       expect(toolsStore.deactivateProfile).toHaveBeenCalled();
       expect(showInfo).toHaveBeenCalledWith("Profile deactivated");
     }
+
+    document.body.removeChild(el);
+  });
+
+  it("handles event listener failure paths and UI interactions", async () => {
+    const el = new ShadowClawTools() as any;
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 0));
+    const root = el.shadowRoot!;
+    const db = {} as any;
+
+    // 1. Add Tool dialog open via button
+    const addBtn = root.querySelector(".tools__add-btn") as HTMLButtonElement;
+    const addDialog = root.querySelector("dialog") as HTMLDialogElement;
+    addDialog.showModal = jest.fn();
+    addBtn?.click();
+    expect(addDialog.showModal).toHaveBeenCalled();
+
+    // 2. WebMCP toggle when orchestrator is null
+    el.orchestrator = null;
+    orchestratorStore.orchestrator = null;
+    const webMcpToggle = root.querySelector(
+      ".tools__webmcp-toggle",
+    ) as HTMLInputElement;
+    webMcpToggle.checked = true;
+    webMcpToggle.dispatchEvent(new Event("change"));
+    expect(showError).toHaveBeenCalledWith("Orchestrator is not ready");
+    expect(webMcpToggle.checked).toBe(false);
+
+    // Restore orchestrator and test WebMCP toggle error throw (Error and string error)
+    orchestratorStore.orchestrator = {
+      getWebMcpToolsEnabled: jest.fn(() => true),
+      getWebMcpMode: jest.fn(() => "native"),
+    };
+    mockSetWebMcpToolsEnabled.mockRejectedValueOnce(
+      new Error("WebMCP toggle failure"),
+    );
+    webMcpToggle.checked = true;
+    webMcpToggle.dispatchEvent(new Event("change"));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(showError).toHaveBeenCalledWith(
+      "Failed to update WebMCP setting: WebMCP toggle failure",
+    );
+    expect(webMcpToggle.checked).toBe(false);
+
+    mockSetWebMcpToolsEnabled.mockRejectedValueOnce("WebMCP string error");
+    webMcpToggle.checked = true;
+    webMcpToggle.dispatchEvent(new Event("change"));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(showError).toHaveBeenCalledWith(
+      "Failed to update WebMCP setting: WebMCP string error",
+    );
+
+    // 3. Internet access toggle error throw (string error and Error)
+    orchestratorStore.setVMBashFullInternetAccess.mockRejectedValueOnce(
+      "String error",
+    );
+    const internetToggle = root.querySelector(
+      ".tools__internet-access-toggle",
+    ) as HTMLInputElement;
+    internetToggle.checked = true;
+    internetToggle.dispatchEvent(new Event("change"));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(showError).toHaveBeenCalledWith(
+      "Failed to update internet access setting: String error",
+    );
+    expect(internetToggle.checked).toBe(false);
+
+    orchestratorStore.setVMBashFullInternetAccess.mockRejectedValueOnce(
+      new Error("Err obj"),
+    );
+    internetToggle.checked = true;
+    internetToggle.dispatchEvent(new Event("change"));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(showError).toHaveBeenCalledWith(
+      "Failed to update internet access setting: Err obj",
+    );
+
+    // Internet access toggle success (disabled branch)
+    orchestratorStore.setVMBashFullInternetAccess.mockResolvedValueOnce(
+      undefined,
+    );
+    internetToggle.checked = false;
+    internetToggle.dispatchEvent(new Event("change"));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(showInfo).toHaveBeenCalledWith(
+      "Full internet access disabled for Bash and JavaScript tools",
+    );
+
+    // 4. Web Search Proxy toggle error throw (Error and string)
+    toolsStore.setWebSearchUseProxy.mockRejectedValueOnce(
+      new Error("Proxy error"),
+    );
+    const webSearchProxyToggle = root.querySelector(
+      ".tools__websearch-proxy-toggle",
+    ) as HTMLInputElement;
+    webSearchProxyToggle.checked = true;
+    webSearchProxyToggle.dispatchEvent(new Event("change"));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(showError).toHaveBeenCalledWith(
+      "Failed to update Web Search proxy setting: Proxy error",
+    );
+
+    toolsStore.setWebSearchUseProxy.mockRejectedValueOnce("Proxy string error");
+    webSearchProxyToggle.checked = true;
+    webSearchProxyToggle.dispatchEvent(new Event("change"));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(showError).toHaveBeenCalledWith(
+      "Failed to update Web Search proxy setting: Proxy string error",
+    );
+
+    // Web Search Proxy toggle success (disabled branch)
+    toolsStore.setWebSearchUseProxy.mockResolvedValueOnce(undefined);
+    webSearchProxyToggle.checked = false;
+    webSearchProxyToggle.dispatchEvent(new Event("change"));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(showInfo).toHaveBeenCalledWith("Web Search local proxy disabled");
+
+    // 5. Search files save button error throw (Error and string) and with invalid numbers
+    const maxFileBytesInput = root.querySelector(
+      ".tools__searchfiles-max-file-bytes-input",
+    ) as HTMLInputElement;
+    const maxFilesVisitedInput = root.querySelector(
+      ".tools__searchfiles-max-files-visited-input",
+    ) as HTMLInputElement;
+    maxFileBytesInput.value = "-5"; // <= 0 branch
+    maxFilesVisitedInput.value = "abc"; // NaN branch
+
+    toolsStore.setSearchFilesSkipDirs.mockRejectedValueOnce(
+      new Error("SkipDirs error"),
+    );
+    const saveSearchBtn = root.querySelector(
+      ".tools__save-searchfiles-btn",
+    ) as HTMLButtonElement;
+    saveSearchBtn?.click();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(showError).toHaveBeenCalledWith(
+      "Failed to save Search Files settings: SkipDirs error",
+    );
+
+    toolsStore.setSearchFilesSkipDirs.mockRejectedValueOnce(
+      "SkipDirs string error",
+    );
+    saveSearchBtn?.click();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(showError).toHaveBeenCalledWith(
+      "Failed to save Search Files settings: SkipDirs string error",
+    );
+
+    // 6. Web Search save button error throw and defaults (empty strings)
+    const proxyInput = root.querySelector(
+      ".tools__websearch-proxy-url-input",
+    ) as HTMLInputElement;
+    const searchUrlInput = root.querySelector(
+      ".tools__websearch-url-input",
+    ) as HTMLInputElement;
+    proxyInput.value = "";
+    searchUrlInput.value = "";
+    toolsStore.setWebSearchProxyUrl.mockRejectedValueOnce(
+      new Error("Save URL error"),
+    );
+    const saveWebSearchBtn = root.querySelector(
+      ".tools__save-websearch-btn",
+    ) as HTMLButtonElement;
+    saveWebSearchBtn?.click();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(showError).toHaveBeenCalledWith(
+      "Failed to save Web Search settings: Save URL error",
+    );
+
+    toolsStore.setWebSearchProxyUrl.mockRejectedValueOnce(
+      "Save URL string error",
+    );
+    saveWebSearchBtn?.click();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(showError).toHaveBeenCalledWith(
+      "Failed to save Web Search settings: Save URL string error",
+    );
+
+    // 7. WebMCP mode select: null orchestrator vs error (Error and string)
+    const webMcpModeSelect = root.querySelector(
+      ".tools__webmcp-mode",
+    ) as HTMLSelectElement;
+    el.orchestrator = null;
+    orchestratorStore.orchestrator = null;
+    webMcpModeSelect.value = "native";
+    webMcpModeSelect.dispatchEvent(new Event("change")); // orchestrator null -> returns early
+
+    const { setWebMcpMode } =
+      (await import("../../core/orchestrator/utils/sync-web-mcp-registration.js")) as any;
+    el.orchestrator = { webMcpToolsEnabled: true };
+    setWebMcpMode.mockRejectedValueOnce(new Error("Mode error"));
+    webMcpModeSelect.dispatchEvent(new Event("change"));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(showError).toHaveBeenCalledWith(
+      "Failed to update WebMCP mode: Mode error",
+    );
+
+    setWebMcpMode.mockRejectedValueOnce("Mode string error");
+    webMcpModeSelect.dispatchEvent(new Event("change"));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(showError).toHaveBeenCalledWith(
+      "Failed to update WebMCP mode: Mode string error",
+    );
+
+    setWebMcpMode.mockResolvedValueOnce(undefined);
+    webMcpModeSelect.value = "polyfill";
+    webMcpModeSelect.dispatchEvent(new Event("change"));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(showInfo).toHaveBeenCalledWith("WebMCP mode set to polyfill");
+
+    // 8. Prompt buttons: save and clear
+    const promptArea = root.querySelector(
+      ".tools__prompt-area",
+    ) as HTMLTextAreaElement;
+    promptArea.value = "Custom system prompt";
+    const savePromptBtn = root.querySelector(
+      ".tools__save-prompt-btn",
+    ) as HTMLButtonElement;
+    savePromptBtn?.click();
+    expect(toolsStore.setSystemPromptOverride).toHaveBeenCalledWith(
+      expect.anything(),
+      "Custom system prompt",
+    );
+    expect(showSuccess).toHaveBeenCalledWith("System prompt override saved");
+
+    const clearPromptBtn = root.querySelector(
+      ".tools__clear-prompt-btn",
+    ) as HTMLButtonElement;
+    clearPromptBtn?.click();
+    expect(promptArea.value).toBe("");
+    expect(toolsStore.setSystemPromptOverride).toHaveBeenCalledWith(
+      expect.anything(),
+      "",
+    );
+    expect(showSuccess).toHaveBeenCalledWith("System prompt override cleared");
+
+    // 9. Profile controls: New, Save, Delete
+    const profileNewBtn = root.querySelector(
+      ".tools__profile-new-btn",
+    ) as HTMLButtonElement;
+    const profileDialog = root.querySelector(
+      ".tools__profile-dialog",
+    ) as HTMLDialogElement;
+    profileDialog.showModal = jest.fn();
+    profileNewBtn?.click();
+    expect(profileDialog.showModal).toHaveBeenCalled();
+
+    // Profile save when activeProfileId is null -> delegates to New Profile button
+    toolsStore.activeProfileId = null;
+    const profileSaveBtn = root.querySelector(
+      ".tools__profile-save-btn",
+    ) as HTMLButtonElement;
+    profileSaveBtn?.click();
+
+    // Profile save when activeProfileId is present
+    toolsStore.activeProfileId = "custom_profile";
+    toolsStore.saveToActiveProfile.mockResolvedValueOnce(undefined);
+    profileSaveBtn?.click();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(toolsStore.saveToActiveProfile).toHaveBeenCalled();
+    expect(showSuccess).toHaveBeenCalledWith("Profile saved");
+
+    // Profile delete: no active profile
+    toolsStore.activeProfileId = null;
+    const profileDeleteBtn = root.querySelector(
+      ".tools__profile-delete-btn",
+    ) as HTMLButtonElement;
+    profileDeleteBtn?.click();
+    expect(showInfo).toHaveBeenCalledWith("No profile selected");
+
+    // Profile delete: builtin profile
+    toolsStore.activeProfileId = "__builtin_default";
+    profileDeleteBtn?.click();
+    expect(showInfo).toHaveBeenCalledWith(
+      "Built-in profiles cannot be deleted",
+    );
+
+    // Profile delete: custom profile
+    toolsStore.activeProfileId = "custom_profile";
+    toolsStore.deleteProfile.mockResolvedValueOnce(undefined);
+    profileDeleteBtn?.click();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(toolsStore.deleteProfile).toHaveBeenCalledWith(
+      expect.anything(),
+      "custom_profile",
+    );
+    expect(showSuccess).toHaveBeenCalledWith("Profile deleted");
+
+    // 10. Import Dialog controls: Import button, Close, Cancel, Backdrop, Preset btn, Fetch btn
+    const importBtn = root.querySelector(
+      ".tools__import-btn",
+    ) as HTMLButtonElement;
+    const importDialog = root.querySelector(
+      ".tools__import-dialog",
+    ) as HTMLDialogElement;
+    importDialog.showModal = jest.fn();
+    importDialog.close = jest.fn();
+    importBtn?.click();
+    expect(importDialog.showModal).toHaveBeenCalled();
+
+    const importCloseBtn = root.querySelector(
+      ".tools__import-dialog-close",
+    ) as HTMLButtonElement;
+    importCloseBtn?.click();
+    expect(importDialog.close).toHaveBeenCalledTimes(1);
+
+    const importCancelBtn = root.querySelector(
+      ".tools__import-cancel-btn",
+    ) as HTMLButtonElement;
+    importCancelBtn?.click();
+    expect(importDialog.close).toHaveBeenCalledTimes(2);
+
+    // Click inside child element (bubbles up, target !== importDialog)
+    const insideEl = document.createElement("div");
+    importDialog.appendChild(insideEl);
+    insideEl.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(importDialog.close).toHaveBeenCalledTimes(2); // Not called when target !== importDialog
+
+    // Click backdrop (target === importDialog)
+    importDialog.dispatchEvent(new MouseEvent("click", { bubbles: false }));
+    expect(importDialog.close).toHaveBeenCalledTimes(3);
+
+    // Preset button without url
+    const presetBtn = root.querySelector(
+      ".tools__preset-btn",
+    ) as HTMLButtonElement;
+    if (presetBtn) {
+      delete presetBtn.dataset.url;
+      const handleFetchSpy = jest
+        .spyOn(el, "handleFetchSite")
+        .mockImplementation(async () => {});
+      presetBtn.click();
+      expect(handleFetchSpy).not.toHaveBeenCalled();
+
+      // Preset button with url
+      presetBtn.dataset.url = "https://preset.example.com";
+      presetBtn.click();
+      expect(handleFetchSpy).toHaveBeenCalledWith(
+        db,
+        "https://preset.example.com",
+      );
+
+      // Fetch button with empty url
+      const importUrlInput = root.querySelector(
+        ".tools__import-url-input",
+      ) as HTMLInputElement;
+      importUrlInput.value = "   ";
+      const fetchBtn = root.querySelector(
+        ".tools__import-fetch-btn",
+      ) as HTMLButtonElement;
+      handleFetchSpy.mockClear();
+      fetchBtn?.click();
+      expect(handleFetchSpy).not.toHaveBeenCalled();
+
+      importUrlInput.value = "https://manual.example.com";
+      fetchBtn?.click();
+      expect(handleFetchSpy).toHaveBeenCalledWith(
+        db,
+        "https://manual.example.com",
+      );
+
+      handleFetchSpy.mockRestore();
+    }
+
+    // 11. Form submissions
+    const handleAddToolSpy = jest
+      .spyOn(el, "handleAddTool")
+      .mockImplementation(async () => {});
+    const addForm = root.querySelector(
+      ".tools__dialog-form",
+    ) as HTMLFormElement;
+    addForm?.dispatchEvent(new Event("submit"));
+    expect(handleAddToolSpy).toHaveBeenCalled();
+
+    const handleCloneToolSpy = jest
+      .spyOn(el, "handleCloneTool")
+      .mockImplementation(async () => {});
+    const cloneForm = root.querySelector(
+      ".tools__clone-dialog-form",
+    ) as HTMLFormElement;
+    cloneForm?.dispatchEvent(new Event("submit"));
+    expect(handleCloneToolSpy).toHaveBeenCalled();
+
+    const handleSaveProfileSpy = jest
+      .spyOn(el, "handleSaveProfile")
+      .mockImplementation(async () => {});
+    const profileForm = root.querySelector(
+      ".tools__profile-dialog-form",
+    ) as HTMLFormElement;
+    profileForm?.dispatchEvent(new Event("submit"));
+    expect(handleSaveProfileSpy).toHaveBeenCalled();
+
+    const handleImportSubmitSpy = jest
+      .spyOn(el, "handleImportSubmit")
+      .mockImplementation(async () => {});
+    const importForm = root.querySelector(
+      ".tools__import-dialog-form",
+    ) as HTMLFormElement;
+    importForm?.dispatchEvent(new Event("submit"));
+    expect(handleImportSubmitSpy).toHaveBeenCalled();
+
+    // 12. Clone dialog backdrop clicks
+    const cloneDialogEl = root.querySelector(
+      ".tools__clone-dialog",
+    ) as HTMLDialogElement;
+    cloneDialogEl.close = jest.fn();
+    const cloneInside = document.createElement("div");
+    cloneDialogEl.appendChild(cloneInside);
+    cloneInside.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(cloneDialogEl.close).not.toHaveBeenCalled();
+
+    cloneDialogEl.dispatchEvent(new MouseEvent("click", { bubbles: false }));
+    expect(cloneDialogEl.close).toHaveBeenCalled();
+
+    // 13. Restore input change event (non-input target vs input target)
+    const restoreInput = root.querySelector(
+      ".tools__hidden-restore",
+    ) as HTMLInputElement;
+    const handleRestoreSpy = jest
+      .spyOn(el, "handleRestore")
+      .mockImplementation(async () => {});
+    const dummyEvent = new Event("change");
+    Object.defineProperty(dummyEvent, "target", {
+      value: document.createElement("div"),
+    });
+    restoreInput?.dispatchEvent(dummyEvent);
+    expect(handleRestoreSpy).not.toHaveBeenCalled();
+
+    restoreInput?.dispatchEvent(new Event("change"));
+    expect(handleRestoreSpy).toHaveBeenCalled();
+
+    // DisconnectedCallback
+    el.disconnectedCallback();
+
+    document.body.removeChild(el);
+  });
+
+  it("handles early returns when shadowRoot or inner elements are missing", async () => {
+    const el = new ShadowClawTools() as any;
+    const db = {} as any;
+
+    // 1. Calling methods with no shadowRoot
+    Object.defineProperty(el, "shadowRoot", {
+      value: null,
+      configurable: true,
+    });
+    el.bindEventListeners(db);
+    el.openCloneDialog("bash");
+    el.renderImportCatalog({} as any);
+    el.resetImportDialogState();
+    el.setupEffects(db);
+    el.updateProfileSelector();
+    el.updateToolList(db);
+    await el.handleFetchSite(db, "https://example.com");
+
+    // 2. Calling openCloneDialog when cloneDialog or cloneForm is missing
+    const dummyRoot = document.createElement("div");
+    Object.defineProperty(el, "shadowRoot", {
+      value: dummyRoot,
+      configurable: true,
+    });
+    el.openCloneDialog("bash");
+
+    // 3. Calling renderImportCatalog when catalog element is missing
+    el.renderImportCatalog({ tools: [{ name: "t" }] });
+
+    // 4. Calling updateProfileSelector when select is missing
+    el.updateProfileSelector();
+
+    // 5. Calling updateToolList when list is missing
+    el.updateToolList(db);
+
+    // 6. Calling bindEventListeners when restoreInput is not an HTMLInputElement
+    const mockRoot = document.createElement("div");
+    mockRoot.innerHTML = `
+      <button class="tools__restore-btn"></button>
+      <div class="tools__hidden-restore"></div>
+    `;
+    Object.defineProperty(el, "shadowRoot", {
+      value: mockRoot,
+      configurable: true,
+    });
+    el.bindEventListeners(db);
+    const restoreBtn = mockRoot.querySelector(
+      ".tools__restore-btn",
+    ) as HTMLButtonElement;
+    restoreBtn?.click(); // Should not throw when restoreInput is a div
+  });
+
+  it("handles handleAddTool validation errors and duplicate detection", async () => {
+    const el = new ShadowClawTools() as any;
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 0));
+    const db = {} as any;
+
+    toolsStore.allTools = [{ name: "existing_tool", description: "exists" }];
+
+    // 1. Missing name or description
+    const form1 = document.createElement("form");
+    form1.innerHTML = `<input name="name" value="" /><input name="description" value="some desc" />`;
+    await el.handleAddTool(db, form1);
+    expect(showError).toHaveBeenCalledWith("Name and description are required");
+
+    const form2 = document.createElement("form");
+    form2.innerHTML = `<input name="name" value="tool_name" /><input name="description" value="" />`;
+    await el.handleAddTool(db, form2);
+    expect(showError).toHaveBeenCalledWith("Name and description are required");
+
+    // 2. Duplicate tool name
+    const form3 = document.createElement("form");
+    form3.innerHTML = `<input name="name" value="existing_tool" /><input name="description" value="desc" />`;
+    await el.handleAddTool(db, form3);
+    expect(showError).toHaveBeenCalledWith(
+      'A tool named "existing_tool" already exists',
+    );
+
+    // 3. Invalid JSON schema
+    const form4 = document.createElement("form");
+    form4.innerHTML = `
+      <input name="name" value="new_valid_tool" />
+      <input name="description" value="valid desc" />
+      <input name="input_schema" value="{ invalid json }" />
+    `;
+    await el.handleAddTool(db, form4);
+    expect(showError).toHaveBeenCalledWith("Invalid JSON in input schema");
+
+    document.body.removeChild(el);
+  });
+
+  it("handles handleCloneTool validation errors and clone failure", async () => {
+    const el = new ShadowClawTools() as any;
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 0));
+    const db = {} as any;
+
+    // Missing source or name
+    const form1 = document.createElement("form");
+    form1.innerHTML = `<input name="source" value="" /><input name="name" value="new" />`;
+    await el.handleCloneTool(db, form1);
+    expect(showError).toHaveBeenCalledWith(
+      "Source and new tool name are required",
+    );
+
+    // Clone failure (returns false)
+    toolsStore.cloneTool.mockResolvedValueOnce(false);
+    const form2 = document.createElement("form");
+    form2.innerHTML = `<input name="source" value="src_tool" /><input name="name" value="cloned_tool" />`;
+    await el.handleCloneTool(db, form2);
+    expect(showError).toHaveBeenCalledWith(
+      'Clone failed: source not found or name "cloned_tool" already exists.',
+    );
+
+    // Clone success with new description
+    toolsStore.cloneTool.mockResolvedValueOnce(true);
+    const form3 = document.createElement("form");
+    form3.innerHTML = `
+      <input name="source" value="src_tool" />
+      <input name="name" value="cloned_tool_2" />
+      <input name="description" value="Brand new description" />
+    `;
+    await el.handleCloneTool(db, form3);
+    expect(toolsStore.cloneTool).toHaveBeenCalledWith(
+      db,
+      "src_tool",
+      "cloned_tool_2",
+      "Brand new description",
+    );
+
+    document.body.removeChild(el);
+  });
+
+  it("handles handleRestore edge cases and handleSaveProfile validation", async () => {
+    const el = new ShadowClawTools() as any;
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 0));
+    const db = {} as any;
+
+    // 1. handleRestore with no file
+    const inputEmpty = { files: [] } as any;
+    await el.handleRestore(db, inputEmpty);
+    expect(toolsStore.importBackup).not.toHaveBeenCalled();
+
+    // 2. handleRestore with error (Error and string error)
+    const brokenFile = {
+      text: jest
+        .fn<() => Promise<string>>()
+        .mockRejectedValue(new Error("Corrupt file")),
+    };
+    const inputBroken = { files: [brokenFile], value: "corrupt.json" } as any;
+    await el.handleRestore(db, inputBroken);
+    expect(showError).toHaveBeenCalledWith("Failed to restore: Corrupt file");
+    expect(inputBroken.value).toBe("");
+
+    const brokenFileString = {
+      text: jest
+        .fn<() => Promise<string>>()
+        .mockRejectedValue("Corrupt string error"),
+    };
+    const inputBrokenString = {
+      files: [brokenFileString],
+      value: "corrupt.json",
+    } as any;
+    await el.handleRestore(db, inputBrokenString);
+    expect(showError).toHaveBeenCalledWith(
+      "Failed to restore: Corrupt string error",
+    );
+
+    // 3. handleSaveProfile with missing name
+    const emptyForm = document.createElement("form");
+    emptyForm.innerHTML = `<input name="name" value="" />`;
+    await el.handleSaveProfile(db, emptyForm);
+    expect(showError).toHaveBeenCalledWith("Profile name is required");
+
+    // handleSaveProfile with empty providerId and empty model
+    const minimalForm = document.createElement("form");
+    minimalForm.innerHTML = `
+      <input name="name" value="Minimal Profile" />
+      <input name="providerId" value="" />
+      <input name="model" value="" />
+    `;
+    await el.handleSaveProfile(db, minimalForm);
+    expect(toolsStore.addProfile).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({
+        name: "Minimal Profile",
+        providerId: undefined,
+        model: undefined,
+      }),
+    );
+
+    document.body.removeChild(el);
+  });
+
+  it("handles handleFetchSite and handleImportSubmit error conditions and options", async () => {
+    const el = new ShadowClawTools() as any;
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 0));
+    const db = {} as any;
+
+    // 1. handleFetchSite failure with Error and string
+    toolsStore.fetchRemoteDiscoveryManifest.mockRejectedValueOnce(
+      new Error("Network timeout"),
+    );
+    await el.handleFetchSite(db, "https://invalid.example.com");
+    expect(showError).toHaveBeenCalledWith(
+      "Failed to fetch site: Network timeout",
+    );
+
+    toolsStore.fetchRemoteDiscoveryManifest.mockRejectedValueOnce(
+      "Server crashed",
+    );
+    await el.handleFetchSite(db, "https://invalid.example.com");
+    expect(showError).toHaveBeenCalledWith(
+      "Failed to fetch site: Server crashed",
+    );
+
+    // 2. handleFetchSite success with manifest without description or name
+    toolsStore.fetchRemoteDiscoveryManifest.mockResolvedValueOnce({
+      manifest: { name: "", description: "" },
+    });
+    await el.handleFetchSite(db, "https://minimal.example.com");
+    const siteNameEl = el.shadowRoot.querySelector(".tools__import-site-name");
+    const siteDescEl = el.shadowRoot.querySelector(".tools__import-site-desc");
+    expect(siteNameEl.textContent).toBe("Remote Site");
+    expect(siteDescEl.textContent).toBe("No description provided.");
+
+    // 3. handleImportSubmit with no manifest loaded
+    el.currentRemoteManifest = null;
+    const dummyForm = document.createElement("form");
+    await el.handleImportSubmit(db, dummyForm);
+    expect(showError).toHaveBeenCalledWith(
+      "No remote discovery manifest loaded.",
+    );
+
+    // 4. handleImportSubmit with no items selected
+    el.currentRemoteManifest = { name: "Test Site" };
+    await el.handleImportSubmit(db, dummyForm);
+    expect(showError).toHaveBeenCalledWith(
+      "Please select at least one tool, skill, or script to import.",
+    );
+
+    // 5. handleImportSubmit with items selected and error thrown (Error and string error)
+    const formWithItems = document.createElement("form");
+    formWithItems.innerHTML = `
+      <input type="checkbox" name="importTool" value="tool1" checked />
+      <input type="checkbox" class="tools__import-auto-enable" checked />
+      <input type="checkbox" class="tools__import-overwrite" checked />
+      <button class="tools__import-submit-btn">Import</button>
+    `;
+    toolsStore.importFromRemoteSite.mockRejectedValueOnce(
+      new Error("Import disk write failed"),
+    );
+    await el.handleImportSubmit(db, formWithItems);
+    expect(showError).toHaveBeenCalledWith(
+      "Import failed: Import disk write failed",
+    );
+
+    toolsStore.importFromRemoteSite.mockRejectedValueOnce(
+      "Import string failure",
+    );
+    await el.handleImportSubmit(db, formWithItems);
+    expect(showError).toHaveBeenCalledWith(
+      "Import failed: Import string failure",
+    );
+
+    // 6. renderImportCatalog with items without descriptions and fallback execution type
+    el.renderImportCatalog({
+      tools: [{ name: "t_no_desc" }],
+      skills: [{ name: "s_no_desc" }],
+      scripts: [{ name: "sc_no_desc" }],
+    });
+    const catalogItems = el.shadowRoot.querySelectorAll(".tools__import-item");
+    expect(catalogItems.length).toBe(3);
+
+    // Empty catalog
+    el.renderImportCatalog({ tools: [], skills: [], scripts: [] });
+    const emptyCatalog = el.shadowRoot.querySelectorAll(".tools__import-item");
+    expect(emptyCatalog.length).toBe(0);
+
+    document.body.removeChild(el);
+  });
+
+  it("handles updateToolList with matching structure and profile selector display", async () => {
+    const el = new ShadowClawTools() as any;
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 0));
+    const db = {} as any;
+
+    // 1. Profiles with different formats: builtin, no provider, no model, provider without registered name
+    const { getProvider } = (await import("../../config/config.js")) as any;
+    getProvider.mockImplementationOnce((_id: string) => null);
+    toolsStore.profiles = [
+      { id: "__builtin_full", name: "Full Builtin" },
+      { id: "custom_minimal", name: "Minimal Custom" },
+      {
+        id: "custom_unregistered_prov",
+        name: "Unreg Prov",
+        providerId: "unknown-prov",
+      },
+      {
+        id: "custom_with_prov",
+        name: "Custom Prov",
+        providerId: "openai",
+        model: "gpt-4o",
+      },
+    ];
+    toolsStore.activeProfileId = "__builtin_full";
+    el.updateProfileSelector();
+
+    const deleteBtn = el.shadowRoot.querySelector(
+      ".tools__profile-delete-btn",
+    ) as HTMLButtonElement;
+    expect(deleteBtn.disabled).toBe(true);
+    expect(deleteBtn.title).toBe("Built-in profiles cannot be deleted");
+
+    toolsStore.activeProfileId = "custom_minimal";
+    el.updateProfileSelector();
+    expect(deleteBtn.disabled).toBe(false);
+    expect(deleteBtn.title).toBe("");
+
+    // 2. updateToolList with custom tools, clone button click, and delete button click
+    toolsStore.allTools = [
+      { name: "bash", description: "Builtin bash tool. More details." },
+      { name: "custom_1", description: "A custom tool. More details." },
+    ];
+    toolsStore.enabledToolNames = new Set(["bash"]);
+    toolsStore.declarativeTools = [
+      { name: "decl_1", description: "Declarative tool 1. More details." },
+    ];
+    toolsStore.isDeclarativeToolEnabled = jest.fn((name) => name === "decl_1");
+
+    el.updateToolList(db);
+
+    const cloneBtns = el.shadowRoot.querySelectorAll(".tools__item-clone");
+    const openCloneSpy = jest
+      .spyOn(el, "openCloneDialog")
+      .mockImplementation(() => {});
+    (cloneBtns[0] as HTMLButtonElement)?.click();
+    expect(openCloneSpy).toHaveBeenCalledWith("bash");
+    openCloneSpy.mockRestore();
+
+    const deleteBtns = el.shadowRoot.querySelectorAll(".tools__item-delete");
+    (deleteBtns[0] as HTMLButtonElement)?.click();
+    expect(toolsStore.removeCustomTool).toHaveBeenCalledWith(db, "custom_1");
+    expect(showInfo).toHaveBeenCalledWith("Removed custom tool: custom_1");
+
+    // Test declarative tool checkbox change
+    const declCheckbox = el.shadowRoot.querySelector(
+      '.tools__item-checkbox[data-tool="decl_1"]',
+    ) as HTMLInputElement;
+    declCheckbox.checked = false;
+    declCheckbox.dispatchEvent(new Event("change"));
+    expect(toolsStore.setDeclarativeToolEnabled).toHaveBeenCalledWith(
+      db,
+      "decl_1",
+      false,
+    );
+
+    // 3. updateToolList when isSameStructure is true (updates checkboxes in place)
+    // Add a checkbox without data-tool attribute to verify early continue guard
+    const list = el.shadowRoot.querySelector(".tools__list") as HTMLElement;
+    const dummyCb = document.createElement("input");
+    dummyCb.type = "checkbox";
+    dummyCb.className = "tools__item-checkbox";
+    // no data-tool
+    list.appendChild(dummyCb);
+
+    toolsStore.enabledToolNames = new Set(["bash", "custom_1"]);
+    el.updateToolList(db);
+    const customCheckbox = el.shadowRoot.querySelector(
+      '.tools__item-checkbox[data-tool="custom_1"]',
+    ) as HTMLInputElement;
+    expect(customCheckbox.checked).toBe(true);
+
+    // 4. Focus state on inputs in setupEffects
+    const webSearchProxyUrlInput = el.shadowRoot.querySelector(
+      ".tools__websearch-proxy-url-input",
+    ) as HTMLInputElement;
+    const webSearchUrlInput = el.shadowRoot.querySelector(
+      ".tools__websearch-url-input",
+    ) as HTMLInputElement;
+    const searchFilesMaxFileBytesInput = el.shadowRoot.querySelector(
+      ".tools__searchfiles-max-file-bytes-input",
+    ) as HTMLInputElement;
+    const searchFilesMaxFilesVisitedInput = el.shadowRoot.querySelector(
+      ".tools__searchfiles-max-files-visited-input",
+    ) as HTMLInputElement;
+    const searchFilesSkipDirsInput = el.shadowRoot.querySelector(
+      ".tools__searchfiles-skip-dirs-input",
+    ) as HTMLInputElement;
+    const promptArea = el.shadowRoot.querySelector(
+      ".tools__prompt-area",
+    ) as HTMLTextAreaElement;
+
+    // Simulate focus
+    webSearchProxyUrlInput.matches = jest.fn(
+      (selector) => selector === ":focus",
+    );
+    webSearchUrlInput.matches = jest.fn((selector) => selector === ":focus");
+    searchFilesMaxFileBytesInput.matches = jest.fn(
+      (selector) => selector === ":focus",
+    );
+    searchFilesMaxFilesVisitedInput.matches = jest.fn(
+      (selector) => selector === ":focus",
+    );
+    searchFilesSkipDirsInput.matches = jest.fn(
+      (selector) => selector === ":focus",
+    );
+    promptArea.matches = jest.fn((selector) => selector === ":focus");
+
+    // Trigger effect re-runs
+    toolsStore.webSearchProxyUrl = "/new-proxy";
+    toolsStore.webSearchUrl = "https://new.url";
+    toolsStore.searchFilesMaxFileBytes = 999;
+    toolsStore.searchFilesMaxFilesVisited = 888;
+    toolsStore.searchFilesSkipDirs = ".dist";
+    toolsStore.systemPromptOverride = "Override when focused";
+    el.updateToolList(db);
 
     document.body.removeChild(el);
   });

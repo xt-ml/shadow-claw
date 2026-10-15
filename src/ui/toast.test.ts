@@ -52,4 +52,19 @@ describe("toast API", () => {
 
     expect(toastStore.toasts).toHaveLength(0);
   });
+
+  test("uses default duration and options when omitted", () => {
+    clearAllToasts();
+    showToast("default toast");
+    showSuccess("default success");
+    showError("default error");
+    showWarning("default warning");
+    showInfo("default info");
+
+    expect(toastStore.toasts[0].duration).toBe(4000);
+    expect(toastStore.toasts[1].duration).toBe(4000);
+    expect(toastStore.toasts[2].duration).toBe(5000);
+    expect(toastStore.toasts[3].duration).toBe(4500);
+    expect(toastStore.toasts[4].duration).toBe(4000);
+  });
 });

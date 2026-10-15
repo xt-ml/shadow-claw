@@ -166,4 +166,140 @@ describe("consumePendingShares", () => {
       "Aborted error",
     );
   });
+
+  it("handles fallback default errors and non-array result", async () => {
+    // 1. getAll error fallback
+    const req1: any = {};
+    const mockDb1: any = {
+      transaction: () => ({
+        objectStore: () => ({
+          getAll: () => {
+            setTimeout(() => {
+              req1.error = null;
+              req1.onerror();
+            }, 0);
+            return req1;
+          },
+        }),
+      }),
+    };
+    await expect(consumePendingShares(mockDb1)).rejects.toThrow(
+      "Failed to read pending shares",
+    );
+
+    // 2. clear error fallback
+    const req2: any = {};
+    const clearReq: any = {};
+    const mockDb2: any = {
+      transaction: () => ({
+        objectStore: () => ({
+          getAll: () => {
+            setTimeout(() => {
+              req2.result = [{ id: "x" }];
+              req2.onsuccess();
+            }, 0);
+            return req2;
+          },
+          clear: () => {
+            setTimeout(() => {
+              clearReq.error = null;
+              clearReq.onerror();
+            }, 0);
+            return clearReq;
+          },
+        }),
+      }),
+    };
+    await expect(consumePendingShares(mockDb2)).rejects.toThrow(
+      "Failed to clear pending shares",
+    );
+
+    // 3. tx abort fallback
+    const req3: any = {};
+    const tx3: any = {
+      objectStore: () => ({
+        getAll: () => {
+          setTimeout(() => {
+            tx3.error = null;
+            tx3.onabort();
+          }, 0);
+          return req3;
+        },
+      }),
+    };
+    const mockDb3: any = {
+      transaction: () => tx3,
+    };
+    await expect(consumePendingShares(mockDb3)).rejects.toThrow(
+      "Pending share transaction aborted",
+    );
+
+    // 4. getAll result is null (not array)
+    const req4: any = {};
+    const clearReq4: any = {};
+    const mockDb4: any = {
+      transaction: () => ({
+        objectStore: () => ({
+          getAll: () => {
+            setTimeout(() => {
+              req4.result = null;
+              req4.onsuccess();
+            }, 0);
+            return req4;
+          },
+          clear: () => {
+            setTimeout(() => {
+              clearReq4.onsuccess();
+            }, 0);
+            return clearReq4;
+          },
+        }),
+      }),
+    };
+    expect(await consumePendingShares(mockDb4)).toEqual([]);
+  });
+
+  it("normalizes records with ArrayBuffer and missing fields", async () => {
+    const req: any = {};
+    const clearReq: any = {};
+    const buf = new ArrayBuffer(8);
+    const mockDb: any = {
+      transaction: () => ({
+        objectStore: () => ({
+          getAll: () => {
+            setTimeout(() => {
+              req.result = [
+                null,
+                {},
+                { id: "" },
+                {
+                  id: "valid-1",
+                  createdAt: 123,
+                  title: "Title",
+                  text: "Text",
+                  url: "https://example.com",
+                  fileName: "test.dat",
+                  fileType: "application/octet-stream",
+                  fileBytes: buf,
+                },
+              ];
+              req.onsuccess();
+            }, 0);
+            return req;
+          },
+          clear: () => {
+            setTimeout(() => {
+              clearReq.onsuccess();
+            }, 0);
+            return clearReq;
+          },
+        }),
+      }),
+    };
+
+    const res = await consumePendingShares(mockDb);
+    expect(res).toHaveLength(1);
+    expect(res[0].id).toBe("valid-1");
+    expect(res[0].fileBytes).toBe(buf);
+  });
 });

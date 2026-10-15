@@ -3,7 +3,7 @@ import { jest } from "@jest/globals";
 const mockGroupFileExists = jest.fn() as any;
 const mockPost = jest.fn() as any;
 
-jest.unstable_mockModule("../../../storage/groupFileExists.js", () => ({
+jest.unstable_mockModule("../../../storage/group-file-exists.js", () => ({
   groupFileExists: mockGroupFileExists,
 }));
 

@@ -993,7 +993,17 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
  * Get provider configuration by ID
  */
 export function getProvider(providerId: string): ProviderConfig | null {
-  return PROVIDERS[providerId] || null;
+  const provider = PROVIDERS[providerId];
+  if (!provider) return null;
+  if (typeof process !== "undefined" && process?.env) {
+    if (providerId === "openrouter" && process.env.OPENROUTER_BASE_URL) {
+      return { ...provider, baseUrl: process.env.OPENROUTER_BASE_URL };
+    }
+    if (providerId === "huggingface" && process.env.HUGGINGFACE_BASE_URL) {
+      return { ...provider, baseUrl: process.env.HUGGINGFACE_BASE_URL };
+    }
+  }
+  return provider;
 }
 
 /**

@@ -30,27 +30,27 @@ jest.unstable_mockModule("../../core/effect.js", () => ({
   }),
 }));
 
-jest.unstable_mockModule("../../storage/readGroupFileBytes.js", () => ({
+jest.unstable_mockModule("../../storage/read-group-file-bytes.js", () => ({
   readGroupFileBytes: jest.fn(async () => new Uint8Array([1, 2, 3])),
 }));
 
-jest.unstable_mockModule("../../storage/downloadGroupFile.js", () => ({
+jest.unstable_mockModule("../../storage/download-group-file.js", () => ({
   downloadGroupFile: jest.fn(async () => undefined),
 }));
 
-jest.unstable_mockModule("../../db/exportChatData.js", () => ({
+jest.unstable_mockModule("../../db/export-chat-data.js", () => ({
   exportChatData: jest.fn(async () => ({ messages: [], version: 1 })),
 }));
 
-jest.unstable_mockModule("../../db/importChatData.js", () => ({
+jest.unstable_mockModule("../../db/import-chat-data.js", () => ({
   importChatData: jest.fn(async () => undefined),
 }));
 
 const { orchestratorStore } = await import("../../stores/orchestrator.js");
-const { clearGroupMessages } = await import("../../db/clearGroupMessages.js");
+const { clearGroupMessages } = await import("../../db/clear-group-messages.js");
 const { setDB } = await import("../../db/db.js");
 const { getPeerChatDisplayStatus } =
-  await import("./utils/getPeerChatDisplayStatus.js");
+  await import("./utils/get-peer-chat-display-status.js");
 
 describe("shadow-claw-chat clear functionality", () => {
   let mockDb;
@@ -295,7 +295,7 @@ describe("shadow-claw-chat UX enhancements (issue #10)", () => {
       // Import the class to access static method
       // We use a dynamic import with a mock to avoid browser-only deps
       // jszip mocked at top level
-      jest.unstable_mockModule("../../db/exportChatData.js", () => ({
+      jest.unstable_mockModule("../../db/export-chat-data.js", () => ({
         exportChatData: jest.fn(),
       }));
 
@@ -303,7 +303,7 @@ describe("shadow-claw-chat UX enhancements (issue #10)", () => {
         getDb: jest.fn(),
       }));
 
-      jest.unstable_mockModule("../../db/importChatData.js", () => ({
+      jest.unstable_mockModule("../../db/import-chat-data.js", () => ({
         importChatData: jest.fn(),
       }));
 
@@ -474,7 +474,7 @@ describe("message copy button", () => {
   beforeAll(async () => {
     // jszip mocked at top level
 
-    jest.unstable_mockModule("../../db/exportChatData.js", () => ({
+    jest.unstable_mockModule("../../db/export-chat-data.js", () => ({
       exportChatData: jest.fn(),
     }));
 
@@ -482,7 +482,7 @@ describe("message copy button", () => {
       getDb: jest.fn(),
     }));
 
-    jest.unstable_mockModule("../../db/importChatData.js", () => ({
+    jest.unstable_mockModule("../../db/import-chat-data.js", () => ({
       importChatData: jest.fn(),
     }));
 
@@ -921,7 +921,7 @@ describe("chat workspace link resolution", () => {
   beforeAll(async () => {
     // jszip mocked at top level
 
-    jest.unstable_mockModule("../../db/exportChatData.js", () => ({
+    jest.unstable_mockModule("../../db/export-chat-data.js", () => ({
       exportChatData: jest.fn(),
     }));
 
@@ -929,7 +929,7 @@ describe("chat workspace link resolution", () => {
       getDb: jest.fn(),
     }));
 
-    jest.unstable_mockModule("../../db/importChatData.js", () => ({
+    jest.unstable_mockModule("../../db/import-chat-data.js", () => ({
       importChatData: jest.fn(),
     }));
 
@@ -1064,13 +1064,13 @@ describe("chat attachment helpers", () => {
 
   beforeAll(async () => {
     // jszip mocked at top level
-    jest.unstable_mockModule("../../db/exportChatData.js", () => ({
+    jest.unstable_mockModule("../../db/export-chat-data.js", () => ({
       exportChatData: jest.fn(),
     }));
     jest.unstable_mockModule("../../db/db.js", () => ({
       getDb: jest.fn(),
     }));
-    jest.unstable_mockModule("../../db/importChatData.js", () => ({
+    jest.unstable_mockModule("../../db/import-chat-data.js", () => ({
       importChatData: jest.fn(),
     }));
     // effect mocked at top level
@@ -1091,10 +1091,10 @@ describe("chat attachment helpers", () => {
         compactContext: jest.fn(),
       },
     }));
-    jest.unstable_mockModule("../../storage/readGroupFileBytes.js", () => ({
+    jest.unstable_mockModule("../../storage/read-group-file-bytes.js", () => ({
       readGroupFileBytes: jest.fn(),
     }));
-    jest.unstable_mockModule("../../storage/downloadGroupFile.js", () => ({
+    jest.unstable_mockModule("../../storage/download-group-file.js", () => ({
       downloadGroupFile: jest.fn(),
     }));
     jest.unstable_mockModule("../../utils/utils.js", () => ({
@@ -1712,19 +1712,46 @@ describe("shadow-claw-chat prompt api onboarding", () => {
     let chatInstance: any;
     let mockDbInstance: any;
 
+    let suiteOrchestratorStore: any;
+
     beforeAll(async () => {
+      if (typeof (globalThis as any).ResizeObserver === "undefined") {
+        (globalThis as any).ResizeObserver = class {
+          observe() {}
+          unobserve() {}
+          disconnect() {}
+        };
+      }
+      const orchMod: any = await import("../../stores/orchestrator.js");
+      suiteOrchestratorStore = orchMod.orchestratorStore;
       const mod = await import("./shadow-claw-chat.js");
       ShadowClawChatClass = mod.ShadowClawChat;
     });
 
     beforeEach(() => {
       document.body.innerHTML = "";
+      const createReq = (result?: any) => {
+        const req: any = { result };
+        let _cb: any = null;
+        Object.defineProperty(req, "onsuccess", {
+          get: () => _cb,
+          set: (cb) => {
+            _cb = cb;
+            if (typeof cb === "function") {
+              queueMicrotask(() => cb({ target: req }));
+            }
+          },
+        });
+        return req;
+      };
       mockDbInstance = {
         transaction: jest.fn().mockReturnValue({
           objectStore: jest.fn().mockReturnValue({
-            get: jest.fn().mockReturnValue({ onsuccess: null }),
-            put: jest.fn().mockReturnValue({ onsuccess: null }),
-            delete: jest.fn().mockReturnValue({ onsuccess: null }),
+            get: jest.fn().mockImplementation(() => createReq(undefined)),
+            put: jest
+              .fn()
+              .mockImplementation((entry: any) => createReq(entry?.key)),
+            delete: jest.fn().mockImplementation(() => createReq(undefined)),
           }),
         }),
       };
@@ -2257,8 +2284,8 @@ describe("shadow-claw-chat prompt api onboarding", () => {
       document.body.appendChild(chatInstance);
       chatInstance.db = mockDbInstance;
 
-      const { exportChatData } = await import("../../db/exportChatData.js");
-      const { importChatData } = await import("../../db/importChatData.js");
+      const { exportChatData } = await import("../../db/export-chat-data.js");
+      const { importChatData } = await import("../../db/import-chat-data.js");
       const JSZip = (await import("jszip")).default as any;
 
       global.URL.createObjectURL = jest
@@ -2374,7 +2401,7 @@ describe("shadow-claw-chat prompt api onboarding", () => {
 
       // 3. With path and error thrown
       const { downloadGroupFile } =
-        await import("../../storage/downloadGroupFile.js");
+        await import("../../storage/download-group-file.js");
       const { fileViewerStore } = await import("../../stores/file-viewer.js");
 
       (downloadGroupFile as jest.MockedFunction<any>).mockRejectedValueOnce(
@@ -2934,32 +2961,1489 @@ describe("shadow-claw-chat prompt api onboarding", () => {
       expect(chatInstance.showAttachmentDialog).toHaveBeenCalled();
     });
 
-    it("exercises checkPromptApiOnboarding, confirmPromptApiOnboarding, bypassPromptApiOnboardingToSettings", async () => {
+    it("handles checkPromptApiOnboarding with various configurations and dialog closing", async () => {
       document.body.appendChild(chatInstance);
+      const createReq = (result: any) => {
+        const req: any = { result };
+        let _cb: any = null;
+        Object.defineProperty(req, "onsuccess", {
+          get: () => _cb,
+          set: (fn) => {
+            _cb = fn;
+            if (fn) queueMicrotask(() => fn({ target: req }));
+          },
+        });
+        return req;
+      };
+      const createConfigDb = (configs: Record<string, any>) => ({
+        transaction: jest.fn().mockReturnValue({
+          objectStore: jest.fn().mockReturnValue({
+            get: jest
+              .fn()
+              .mockImplementation((key: string) =>
+                createReq(
+                  key in configs ? { key, value: configs[key] } : undefined,
+                ),
+              ),
+            put: jest
+              .fn()
+              .mockImplementation((entry: any) => createReq(entry.key)),
+          }),
+        }),
+      });
+
+      // 1. When non-transformers_js_browser provider is configured
+      chatInstance.db = createConfigDb({ provider: "anthropic" });
+      await chatInstance.checkPromptApiOnboarding();
+
+      // 2. When transformers_js_browser but already seen
+      chatInstance.db = createConfigDb({
+        provider: "transformers_js_browser",
+        transformers_js_onboarding_seen: "true",
+      });
+      await chatInstance.checkPromptApiOnboarding();
+
+      // 3. When transformers_js_browser and NOT seen
+      globalThis.fetch = jest.fn<any>().mockResolvedValue({
+        ok: true,
+        json: async () => [{ id: "model-1", name: "Model 1" }],
+      });
+      chatInstance.db = createConfigDb({
+        provider: "transformers_js_browser",
+        transformers_js_onboarding_seen: "false",
+        prompt_api_onboarding_seen: "false",
+        model: "model-1",
+      });
+      const showModalSpy = jest.fn();
+      const dialog = chatInstance.shadowRoot.querySelector(
+        "dialog.chat__prompt-api-dialog",
+      );
+      if (dialog) {
+        dialog.showModal = showModalSpy;
+      }
+      await chatInstance.checkPromptApiOnboarding();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(showModalSpy).toHaveBeenCalled();
+
+      // 4. Confirm onboarding
+      const closeSpy = jest.fn();
+      if (dialog) dialog.close = closeSpy;
+      suiteOrchestratorStore.orchestrator = { provider: "", model: "" } as any;
+      chatInstance.db = createConfigDb({ provider: "transformers_js_browser" });
+      await chatInstance.confirmPromptApiOnboarding();
+      expect(closeSpy).toHaveBeenCalled();
+      expect(suiteOrchestratorStore.orchestrator?.provider).toBe(
+        "transformers_js_browser",
+      );
+
+      // 5. Bypass onboarding to settings
+      const navSpy = jest.fn();
+      document.addEventListener("shadow-claw-navigate", navSpy, { once: true });
+      await chatInstance.bypassPromptApiOnboardingToSettings();
+      expect(navSpy).toHaveBeenCalled();
+    });
+
+    it("handles inferAttachmentModelSupport across multimodal capability combinations", () => {
+      // empty attachments
+      expect(chatInstance.inferAttachmentModelSupport([])).toBe(true);
+      expect(chatInstance.inferAttachmentModelSupport()).toBe(true);
+
+      // text attachment
+      expect(
+        chatInstance.inferAttachmentModelSupport([
+          { mimeType: "text/plain" } as any,
+        ]),
+      ).toBe(true);
+
+      // multimodal model with vision, audio, video (omni heuristic supports all 3)
+      suiteOrchestratorStore.orchestrator = { model: "omni-multimodal" } as any;
+      expect(
+        chatInstance.inferAttachmentModelSupport([
+          { mimeType: "image/png" } as any,
+        ]),
+      ).toBe(true);
+      expect(
+        chatInstance.inferAttachmentModelSupport([
+          { mimeType: "audio/mp3" } as any,
+        ]),
+      ).toBe(true);
+      expect(
+        chatInstance.inferAttachmentModelSupport([
+          { mimeType: "video/mp4" } as any,
+        ]),
+      ).toBe(true);
+
+      // model lacking capabilities
+      suiteOrchestratorStore.orchestrator = {
+        model: "unknown-text-model",
+      } as any;
+      expect(
+        chatInstance.inferAttachmentModelSupport([
+          { mimeType: "image/png" } as any,
+        ]),
+      ).toBe(false);
+      expect(
+        chatInstance.inferAttachmentModelSupport([
+          { mimeType: "audio/mp3" } as any,
+        ]),
+      ).toBe(false);
+      expect(
+        chatInstance.inferAttachmentModelSupport([
+          { mimeType: "video/mp4" } as any,
+        ]),
+      ).toBe(false);
+      expect(
+        chatInstance.inferAttachmentModelSupport([
+          { mimeType: "application/pdf" } as any,
+        ]),
+      ).toBe(false);
+    });
+
+    it("handles getAttachmentIcon and getAttachmentTransportLabel with all categories", () => {
+      expect(chatInstance.getAttachmentIcon()).toBe("BIN");
+      expect(chatInstance.getAttachmentIcon("image/jpeg")).toBe("IMG");
+      expect(chatInstance.getAttachmentIcon("video/webm")).toBe("VID");
+      expect(chatInstance.getAttachmentIcon("audio/ogg")).toBe("AUD");
+      expect(chatInstance.getAttachmentIcon("application/pdf")).toBe("PDF");
+      expect(chatInstance.getAttachmentIcon("text/markdown")).toBe("TXT");
+      expect(chatInstance.getAttachmentIcon("application/json")).toBe("TXT");
+      expect(chatInstance.getAttachmentIcon("application/zip")).toBe("ZIP");
+      expect(chatInstance.getAttachmentIcon("application/x-tar")).toBe("ZIP");
+      expect(chatInstance.getAttachmentIcon("application/octet-stream")).toBe(
+        "BIN",
+      );
+
+      const caps: any = {
+        images: true,
+        audio: false,
+        documents: true,
+        routerByFeatures: false,
+      };
+      expect(
+        chatInstance.getAttachmentTransportLabel("text/plain", "doc.txt", caps),
+      ).toBe("text");
+      expect(
+        chatInstance.getAttachmentTransportLabel("image/png", "pic.png", caps),
+      ).toBe("native");
+      expect(
+        chatInstance.getAttachmentTransportLabel("audio/mp3", "song.mp3", caps),
+      ).toBe("fallback");
+      expect(
+        chatInstance.getAttachmentTransportLabel(
+          "application/pdf",
+          "doc.pdf",
+          caps,
+        ),
+      ).toBe("native");
+      expect(
+        chatInstance.getAttachmentTransportLabel(
+          "application/zip",
+          "archive.zip",
+          caps,
+        ),
+      ).toBe("fallback");
+    });
+
+    it("handles showAttachmentDialog with and without shadow-claw host element", async () => {
+      // 1. Without shadow-claw element
+      const resConfirm = await chatInstance.showAttachmentDialog({
+        mode: "confirm",
+        title: "Test",
+        message: "Confirm?",
+      });
+      expect(resConfirm).toBe(false);
+
+      const resInfo = await chatInstance.showAttachmentDialog({
+        mode: "info",
+        title: "Info",
+        message: "Notice",
+      });
+      expect(resInfo).toBe(true);
+
+      // 2. With shadow-claw element
+      const host = document.createElement("shadow-claw") as any;
+      host.requestDialog = jest.fn().mockResolvedValue(true);
+      document.body.appendChild(host);
+
+      const resHost = await chatInstance.showAttachmentDialog({
+        mode: "confirm",
+        title: "Host Test",
+        message: "Host confirm?",
+      });
+      expect(resHost).toBe(true);
+      expect(host.requestDialog).toHaveBeenCalled();
+      host.remove();
+    });
+
+    it("handles injectCopyButtons and copy click success / failure", async () => {
+      const container = document.createElement("div");
+      const pre = document.createElement("pre");
+      const code = document.createElement("code");
+      code.textContent = "console.log('hi');";
+      pre.appendChild(code);
+      container.appendChild(pre);
+
+      chatInstance.injectCopyButtons(container);
+      const btn = pre.querySelector(
+        ".chat__code-copy-btn",
+      ) as HTMLButtonElement;
+      expect(btn).not.toBeNull();
+
+      // Second invocation should not duplicate
+      chatInstance.injectCopyButtons(container);
+      expect(pre.querySelectorAll(".chat__code-copy-btn").length).toBe(1);
+
+      // Click copy button success
+      const writeSpy = jest.fn<any>().mockResolvedValue(undefined);
+      Object.assign(navigator, { clipboard: { writeText: writeSpy } });
+
+      jest.useFakeTimers();
+      btn.click();
+      await Promise.resolve();
+      expect(writeSpy).toHaveBeenCalledWith("console.log('hi');");
+      expect(btn.textContent).toBe("✅ Copied");
+      jest.advanceTimersByTime(1600);
+      expect(btn.textContent).toBe("📋 Copy");
+
+      // Click copy button failure
+      writeSpy.mockRejectedValueOnce(new Error("clipboard fail"));
+      btn.click();
+      await Promise.resolve();
+      expect(btn.textContent).toBe("⚠️ Failed");
+      jest.advanceTimersByTime(1600);
+      expect(btn.textContent).toBe("📋 Copy");
+      jest.useRealTimers();
+
+      // Pre without code tag
+      const preNoCode = document.createElement("pre");
+      preNoCode.textContent = "pure pre text";
+      container.appendChild(preNoCode);
+      chatInstance.injectCopyButtons(container);
+      const btn2 = preNoCode.querySelector(
+        ".chat__code-copy-btn",
+      ) as HTMLButtonElement;
+      expect(btn2).not.toBeNull();
+    });
+
+    it("handles injectMessageDeleteButton and user confirmation / cancellation", async () => {
+      const article = document.createElement("article");
+      chatInstance.injectMessageDeleteButton(article, "msg-1");
+      expect(article.querySelector(".chat__msg-delete-btn")).toBeNull();
+
+      const content = document.createElement("div");
+      content.className = "chat__message-content";
+      article.appendChild(content);
+
+      chatInstance.injectMessageDeleteButton(article, "msg-1");
+      const btn = article.querySelector(
+        ".chat__msg-delete-btn",
+      ) as HTMLButtonElement;
+      expect(btn).not.toBeNull();
+
+      // Second invocation should not duplicate
+      chatInstance.injectMessageDeleteButton(article, "msg-1");
+      expect(article.querySelectorAll(".chat__msg-delete-btn").length).toBe(1);
+
+      const deleteSpy = jest.fn().mockResolvedValue(undefined);
+      suiteOrchestratorStore.deleteMessage = deleteSpy;
+
+      // Cancel deletion
+      chatInstance.showAttachmentDialog = jest.fn().mockResolvedValue(false);
+      btn.click();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(deleteSpy).not.toHaveBeenCalled();
+
+      // Confirm deletion
+      chatInstance.db = mockDbInstance;
+      chatInstance.showAttachmentDialog = jest.fn().mockResolvedValue(true);
+      btn.click();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(deleteSpy).toHaveBeenCalledWith(mockDbInstance, "msg-1");
+    });
+
+    it("handles handleCompactChat, handleStopChat, and handleMessageLinkClick", async () => {
+      // handleCompactChat without db
+      chatInstance.db = null;
+      await chatInstance.handleCompactChat();
+
+      // handleCompactChat cancelled
+      chatInstance.db = mockDbInstance;
+      chatInstance.showAttachmentDialog = jest.fn().mockResolvedValue(false);
+      await chatInstance.handleCompactChat();
+
+      // handleCompactChat confirmed and succeeds
+      chatInstance.showAttachmentDialog = jest.fn().mockResolvedValue(true);
+      suiteOrchestratorStore.orchestrator = {} as any;
+      const compactSpy = jest.fn().mockResolvedValue(undefined);
+      suiteOrchestratorStore.compactContext = compactSpy;
+      await chatInstance.handleCompactChat();
+      expect(compactSpy).toHaveBeenCalledWith(mockDbInstance);
+
+      // handleCompactChat confirmed and rejects
+      compactSpy.mockRejectedValueOnce(new Error("compact fail"));
+      await chatInstance.handleCompactChat();
+
+      // handleStopChat success and failure
+      suiteOrchestratorStore.stopCurrentRequest = jest.fn();
+      await chatInstance.handleStopChat();
+      expect(suiteOrchestratorStore.stopCurrentRequest).toHaveBeenCalled();
+
+      suiteOrchestratorStore.stopCurrentRequest = jest.fn(() => {
+        throw new Error("stop err");
+      });
+      await chatInstance.handleStopChat();
+
+      // handleMessageLinkClick ignored events
+      const preventSpy = jest.fn();
+      chatInstance.handleMessageLinkClick({
+        defaultPrevented: true,
+        button: 0,
+      } as any);
+      chatInstance.handleMessageLinkClick({
+        defaultPrevented: false,
+        button: 1,
+      } as any);
+      chatInstance.handleMessageLinkClick({
+        defaultPrevented: false,
+        button: 0,
+        metaKey: true,
+      } as any);
+      chatInstance.handleMessageLinkClick({
+        defaultPrevented: false,
+        button: 0,
+        target: {},
+      } as any);
+
+      // valid link click
+      const a = document.createElement("a");
+      a.setAttribute("href", "#special");
+      const clickEvent = {
+        defaultPrevented: false,
+        button: 0,
+        target: a,
+        preventDefault: preventSpy,
+      } as any;
+      await chatInstance.handleMessageLinkClick(clickEvent);
+    });
+
+    it("handles downloadAttachment, downloadChat, and restoreChat", async () => {
+      // downloadAttachment guards
+      chatInstance.db = null;
+      await chatInstance.downloadAttachment("grp-1", {} as any);
+
+      chatInstance.db = mockDbInstance;
+      await chatInstance.downloadAttachment("grp-1", {
+        path: "file.txt",
+      } as any);
+
+      // downloadChat guards and execution
+      chatInstance.db = null;
+      await chatInstance.downloadChat();
+
+      chatInstance.db = mockDbInstance;
+      await chatInstance.downloadChat();
+
+      // restoreChat guards
+      const fileInput = document.createElement("input");
+      fileInput.type = "file";
+
+      chatInstance.db = null;
+      await chatInstance.restoreChat(fileInput);
+
+      chatInstance.db = mockDbInstance;
+      await chatInstance.restoreChat(fileInput); // no file
+
+      // invalid extension
+      const nonZip = new File(["dummy"], "data.txt", { type: "text/plain" });
+      Object.defineProperty(fileInput, "files", {
+        value: [nonZip],
+        configurable: true,
+      });
+      await chatInstance.restoreChat(fileInput);
+
+      // valid zip restore
+      const zipFile = new File(["zipcontent"], "backup.zip", {
+        type: "application/zip",
+      });
+      Object.defineProperty(fileInput, "files", {
+        value: [zipFile],
+        configurable: true,
+      });
+      await chatInstance.restoreChat(fileInput);
+    });
+
+    it("handles sendMessage guards, payload dispatch, and error handling", async () => {
+      document.body.appendChild(chatInstance);
+
+      const input = chatInstance.shadowRoot.querySelector(
+        ".chat__input",
+      ) as HTMLTextAreaElement;
+
+      // 1. Empty message and no attachments
+      input.value = "   ";
+      await chatInstance.sendMessage();
+
+      // 2. Not ready warning
+      suiteOrchestratorStore.ready = false;
+      input.value = "Hello ShadowClaw";
+      await chatInstance.sendMessage();
+
+      // 3. Ready and successful send
+      suiteOrchestratorStore.ready = true;
+      const sendSpy = jest.fn();
+      suiteOrchestratorStore.sendMessage = sendSpy;
+      input.value = "Hello World";
+      await chatInstance.sendMessage();
+      expect(sendSpy).toHaveBeenCalledWith("Hello World", []);
+      expect(input.value).toBe("");
+
+      // 4. Send error
+      input.value = "Fail test";
+      sendSpy.mockImplementationOnce(() => {
+        throw new Error("send fail");
+      });
+      await chatInstance.sendMessage();
+    });
+
+    it("handles renderMessageAttachments and resolveImagePaths for images and pdfs", async () => {
       chatInstance.db = mockDbInstance;
 
-      const checkSpy = jest
-        .spyOn(chatInstance, "checkPromptApiOnboarding")
-        .mockImplementation(async () => {});
-      const confirmSpy = jest
-        .spyOn(chatInstance, "confirmPromptApiOnboarding")
-        .mockImplementation(async () => {});
-      const bypassSpy = jest
-        .spyOn(chatInstance, "bypassPromptApiOnboardingToSettings")
-        .mockImplementation(async () => {});
+      // renderMessageAttachments with null/empty
+      expect(await chatInstance.renderMessageAttachments({} as any)).toBeNull();
+      expect(
+        await chatInstance.renderMessageAttachments({ attachments: [] } as any),
+      ).toBeNull();
+
+      // renderMessageAttachments with image and open click
+      const msg: any = {
+        groupId: "grp-1",
+        attachments: [
+          {
+            fileName: "photo.png",
+            mimeType: "image/png",
+            path: "photo.png",
+            previewDisposition: "inline",
+          },
+          { fileName: "notes.txt", mimeType: "text/plain", path: "notes.txt" },
+        ],
+      };
+      const rendered = await chatInstance.renderMessageAttachments(msg);
+      expect(rendered).not.toBeNull();
+      const openBtn = rendered?.querySelector(
+        ".chat__attachment-title",
+      ) as HTMLButtonElement;
+      openBtn?.click();
+
+      // deferWorkspaceImageLoads
+      const deferredHtml = chatInstance.deferWorkspaceImageLoads(
+        '<img src="weather/chart.png"><img src="http://external.com/pic.png">',
+      );
+      expect(deferredHtml).toContain("data-inline-workspace-src");
+
+      // resolveImagePaths with jpg, gif, webp, svg, pdf
+      const container = document.createElement("div");
+      container.innerHTML = `
+        <img data-inline-workspace-src="pic.jpg">
+        <img data-inline-workspace-src="pic.gif">
+        <img data-inline-workspace-src="pic.webp">
+        <img data-inline-workspace-src="pic.svg">
+        <img data-inline-workspace-src="doc.pdf">
+        <a href="doc.pdf">Download PDF</a>
+      `;
+      await chatInstance.resolveImagePaths("grp-1", container);
+    });
+
+    it("handles input area resizing pointer events and edge conditions", () => {
+      document.body.appendChild(chatInstance);
+
+      const inputArea = chatInstance.shadowRoot.querySelector(
+        ".chat__input-area",
+      ) as HTMLElement;
+      const handle = chatInstance.shadowRoot.querySelector(
+        ".chat__input-resize-handle",
+      ) as HTMLElement;
+
+      chatInstance.bindInputResizeEvents(inputArea, handle);
+
+      // Pointerdown with right click button (ignored)
+      const rightClick = new PointerEvent("pointerdown", {
+        pointerType: "mouse",
+        button: 2,
+      });
+      handle.dispatchEvent(rightClick);
+
+      // Valid pointerdown
+      handle.setPointerCapture = jest.fn();
+      const validDown = new PointerEvent("pointerdown", {
+        pointerId: 10,
+        button: 0,
+        clientY: 500,
+        pointerType: "mouse",
+      });
+      handle.dispatchEvent(validDown);
+      expect(handle.classList.contains("active")).toBe(true);
+
+      // Pointermove with unmatched id (ignored)
+      const moveOther = new PointerEvent("pointermove", {
+        pointerId: 99,
+        clientY: 450,
+      });
+      document.dispatchEvent(moveOther);
+
+      // Pointermove with matched id
+      const moveMatch = new PointerEvent("pointermove", {
+        pointerId: 10,
+        clientY: 450,
+      });
+      document.dispatchEvent(moveMatch);
+
+      // Pointerup with matched id
+      const upMatch = new PointerEvent("pointerup", { pointerId: 10 });
+      handle.dispatchEvent(upMatch);
+      expect(handle.classList.contains("active")).toBe(false);
+
+      // Double click to reset
+      handle.dispatchEvent(new MouseEvent("dblclick"));
+
+      // Pointercancel
+      handle.dispatchEvent(validDown);
+      handle.dispatchEvent(new PointerEvent("pointercancel"));
+      expect(handle.classList.contains("active")).toBe(false);
+    });
+
+    it("handles applyActivityLogVisibility and a2ui routing events", async () => {
+      document.body.appendChild(chatInstance);
+      const logEl = chatInstance.shadowRoot.querySelector(
+        ".chat__activity-log",
+      ) as HTMLElement;
+
+      // 1. applyActivityLogVisibility overrides
+      chatInstance.activityLogCollapsedOverride = true;
+      chatInstance.applyActivityLogVisibility();
+      expect(logEl.classList.contains("chat__activity-log--collapsed")).toBe(
+        true,
+      );
+
+      chatInstance.activityLogCollapsedOverride = false;
+      chatInstance.applyActivityLogVisibility();
+      expect(logEl.classList.contains("chat__activity-log--collapsed")).toBe(
+        false,
+      );
+
+      chatInstance.activityLogCollapsedOverride = null;
+      chatInstance.activityLogVisibilityMediaQuery = { matches: false } as any;
+      chatInstance.applyActivityLogVisibility();
+      expect(logEl.classList.contains("chat__activity-log--collapsed")).toBe(
+        true,
+      );
+
+      // 2. a2ui-function-response routing for room and peer
+      chatInstance.bindEventListeners();
+      const messagesEl = chatInstance.shadowRoot.querySelector(
+        ".chat__messages",
+      ) as HTMLElement;
+
+      // room event returns early
+      messagesEl.dispatchEvent(
+        new CustomEvent("shadow-claw-a2ui-function-response", {
+          detail: { groupId: "room:abc", response: {} },
+        }),
+      );
+
+      // peer event routes to channel
+      const sendActionSpy = jest.fn();
+      suiteOrchestratorStore.orchestrator = {
+        router: {
+          findChannel: jest
+            .fn()
+            .mockReturnValue({ sendA2UIAction: sendActionSpy }),
+        },
+      } as any;
+
+      messagesEl.dispatchEvent(
+        new CustomEvent("shadow-claw-a2ui-function-response", {
+          detail: { groupId: "peer:client-1", response: { action: "ok" } },
+        }),
+      );
+      await new Promise((r) => setTimeout(r, 10));
+      expect(sendActionSpy).toHaveBeenCalledWith("peer:client-1", {
+        action: "ok",
+      });
+    });
+
+    it("handles restoreInputAreaHeight with various config states and db availability", async () => {
+      // 1. Without inputArea in shadowRoot
+      const origInputArea =
+        chatInstance.shadowRoot.querySelector(".chat__input-area");
+      origInputArea?.remove();
+      await chatInstance.restoreInputAreaHeight();
+
+      // 2. Re-attach inputArea, but without db
+      const newArea = document.createElement("div");
+      newArea.className = "chat__input-area";
+      chatInstance.shadowRoot.appendChild(newArea);
+      chatInstance.db = null;
+      await chatInstance.restoreInputAreaHeight();
+
+      // 3. With db and collapsed height (<= 32)
+      const createConfigReq = (result?: any) => {
+        const req: any = { result };
+        let _cb: any = null;
+        Object.defineProperty(req, "onsuccess", {
+          get: () => _cb,
+          set: (cb) => {
+            _cb = cb;
+            if (typeof cb === "function")
+              queueMicrotask(() => cb({ target: req }));
+          },
+        });
+        return req;
+      };
+
+      chatInstance.db = {
+        transaction: jest.fn().mockReturnValue({
+          objectStore: jest.fn().mockReturnValue({
+            get: jest
+              .fn()
+              .mockReturnValue(
+                createConfigReq({ key: "chat_input_area_height", value: 20 }),
+              ),
+          }),
+        }),
+      };
+      jest
+        .spyOn(chatInstance, "isCollapsedInputAreaHeight")
+        .mockReturnValue(true);
+      const resetSpy = jest.spyOn(chatInstance, "resetInputAreaHeight");
+      await chatInstance.restoreInputAreaHeight();
+      expect(resetSpy).toHaveBeenCalledWith(newArea);
+
+      // 4. With db and normal expanded height (> 32)
+      chatInstance.db = {
+        transaction: jest.fn().mockReturnValue({
+          objectStore: jest.fn().mockReturnValue({
+            get: jest
+              .fn()
+              .mockReturnValue(
+                createConfigReq({ key: "chat_input_area_height", value: 220 }),
+              ),
+          }),
+        }),
+      };
+      jest
+        .spyOn(chatInstance, "isCollapsedInputAreaHeight")
+        .mockReturnValue(false);
+      const setHeightSpy = jest.spyOn(chatInstance, "setInputAreaHeight");
+      await chatInstance.restoreInputAreaHeight();
+      expect(setHeightSpy).toHaveBeenCalledWith(newArea, 220);
+
+      // 5. When getConfig throws
+      chatInstance.db = {
+        transaction: jest.fn().mockImplementation(() => {
+          throw new Error("db read failure");
+        }),
+      };
+      await expect(
+        chatInstance.restoreInputAreaHeight(),
+      ).resolves.toBeUndefined();
+    });
+
+    it("handles showAttachmentDialog across shadow-claw, info, and confirm modes", async () => {
+      // 1. With shadow-claw custom element in DOM providing requestDialog
+      const hostEl = document.createElement("shadow-claw") as any;
+      hostEl.requestDialog = jest.fn().mockResolvedValue(true);
+      document.body.appendChild(hostEl);
+
+      const res1 = await chatInstance.showAttachmentDialog({
+        mode: "confirm",
+        title: "Test",
+        message: "Msg",
+      });
+      expect(res1).toBe(true);
+      expect(hostEl.requestDialog).toHaveBeenCalledWith({
+        mode: "confirm",
+        title: "Test",
+        message: "Msg",
+      });
+
+      hostEl.requestDialog.mockResolvedValue(false);
+      const res2 = await chatInstance.showAttachmentDialog({
+        mode: "confirm",
+        title: "Test",
+        message: "Msg",
+      });
+      expect(res2).toBe(false);
+
+      hostEl.remove();
+
+      // 2. Without shadow-claw element, mode: "info"
+      const res3 = await chatInstance.showAttachmentDialog({
+        mode: "info",
+        title: "Info title",
+        message: "Info message",
+      });
+      expect(res3).toBe(true);
+
+      // 3. Without shadow-claw element, mode: "confirm" (explicit)
+      const res4 = await chatInstance.showAttachmentDialog({
+        mode: "confirm",
+        title: "Confirm title",
+        message: "Confirm message",
+      });
+      expect(res4).toBe(false);
+
+      // 4. Without shadow-claw element, mode omitted (defaults to confirm)
+      const res5 = await chatInstance.showAttachmentDialog({
+        title: "Default title",
+        message: "Default message",
+      } as any);
+      expect(res5).toBe(false);
+    });
+
+    it("handles sendMessage and buildMessageDraftPayload edge cases, dialog cancellations, and budget limits", async () => {
+      document.body.appendChild(chatInstance);
+
+      // 1. sendMessage when input is missing
+      const inputEl = chatInstance.shadowRoot.querySelector(".chat__input");
+      inputEl?.remove();
+      await chatInstance.sendMessage();
+
+      // Re-add input
+      const newInput = document.createElement("textarea");
+      newInput.className = "chat__input";
+      chatInstance.shadowRoot.appendChild(newInput);
+
+      // 2. sendMessage when input is empty and no attachments
+      newInput.value = "   ";
+      await chatInstance.sendMessage();
+
+      // 3. sendMessage when orchestratorStore.ready is false
+      newInput.value = "Hello world";
+      suiteOrchestratorStore.ready = false;
+      await chatInstance.sendMessage();
+      suiteOrchestratorStore.ready = true;
+
+      // 4. buildMessageDraftPayload with binary attachment and unsupported model -> cancelled dialog
+      suiteOrchestratorStore.orchestrator = { model: "text-only-model" } as any;
+      const fakeBinaryBlob = new Blob(["bin"], { type: "image/png" });
+      const testAttachment = {
+        id: "att-bin",
+        fileName: "image.png",
+        mimeType: "image/png",
+        size: 100,
+        source: { kind: "local-file", file: fakeBinaryBlob },
+      };
+
+      jest.spyOn(chatInstance, "showAttachmentDialog").mockResolvedValue(false);
+      (chatInstance as any).buildQueuedAttachmentsFromFiles = () => [
+        testAttachment,
+      ];
+      const dt = {
+        files: [new File(["abc"], "photo.png", { type: "image/png" })],
+        types: ["Files"],
+      } as any;
+      await chatInstance.queueDroppedData(dt);
+
+      const payloadCancelled =
+        await chatInstance.buildMessageDraftPayload("Prompt");
+      expect(payloadCancelled).toBeNull();
+
+      // 5. When dialog confirmed:
+      (chatInstance.showAttachmentDialog as any).mockResolvedValue(true);
+      const bigTextBlob = new Blob(["a".repeat(100)], { type: "text/plain" });
+      const bigAttachment = {
+        id: "big-text",
+        fileName: "large.txt",
+        mimeType: "text/plain",
+        size: 10_000_000,
+        source: { kind: "local-file", file: bigTextBlob },
+      };
+      const remoteAttachment = {
+        id: "remote",
+        fileName: "remote.txt",
+        mimeType: "text/plain",
+        size: 50,
+        source: { kind: "remote-url", url: "https://example.com/file" },
+      };
+      const smallTextBlob = new Blob(["content of small file"], {
+        type: "text/plain",
+      });
+      (smallTextBlob as any).text = async () => "content of small file";
+      const smallAttachment = {
+        id: "small-text",
+        fileName: "small.txt",
+        mimeType: "text/plain",
+        size: 21,
+        source: { kind: "local-file", file: smallTextBlob },
+      };
+
+      (chatInstance as any).buildQueuedAttachmentsFromFiles = () => [
+        testAttachment,
+        bigAttachment,
+        remoteAttachment,
+        smallAttachment,
+      ];
+      await chatInstance.queueDroppedData(dt);
+
+      const payloadSuccess = await chatInstance.buildMessageDraftPayload("");
+      expect(payloadSuccess).not.toBeNull();
+      expect(payloadSuccess.text).toContain("Attached files:");
+      expect(payloadSuccess.text).toContain("content of small file");
+      expect(payloadSuccess.text).toContain(
+        "Skipped inline content because the file is larger than",
+      );
+
+      // 6. Text content exceeds INLINE_ATTACHMENT_TOTAL_CHAR_BUDGET
+      const hugeText = "x".repeat(150_000);
+      const hugeBlob = new Blob([hugeText], { type: "text/plain" });
+      (hugeBlob as any).text = async () => hugeText;
+      const budgetExceedAttachment = {
+        id: "huge-text",
+        fileName: "huge.txt",
+        mimeType: "text/plain",
+        size: 500,
+        source: { kind: "local-file", file: hugeBlob },
+      };
+      (chatInstance as any).buildQueuedAttachmentsFromFiles = () => [
+        budgetExceedAttachment,
+      ];
+      await chatInstance.queueDroppedData(dt);
+      const payloadExceeded =
+        await chatInstance.buildMessageDraftPayload("test");
+      expect(payloadExceeded).toBeNull();
+
+      // 7. sendMessage error handling
+      chatInstance.showAttachmentDialog.mockRestore?.();
+      newInput.value = "Send message error test";
+      suiteOrchestratorStore.sendMessage = jest.fn().mockImplementation(() => {
+        throw new Error("send exploded");
+      });
+      await chatInstance.sendMessage();
+
+      suiteOrchestratorStore.sendMessage = jest.fn().mockImplementation(() => {
+        throw "non-error rejection";
+      });
+      await chatInstance.sendMessage();
+    });
+
+    it("handles checkPromptApiOnboarding, confirmPromptApiOnboarding, and bypassPromptApiOnboardingToSettings", async () => {
+      document.body.appendChild(chatInstance);
+      const makeConfigDb = (configMap: Record<string, any>) => {
+        const createReq = (result?: any) => {
+          const req: any = { result };
+          let _cb: any = null;
+          Object.defineProperty(req, "onsuccess", {
+            get: () => _cb,
+            set: (cb) => {
+              _cb = cb;
+              if (typeof cb === "function")
+                queueMicrotask(() => cb({ target: req }));
+            },
+          });
+          return req;
+        };
+        return {
+          transaction: jest.fn().mockReturnValue({
+            objectStore: jest.fn().mockReturnValue({
+              get: jest.fn().mockImplementation((k: string) => {
+                const val = configMap[k];
+                return createReq(
+                  val !== undefined ? { key: k, value: val } : undefined,
+                );
+              }),
+              put: jest
+                .fn()
+                .mockImplementation((entry: any) => createReq(entry?.key)),
+            }),
+          }),
+        };
+      };
+
+      // 1. provider !== "transformers_js_browser"
+      chatInstance.db = makeConfigDb({ provider: "openai" });
+      await chatInstance.checkPromptApiOnboarding();
+
+      // 2. provider === "transformers_js_browser" but seen is true
+      chatInstance.db = makeConfigDb({
+        provider: "transformers_js_browser",
+        transformers_js_onboarding_seen: "true",
+      });
+      await chatInstance.checkPromptApiOnboarding();
+
+      // 3. seen is false, with model select and fetch returning models array
+      chatInstance.db = makeConfigDb({ provider: "transformers_js_browser" });
+
+      const origFetch = globalThis.fetch;
+      globalThis.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          models: [{ id: "custom/model-1" }, { id: "custom/model-2" }],
+        }),
+      }) as any;
 
       await chatInstance.checkPromptApiOnboarding();
-      expect(checkSpy).toHaveBeenCalled();
+      await new Promise((r) => setTimeout(r, 20));
 
+      // 4. fetch returning data array
+      (globalThis.fetch as any).mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: [{ id: "custom/model-3" }] }),
+      });
+      await chatInstance.checkPromptApiOnboarding();
+      await new Promise((r) => setTimeout(r, 20));
+
+      // 5. fetch failure
+      (globalThis.fetch as any).mockRejectedValue(new Error("network error"));
+      await chatInstance.checkPromptApiOnboarding();
+      await new Promise((r) => setTimeout(r, 20));
+
+      globalThis.fetch = origFetch;
+
+      // 6. dialog fallback with native dialog lacking showModal
+      const root = chatInstance.shadowRoot;
+      const shadowDialog = root.querySelector(
+        'shadow-claw-dialog[dialog-class="chat__prompt-api-dialog"]',
+      );
+      shadowDialog?.remove();
+
+      let nativeDialog = root.querySelector("dialog.chat__prompt-api-dialog");
+      if (!nativeDialog) {
+        nativeDialog = document.createElement("dialog");
+        nativeDialog.className = "chat__prompt-api-dialog";
+        root.appendChild(nativeDialog);
+      }
+      (nativeDialog as any).showModal = undefined;
+      await chatInstance.checkPromptApiOnboarding();
+      expect(nativeDialog.hasAttribute("open")).toBe(true);
+
+      // 7. confirmPromptApiOnboarding
+      suiteOrchestratorStore.orchestrator = { provider: "", model: "" } as any;
       await chatInstance.confirmPromptApiOnboarding();
-      expect(confirmSpy).toHaveBeenCalled();
+      expect(suiteOrchestratorStore.orchestrator.provider).toBe(
+        "transformers_js_browser",
+      );
 
+      // 8. bypassPromptApiOnboardingToSettings
+      let navPage = "";
+      const navListener = (e: any) => {
+        navPage = e.detail?.page;
+      };
+      document.addEventListener("shadow-claw-navigate", navListener);
       await chatInstance.bypassPromptApiOnboardingToSettings();
-      expect(bypassSpy).toHaveBeenCalled();
+      document.removeEventListener("shadow-claw-navigate", navListener);
+      expect(navPage).toBe("settings");
+    });
 
-      checkSpy.mockRestore();
-      confirmSpy.mockRestore();
-      bypassSpy.mockRestore();
+    it("handles renderStreamingBubble markdown transformations, cursor, and scroll retention", async () => {
+      document.body.appendChild(chatInstance);
+
+      // 1. null or empty streamingText
+      await chatInstance.renderStreamingBubble(null);
+      await chatInstance.renderStreamingBubble("");
+
+      // 2. First render with initial text
+      await chatInstance.renderStreamingBubble("Hello");
+      const messagesContainer = chatInstance.getMessagesContainer();
+      const streamDiv = messagesContainer.querySelector(
+        ".chat__message--streaming",
+      );
+      expect(streamDiv).not.toBeNull();
+      expect(streamDiv?.textContent).toContain("Hello");
+      expect(
+        streamDiv?.querySelector(".chat__streaming-cursor"),
+      ).not.toBeNull();
+
+      // 3. Second render update with formatting: newlines, backticks, asterisks
+      await chatInstance.renderStreamingBubble(
+        "Line 1\n`inline code` and **bold text**",
+      );
+      const contentEl = streamDiv?.querySelector(".chat__message-content");
+      expect(contentEl?.innerHTML).toContain("<br>");
+      expect(contentEl?.innerHTML).toContain("<code>inline code</code>");
+      expect(contentEl?.innerHTML).toContain("<b>bold text</b>");
+
+      // 4. renderStreamingBubble when shouldAutoFollow is false
+      jest.spyOn(chatInstance, "shouldAutoFollow").mockReturnValue(false);
+      await chatInstance.renderStreamingBubble("More streamed text");
+      expect(contentEl?.innerHTML).toContain("More streamed text");
+
+      // 5. Cleanup streaming bubble
+      await chatInstance.renderStreamingBubble(null);
+      expect(
+        messagesContainer.querySelector(".chat__message--streaming"),
+      ).toBeNull();
+    });
+
+    it("handles drag and drop events, plain text payloads, and queueDroppedData", async () => {
+      document.body.appendChild(chatInstance);
+      const root = chatInstance.shadowRoot;
+      const chatBody = root.querySelector(".chat__body") as HTMLElement;
+
+      // 1. hasDroppableData check
+      expect(chatInstance.hasDroppableData(null)).toBe(false);
+      expect(
+        chatInstance.hasDroppableData({ files: [], types: [] } as any),
+      ).toBe(false);
+
+      expect(
+        chatInstance.hasDroppableData({
+          files: [new File([""], "test.txt")],
+          types: [],
+        } as any),
+      ).toBe(true);
+
+      expect(
+        chatInstance.hasDroppableData({
+          files: [],
+          types: ["application/x-moz-file"],
+        } as any),
+      ).toBe(true);
+
+      expect(
+        chatInstance.hasDroppableData({
+          files: [],
+          types: ["text/plain"],
+        } as any),
+      ).toBe(true);
+
+      // 2. Drag events with droppable data
+      const dragEventFiles = {
+        preventDefault: jest.fn(),
+        dataTransfer: {
+          files: [new File([""], "test.txt")],
+          types: ["Files"],
+        },
+      };
+
+      chatBody.dispatchEvent(new Event("dragenter"));
+      (chatInstance as any).bindEventListeners();
+
+      // dragenter with droppable data
+      const enterEv = new CustomEvent("dragenter", { bubbles: true }) as any;
+      enterEv.dataTransfer = dragEventFiles.dataTransfer;
+      enterEv.preventDefault = jest.fn();
+      chatBody.dispatchEvent(enterEv);
+      expect(enterEv.preventDefault).toHaveBeenCalled();
+
+      // dragover with droppable data
+      const overEv = new CustomEvent("dragover", { bubbles: true }) as any;
+      overEv.dataTransfer = dragEventFiles.dataTransfer;
+      overEv.preventDefault = jest.fn();
+      chatBody.dispatchEvent(overEv);
+      expect(overEv.preventDefault).toHaveBeenCalled();
+
+      // dragleave with droppable data
+      const leaveEv = new CustomEvent("dragleave", { bubbles: true }) as any;
+      leaveEv.dataTransfer = dragEventFiles.dataTransfer;
+      leaveEv.preventDefault = jest.fn();
+      chatBody.dispatchEvent(leaveEv);
+      expect(leaveEv.preventDefault).toHaveBeenCalled();
+
+      // drop with droppable data and text
+      const dropEv = new CustomEvent("drop", { bubbles: true }) as any;
+      dropEv.dataTransfer = {
+        files: [
+          new File(["file content"], "dropped.txt", { type: "text/plain" }),
+        ],
+        types: ["Files", "text/plain"],
+        getData: (t: string) => (t === "text/plain" ? "dropped text" : ""),
+        items: [
+          {
+            kind: "string",
+            type: "text/plain",
+            getAsString: (cb: any) => cb("dropped text string"),
+          },
+        ],
+      };
+      dropEv.preventDefault = jest.fn();
+      chatBody.dispatchEvent(dropEv);
+      expect(dropEv.preventDefault).toHaveBeenCalled();
+
+      // 3. queueDroppedData with 1 file and 2 files
+      await chatInstance.queueDroppedData(null);
+      await chatInstance.queueDroppedData({
+        files: [new File(["1"], "1.txt")],
+      } as any);
+      await chatInstance.queueDroppedData({
+        files: [new File(["1"], "1.txt"), new File(["2"], "2.txt")],
+      } as any);
+    });
+
+    it("handles keyboard events, action button clicks, and link navigation", async () => {
+      document.body.appendChild(chatInstance);
+      const root = chatInstance.shadowRoot;
+      chatInstance.bindEventListeners();
+
+      const input = root.querySelector(".chat__input") as HTMLTextAreaElement;
+      input.value = "Keyboard send test";
+      const sendSpy = jest
+        .spyOn(chatInstance, "sendMessage")
+        .mockResolvedValue(undefined);
+
+      // 1. Shift+Enter -> does not trigger sendMessage
+      input.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", shiftKey: true }),
+      );
+      expect(sendSpy).not.toHaveBeenCalled();
+
+      // 2. Enter -> triggers sendMessage
+      input.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", shiftKey: false }),
+      );
+      expect(sendSpy).toHaveBeenCalledTimes(1);
+
+      // 3. Ctrl+Enter (with shiftKey true so line 315 is skipped) -> triggers sendMessage
+      input.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "Enter",
+          ctrlKey: true,
+          shiftKey: true,
+        }),
+      );
+      expect(sendSpy).toHaveBeenCalledTimes(2);
+
+      // 4. Action buttons
+      const clickAction = (sel: string) => {
+        const el = root.querySelector(sel);
+        if (el) el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      };
+
+      clickAction('[data-action="send-message"]');
+      expect(sendSpy).toHaveBeenCalledTimes(3);
+
+      const compactSpy = jest
+        .spyOn(chatInstance, "handleCompactChat")
+        .mockResolvedValue(undefined);
+      clickAction('[data-action="compact-chat"]');
+      expect(compactSpy).toHaveBeenCalled();
+
+      const clearSpy = jest
+        .spyOn(chatInstance, "handleClearChat")
+        .mockResolvedValue(undefined);
+      clickAction('[data-action="clear-chat"]');
+      expect(clearSpy).toHaveBeenCalled();
+
+      const stopSpy = jest
+        .spyOn(chatInstance, "handleStopChat")
+        .mockResolvedValue(undefined);
+      clickAction('[data-action="stop-chat"]');
+      expect(stopSpy).toHaveBeenCalled();
+
+      const downloadSpy = jest
+        .spyOn(chatInstance, "downloadChat")
+        .mockResolvedValue(undefined);
+      clickAction('[data-action="download-chat"]');
+      expect(downloadSpy).toHaveBeenCalled();
+
+      stopSpy.mockRestore();
+
+      // 5. handleStopChat execution
+      suiteOrchestratorStore.stopCurrentRequest = jest.fn();
+      await chatInstance.handleStopChat();
+      expect(suiteOrchestratorStore.stopCurrentRequest).toHaveBeenCalled();
+
+      suiteOrchestratorStore.stopCurrentRequest = jest
+        .fn()
+        .mockImplementation(() => {
+          throw new Error("stop error");
+        });
+      await chatInstance.handleStopChat();
+
+      // 6. handleMessageLinkClick branches
+      const linkEv1 = { defaultPrevented: true, button: 0 } as any;
+      await chatInstance.handleMessageLinkClick(linkEv1);
+
+      const linkEv2 = { defaultPrevented: false, button: 1 } as any;
+      await chatInstance.handleMessageLinkClick(linkEv2);
+
+      const linkEv3 = {
+        defaultPrevented: false,
+        button: 0,
+        ctrlKey: true,
+      } as any;
+      await chatInstance.handleMessageLinkClick(linkEv3);
+
+      const linkEv4 = {
+        defaultPrevented: false,
+        button: 0,
+        target: "not-an-element",
+      } as any;
+      await chatInstance.handleMessageLinkClick(linkEv4);
+
+      const nonLinkDiv = document.createElement("div");
+      const linkEv5 = {
+        defaultPrevented: false,
+        button: 0,
+        target: nonLinkDiv,
+      } as any;
+      await chatInstance.handleMessageLinkClick(linkEv5);
+
+      const linkEl = document.createElement("a");
+      linkEl.setAttribute("href", "#section");
+      const linkEv6 = {
+        defaultPrevented: false,
+        button: 0,
+        target: linkEl,
+        preventDefault: jest.fn(),
+      } as any;
+      await chatInstance.handleMessageLinkClick(linkEv6);
+    });
+
+    it("handles setupEffects message filtering, envelopes, timestamp, and scroll edge cases", async () => {
+      document.body.appendChild(chatInstance);
+
+      // Verify setupEffects with various message shapes
+      const messages: any[] = [
+        { id: "m1", a2uiAction: true, content: "action" },
+        { id: "m2", content: "[A2UI ACTION]\nsurface: test" },
+        { content: "No timestamp or id", isFromMe: false },
+        {
+          id: "m4",
+          content: "With envelopes",
+          isFromMe: true,
+          timestamp: 1700000000000,
+          a2uiEnvelopes: [{ surfaceId: "surface-1", components: [] }],
+        },
+      ];
+
+      jest
+        .spyOn(suiteOrchestratorStore, "messages", "get")
+        .mockReturnValue(messages);
+      chatInstance.setupEffects();
+      await new Promise((r) => setTimeout(r, 20));
+
+      const container = chatInstance.getMessagesContainer();
+      expect(container.children.length).toBeGreaterThanOrEqual(2);
+
+      jest.spyOn(chatInstance, "shouldAutoFollow").mockReturnValue(false);
+      chatInstance.setupEffects();
+      await new Promise((r) => setTimeout(r, 20));
+    });
+
+    it("handles queueSelectedFiles, readDroppedPlainText, scroll events, a2ui-action routing, and attach/restore click handlers", async () => {
+      document.body.appendChild(chatInstance);
+      const root = chatInstance.shadowRoot;
+
+      // 1. queueSelectedFiles branches
+      const inputEmpty = document.createElement("input");
+      Object.defineProperty(inputEmpty, "files", { value: [] });
+      await chatInstance.queueSelectedFiles(inputEmpty);
+      expect(inputEmpty.value).toBe("");
+
+      const inputSingle = document.createElement("input");
+      Object.defineProperty(inputSingle, "files", {
+        value: [new File([""], "single.txt")],
+      });
+      await chatInstance.queueSelectedFiles(inputSingle);
+
+      const inputMulti = document.createElement("input");
+      Object.defineProperty(inputMulti, "files", {
+        value: [new File([""], "1.txt"), new File([""], "2.txt")],
+      });
+      await chatInstance.queueSelectedFiles(inputMulti);
+
+      // 2. readDroppedPlainText branches
+      const dtEmpty = { items: [] } as any;
+      expect(await chatInstance.readDroppedPlainText(dtEmpty)).toBe("");
+
+      const dtNoString = {
+        items: [{ kind: "file", type: "image/png" }],
+      } as any;
+      expect(await chatInstance.readDroppedPlainText(dtNoString)).toBe("");
+
+      const dtNullString = {
+        items: [
+          {
+            kind: "string",
+            type: "text/plain",
+            getAsString: (cb: any) => cb(null),
+          },
+        ],
+      } as any;
+      expect(await chatInstance.readDroppedPlainText(dtNullString)).toBe("");
+
+      // 3. scroll events on messagesEl
+      const messagesEl = root.querySelector(".chat__messages") as HTMLElement;
+      jest.spyOn(chatInstance, "isContainerNearBottom").mockReturnValue(false);
+      messagesEl.dispatchEvent(new Event("scroll"));
+
+      jest.spyOn(chatInstance, "isContainerNearBottom").mockReturnValue(true);
+      messagesEl.dispatchEvent(new Event("scroll"));
+
+      // With suppressed scroll tracking
+      chatInstance.setMessagesScrollTop(messagesEl, 100);
+      messagesEl.dispatchEvent(new Event("scroll"));
+
+      // 4. shadow-claw-a2ui-action routing
+      // 4a. room routing
+      const routeRoomSpy = jest.fn().mockResolvedValue(undefined);
+      suiteOrchestratorStore.orchestrator = {
+        routeRoomA2UIAction: routeRoomSpy,
+      } as any;
+      messagesEl.dispatchEvent(
+        new CustomEvent("shadow-claw-a2ui-action", {
+          detail: {
+            groupId: "room:party-1",
+            action: { surfaceId: "surf-1", actionId: "act-1", dataModel: {} },
+          },
+        }),
+      );
+      await new Promise((r) => setTimeout(r, 10));
+      expect(routeRoomSpy).toHaveBeenCalled();
+
+      // 4b. peer routing
+      const sendPeerActionSpy = jest.fn();
+      const sendMsgSpy = jest.fn();
+      suiteOrchestratorStore.sendMessage = sendMsgSpy;
+      suiteOrchestratorStore.orchestrator = {
+        router: {
+          findChannel: jest
+            .fn()
+            .mockReturnValue({ sendA2UIAction: sendPeerActionSpy }),
+        },
+      } as any;
+      messagesEl.dispatchEvent(
+        new CustomEvent("shadow-claw-a2ui-action", {
+          detail: {
+            groupId: "peer:peer-1",
+            action: {
+              surfaceId: "surf-2",
+              actionId: "act-2",
+              dataModel: { count: 1 },
+            },
+          },
+        }),
+      );
+      await new Promise((r) => setTimeout(r, 10));
+      expect(sendPeerActionSpy).toHaveBeenCalled();
+      expect(sendMsgSpy).toHaveBeenCalled();
+
+      // 4c. local/main routing
+      messagesEl.dispatchEvent(
+        new CustomEvent("shadow-claw-a2ui-action", {
+          detail: {
+            groupId: "main",
+            action: {
+              surfaceId: "surf-3",
+              actionId: "act-3",
+              dataModel: { ready: true },
+            },
+          },
+        }),
+      );
+      await new Promise((r) => setTimeout(r, 10));
+      expect(sendMsgSpy).toHaveBeenCalledTimes(2);
+
+      // 5. attach-files and restore-chat button clicks
+      const attachInput = root.querySelector(
+        ".chat__attachment-input",
+      ) as HTMLInputElement;
+      const attachClickSpy = jest.spyOn(attachInput, "click");
+      const attachBtn = root.querySelector(
+        '[data-action="attach-files"]',
+      ) as HTMLElement;
+      attachBtn?.click();
+      expect(attachClickSpy).toHaveBeenCalled();
+
+      const restoreInput = root.querySelector(
+        ".chat__restore-input",
+      ) as HTMLInputElement;
+      const restoreClickSpy = jest.spyOn(restoreInput, "click");
+      const restoreBtn = root.querySelector(
+        '[data-action="restore-chat"]',
+      ) as HTMLElement;
+      restoreBtn?.click();
+      expect(restoreClickSpy).toHaveBeenCalled();
+
+      // 6. input change events
+      const queueSpy = jest
+        .spyOn(chatInstance, "queueSelectedFiles")
+        .mockResolvedValue(undefined);
+      attachInput.dispatchEvent(new Event("change"));
+      expect(queueSpy).toHaveBeenCalled();
+
+      const restoreSpy = jest
+        .spyOn(chatInstance, "restoreChat")
+        .mockResolvedValue(undefined);
+      restoreInput.dispatchEvent(new Event("change"));
+      expect(restoreSpy).toHaveBeenCalled();
+    });
+
+    it("handles downloadChat, openAttachment, persistInputAreaHeight, and renderInlineAttachmentPreview edge cases", async () => {
+      // 1. downloadChat without db
+      chatInstance.db = null;
+      await chatInstance.downloadChat();
+
+      // 2. downloadChat with db but exportChatData throwing non-error
+      chatInstance.db = mockDbInstance;
+      const exportMod: any = await import("../../db/export-chat-data.js");
+      exportMod.exportChatData.mockRejectedValueOnce("export string error");
+      await chatInstance.downloadChat();
+
+      // 3. openAttachment without db or path
+      chatInstance.db = null;
+      await chatInstance.openAttachment("main", { id: "1" } as any);
+      chatInstance.db = mockDbInstance;
+      await chatInstance.openAttachment("main", { id: "1", path: "" } as any);
+
+      // 4. openAttachment when fileViewerStore throws non-error
+      const fileViewerMod: any = await import("../../stores/file-viewer.js");
+      fileViewerMod.fileViewerStore.openFile = jest
+        .fn()
+        .mockRejectedValue("open failure string");
+      await chatInstance.openAttachment("main", {
+        id: "1",
+        path: "test.txt",
+      } as any);
+
+      // 5. persistInputAreaHeight without db or when setConfig throws
+      chatInstance.db = null;
+      await chatInstance.persistInputAreaHeight(150);
+
+      chatInstance.db = {
+        transaction: jest.fn().mockImplementation(() => {
+          throw new Error("persist failure");
+        }),
+      };
+      await chatInstance.persistInputAreaHeight(150);
+
+      // 6. renderInlineAttachmentPreview without db or path
+      chatInstance.db = null;
+      expect(
+        await chatInstance.renderInlineAttachmentPreview(
+          {} as any,
+          { path: "a.png" } as any,
+        ),
+      ).toBeNull();
+      chatInstance.db = mockDbInstance;
+      expect(
+        await chatInstance.renderInlineAttachmentPreview(
+          {} as any,
+          { path: "" } as any,
+        ),
+      ).toBeNull();
+
+      // 7. renderInlineAttachmentPreview when readGroupFileBytes throws string
+      const readMod: any =
+        await import("../../storage/read-group-file-bytes.js");
+      readMod.readGroupFileBytes.mockRejectedValueOnce("read string error");
+      const errEl = await chatInstance.renderInlineAttachmentPreview(
+        { groupId: "grp" } as any,
+        { path: "pic.png", fileName: "pic.png" } as any,
+      );
+      expect(errEl?.textContent).toBe("Attachment preview unavailable.");
+
+      // 8. renderInlineAttachmentPreview success without mimeType
+      readMod.readGroupFileBytes.mockResolvedValueOnce(
+        new Uint8Array([1, 2, 3]),
+      );
+      const previewEl = await chatInstance.renderInlineAttachmentPreview(
+        { groupId: "grp" } as any,
+        { path: "pic.png", fileName: "pic.png" } as any,
+      );
+      expect(previewEl).not.toBeNull();
+      expect(previewEl?.className).toBe("chat__attachment-preview-btn");
+      previewEl?.click();
     });
   });
 });

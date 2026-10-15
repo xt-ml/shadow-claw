@@ -1,16 +1,7 @@
 import { jest } from "@jest/globals";
-import {
-  getHuggingFaceDomain,
-  isRemoteEnvironment,
-} from "./transformers-js-utils.js";
+import { getHuggingFaceDomain } from "./transformers-js-utils.js";
 
 describe("transformers-js-utils", () => {
-  describe("isRemoteEnvironment", () => {
-    it("returns false in local jsdom environment", () => {
-      expect(isRemoteEnvironment()).toBe(false);
-    });
-  });
-
   describe("getHuggingFaceDomain", () => {
     const originalFetch = globalThis.fetch;
 

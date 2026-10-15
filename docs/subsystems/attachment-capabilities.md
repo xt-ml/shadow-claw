@@ -2,7 +2,7 @@
 
 > MIME-aware attachment handling and modality detection for native vs fallback delivery.
 
-**Source:** `src/content/buildAttachmentContentBlocks.ts` · `src/content/attachment-capabilities.ts` · `src/content/message-attachments.ts`
+**Source:** `src/content/build-attachment-content-blocks.ts` · `src/content/attachment-capabilities.ts` · `src/content/message-attachments.ts`
 
 ## Overview
 

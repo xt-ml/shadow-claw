@@ -581,4 +581,149 @@ describe("shadow-claw-terminal", () => {
 
     expect(screen.scrollTop).toBe(760);
   });
+
+  it("handles output buffer truncation when exceeding MAX_OUTPUT_LENGTH", async () => {
+    const orchestrator = createOrchestratorStub({ ready: true });
+    const element = new ShadowClawTerminal();
+    element.orchestrator = orchestrator;
+    document.body.appendChild(element);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // Append 150K characters
+    element.appendOutput("x".repeat(150_000));
+    expect(element.outputBuffer.length).toBe(80_000);
+
+    document.body.removeChild(element);
+  });
+
+  it("covers startTerminal and attachSession branches without orchestrator and with errors", async () => {
+    const element = new ShadowClawTerminal();
+    document.body.appendChild(element);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // attachSession without orchestrator
+    element.orchestrator = null;
+    element.attachSession();
+
+    // startTerminal without orchestrator
+    await element.startTerminal();
+    const statusEl = element.shadowRoot?.querySelector(
+      '[data-role="status"]',
+    ) as HTMLElement;
+    expect(statusEl.textContent).toContain("Terminal bridge is unavailable.");
+
+    // startTerminal with status error
+    element.orchestrator = createOrchestratorStub(null) as any;
+    element.vmStatus = {
+      ready: false,
+      booting: false,
+      bootAttempted: true,
+      error: "Kernel panic",
+    };
+    await element.startTerminal();
+
+    // startTerminal when connectedToWorkerTerminal is true
+    element.vmStatus = {
+      ready: false,
+      booting: false,
+      bootAttempted: false,
+      error: null,
+    };
+    element.connectedToWorkerTerminal = true;
+    await element.startTerminal();
+
+    document.body.removeChild(element);
+  });
+
+  it("covers updateStatus variants and non-string error event listener", async () => {
+    const orchestrator = createOrchestratorStub({ ready: false });
+    const element = new ShadowClawTerminal();
+    element.orchestrator = orchestrator;
+    document.body.appendChild(element);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const statusEl = element.shadowRoot?.querySelector(
+      '[data-role="status"]',
+    ) as HTMLElement;
+    const input = element.shadowRoot?.querySelector(
+      '[data-role="input"]',
+    ) as HTMLInputElement;
+
+    // 1. ready true but connectedToWorkerTerminal false
+    element.connectedToWorkerTerminal = false;
+    element.updateStatus({
+      ready: true,
+      booting: false,
+      bootAttempted: true,
+      error: null,
+    });
+    expect(statusEl.textContent).toBe("WebVM ready. Connecting terminal...");
+    expect(input.placeholder).toBe("Connecting to WebVM terminal...");
+
+    // 2. error state
+    element.updateStatus({
+      ready: false,
+      booting: false,
+      bootAttempted: true,
+      error: "Boot failed",
+    });
+    expect(statusEl.textContent).toBe("WebVM unavailable: Boot failed");
+    expect(input.placeholder).toBe("WebVM unavailable");
+
+    // 3. booting true
+    element.updateStatus({
+      ready: false,
+      booting: true,
+      bootAttempted: true,
+      error: null,
+    });
+    expect(statusEl.textContent).toBe("Booting WebVM...");
+    expect(input.placeholder).toBe("Booting WebVM...");
+
+    // 4. waiting for webvm (booting false, error null, ready false)
+    element.updateStatus({
+      ready: false,
+      booting: false,
+      bootAttempted: false,
+      error: null,
+    });
+    expect(statusEl.textContent).toBe("Waiting for WebVM...");
+
+    // 5. non-string error event
+    orchestrator.events.emit("vm-terminal-error", { error: null as any });
+    expect(element.vmStatus.error).toBe("WebVM terminal error");
+
+    // 6. updateStatus with missing status elements
+    const fakeRoot = document.createElement("div");
+    Object.defineProperty(element, "shadowRoot", {
+      value: fakeRoot,
+      configurable: true,
+    });
+    element.updateStatus({
+      ready: true,
+      booting: false,
+      bootAttempted: true,
+      error: null,
+    });
+
+    // 7. updateStatus with null shadowRoot
+    Object.defineProperty(element, "shadowRoot", {
+      value: null,
+      configurable: true,
+    });
+    element.updateStatus({
+      ready: true,
+      booting: false,
+      bootAttempted: true,
+      error: null,
+    });
+    element.bindEventListeners();
+    element.renderOutput();
+
+    // 8. connectOrchestrator with null orchestrator
+    element.orchestrator = null;
+    element.connectOrchestrator();
+
+    document.body.removeChild(element);
+  });
 });

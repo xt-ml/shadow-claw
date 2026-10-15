@@ -88,11 +88,11 @@ jest.unstable_mockModule("../../../config/config.js", () => ({
   },
 }));
 
-jest.unstable_mockModule("../../../db/setConfig.js", () => ({
+jest.unstable_mockModule("../../../db/set-config.js", () => ({
   setConfig: jest.fn<any>().mockResolvedValue(undefined),
 }));
 
-jest.unstable_mockModule("../../../db/getConfig.js", () => ({
+jest.unstable_mockModule("../../../db/get-config.js", () => ({
   getConfig: jest.fn<any>().mockResolvedValue(undefined),
 }));
 
@@ -147,8 +147,8 @@ jest.unstable_mockModule("../../../security/trusted-types.js", () => ({
   toTrustedScriptUrl: jest.fn((url: string) => url),
 }));
 
-const { setConfig } = await import("../../../db/setConfig.js");
-const { getConfig } = await import("../../../db/getConfig.js");
+const { setConfig } = await import("../../../db/set-config.js");
+const { getConfig } = await import("../../../db/get-config.js");
 const { showError } = await import("../../../ui/toast.js");
 const { setSanitizedHtml } = await import("../../../security/trusted-types.js");
 const { ShadowClawGit } = await import("./shadow-claw-git.js");
@@ -419,7 +419,7 @@ describe("shadow-claw-git", () => {
   });
 
   it("handles saveGitSettings with custom proxy and author info", async () => {
-    const { setConfig } = await import("../../../db/setConfig.js");
+    const { setConfig } = await import("../../../db/set-config.js");
     const el = new ShadowClawGit();
     document.body.appendChild(el);
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -541,8 +541,8 @@ describe("shadow-claw-git", () => {
   });
 
   it("migrates legacy account configuration when accounts list is empty", async () => {
-    const { getConfig } = await import("../../../db/getConfig.js");
-    const { setConfig } = await import("../../../db/setConfig.js");
+    const { getConfig } = await import("../../../db/get-config.js");
+    const { setConfig } = await import("../../../db/set-config.js");
 
     (getConfig as any).mockImplementation(async (_db: any, key: string) => {
       if (key === "git_token") return "legacy-enc-token";
@@ -581,6 +581,743 @@ describe("shadow-claw-git", () => {
     await el.deleteAccount("single-acc");
     expect(el.accounts).toHaveLength(0);
     expect(el.defaultAccountId).toBe("");
+
+    document.body.removeChild(el);
+  });
+
+  it("handles settings-action event routing on account list", async () => {
+    const el = new ShadowClawGit();
+    document.body.appendChild(el);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    el.db = {} as any;
+
+    const showFormSpy = jest
+      .spyOn(el, "showAccountForm")
+      .mockImplementation(() => {});
+    const deleteSpy = jest
+      .spyOn(el, "deleteAccount")
+      .mockResolvedValue(undefined as any);
+    const defaultSpy = jest
+      .spyOn(el, "setDefaultAccount")
+      .mockResolvedValue(undefined as any);
+
+    const listEl = el.shadowRoot?.querySelector(
+      '[data-region="account-list"]',
+    ) as HTMLElement;
+
+    // 1. edit-account
+    listEl.dispatchEvent(
+      new CustomEvent("settings-action", {
+        detail: { action: "edit-account", id: "acc-1" },
+        bubbles: true,
+      }),
+    );
+    expect(showFormSpy).toHaveBeenCalledWith("acc-1");
+
+    // 2. delete-account
+    listEl.dispatchEvent(
+      new CustomEvent("settings-action", {
+        detail: { action: "delete-account", id: "acc-2" },
+        bubbles: true,
+      }),
+    );
+    expect(deleteSpy).toHaveBeenCalledWith("acc-2");
+
+    // 3. set-default
+    listEl.dispatchEvent(
+      new CustomEvent("settings-action", {
+        detail: { action: "set-default", id: "acc-3" },
+        bubbles: true,
+      }),
+    );
+    expect(defaultSpy).toHaveBeenCalledWith("acc-3");
+
+    // 4. missing id or invalid detail
+    listEl.dispatchEvent(
+      new CustomEvent("settings-action", {
+        detail: { action: "set-default", id: "" },
+        bubbles: true,
+      }),
+    );
+    listEl.dispatchEvent(
+      new CustomEvent("settings-action", { detail: null, bubbles: true }),
+    );
+
+    document.body.removeChild(el);
+  });
+
+  it("renders account list badges for different credentials and auth modes", async () => {
+    const el = new ShadowClawGit();
+    document.body.appendChild(el);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    el.defaultAccountId = "acc-oauth-reauth";
+    el.accounts = [
+      {
+        id: "acc-oauth-reauth",
+        label: "Reauth Acct",
+        hostPattern: "github.com",
+        token: "enc-tok",
+        authMode: "oauth",
+        oauthReauthRequired: true,
+      },
+      {
+        id: "acc-oauth-ok",
+        label: "OK Acct",
+        hostPattern: "gitlab.com",
+        token: "enc-tok",
+        authMode: "oauth",
+        oauthProviderId: "gitlab",
+      },
+      {
+        id: "acc-user-only",
+        label: "User Acct",
+        hostPattern: "bitbucket.org",
+        username: "developer",
+      },
+      {
+        id: "acc-none",
+        label: "Empty Acct",
+        hostPattern: "unknown.org",
+      },
+    ] as any;
+
+    el.renderAccountList();
+
+    const listEl = el.shadowRoot?.querySelector(
+      '[data-region="account-list"]',
+    ) as HTMLElement;
+    const cards = listEl.querySelectorAll("shadow-claw-card");
+    expect(cards).toHaveLength(4);
+
+    expect(cards[0].getAttribute("meta")).toContain("Reconnect required");
+    expect(cards[0].hasAttribute("highlight")).toBe(true);
+
+    expect(cards[1].getAttribute("meta")).toContain(
+      "OAuth token saved (gitlab)",
+    );
+
+    expect(cards[2].getAttribute("meta")).toContain("Username: developer");
+
+    expect(cards[3].getAttribute("meta")).toContain("No credentials");
+
+    document.body.removeChild(el);
+  });
+
+  it("handles host pattern input for provider auto-detection", async () => {
+    const el = new ShadowClawGit();
+    document.body.appendChild(el);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    el.accounts = [
+      { id: "acc-azure", hostPattern: "dev.azure.com", label: "Azure" } as any,
+      { id: "acc-gitlab", hostPattern: "gitlab.com", label: "GitLab" } as any,
+    ];
+
+    // azure devops auto-detection
+    el.showAccountForm("acc-azure");
+    const slot1 = el.shadowRoot?.querySelector(
+      '[data-region="account-form-slot"]',
+    ) as HTMLElement;
+    const providerSelect1 = slot1.querySelector(
+      '[data-field="acct-oauth-provider"]',
+    ) as HTMLSelectElement;
+    expect(providerSelect1.value).toBe("azure_devops");
+
+    // gitlab auto-detection
+    el.showAccountForm("acc-gitlab");
+    const slot2 = el.shadowRoot?.querySelector(
+      '[data-region="account-form-slot"]',
+    ) as HTMLElement;
+    const providerSelect2 = slot2.querySelector(
+      '[data-field="acct-oauth-provider"]',
+    ) as HTMLSelectElement;
+    expect(providerSelect2.value).toBe("gitlab");
+
+    document.body.removeChild(el);
+  });
+
+  it("handles connectOAuthFromForm validation, errors, and success", async () => {
+    const el = new ShadowClawGit();
+    document.body.appendChild(el);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const { showError, showSuccess } = await import("../../../ui/toast.js");
+
+    el.showAccountForm("new");
+    const slot = el.shadowRoot?.querySelector(
+      '[data-region="account-form-slot"]',
+    ) as HTMLElement;
+    const providerSelect = slot.querySelector(
+      '[data-field="acct-oauth-provider"]',
+    ) as HTMLSelectElement;
+    const clientIdInput = slot.querySelector(
+      '[data-field="acct-oauth-client-id"]',
+    ) as HTMLInputElement;
+
+    // 1. Missing provider
+    providerSelect.value = "";
+    clientIdInput.value = "client-1";
+    await el.connectOAuthFromForm(slot);
+    expect(showError).toHaveBeenCalledWith("OAuth provider is required.", 4000);
+
+    // 2. Missing client ID
+    providerSelect.value = "github";
+    clientIdInput.value = "";
+    await el.connectOAuthFromForm(slot);
+    expect(showError).toHaveBeenCalledWith(
+      "OAuth client ID is required.",
+      4000,
+    );
+
+    clientIdInput.value = "valid-client-id";
+
+    const originalFetch = globalThis.fetch;
+    const originalOpen = window.open;
+    window.open = jest.fn() as any;
+
+    // 3. Authorize fails
+    globalThis.fetch = jest.fn<any>().mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({ error: "App not found" }),
+    });
+    await el.connectOAuthFromForm(slot);
+    expect(showError).toHaveBeenCalledWith(
+      expect.stringContaining("App not found"),
+      6000,
+    );
+
+    // 4. Session polling returns error
+    globalThis.fetch = jest
+      .fn<any>()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          state: "state-git-1",
+          authorizeUrl: "https://auth.git",
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: "error", error: "Access denied by user" }),
+      });
+    await el.connectOAuthFromForm(slot);
+    expect(showError).toHaveBeenCalledWith(
+      expect.stringContaining("Access denied by user"),
+      6000,
+    );
+
+    // 5. Successful flow
+    globalThis.fetch = jest
+      .fn<any>()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          state: "state-git-1",
+          authorizeUrl: "https://auth.git",
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: "authorized" }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          accessToken: "git-token-xyz",
+          refreshToken: "git-refresh-abc",
+          expiresIn: 3600,
+          scope: "repo read:user",
+        }),
+      });
+    await el.connectOAuthFromForm(slot);
+    expect(showSuccess).toHaveBeenCalledWith("OAuth connected", 3000);
+    expect(el.pendingOauthResult?.accessToken).toBe("git-token-xyz");
+
+    window.open = originalOpen;
+    globalThis.fetch = originalFetch;
+    document.body.removeChild(el);
+  });
+
+  it("handles saveAccountForm OAuth validation, single account default, and error handling", async () => {
+    const el = new ShadowClawGit();
+    document.body.appendChild(el);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    el.db = {} as any;
+    el.accounts = [];
+
+    const { showError } = await import("../../../ui/toast.js");
+
+    el.showAccountForm("new");
+    const slot = el.shadowRoot?.querySelector(
+      '[data-region="account-form-slot"]',
+    ) as HTMLElement;
+
+    const labelInput = slot.querySelector(
+      '[data-field="acct-label"]',
+    ) as HTMLInputElement;
+    const hostInput = slot.querySelector(
+      '[data-field="acct-host"]',
+    ) as HTMLInputElement;
+    const authModeSelect = slot.querySelector(
+      '[data-field="acct-auth-mode"]',
+    ) as HTMLSelectElement;
+    const providerSelect = slot.querySelector(
+      '[data-field="acct-oauth-provider"]',
+    ) as HTMLSelectElement;
+    const clientIdInput = slot.querySelector(
+      '[data-field="acct-oauth-client-id"]',
+    ) as HTMLInputElement;
+
+    labelInput.value = "My GitHub";
+    hostInput.value = "github.com";
+    authModeSelect.value = "oauth";
+
+    // 1. Missing provider in OAuth mode
+    providerSelect.value = "";
+    await el.saveAccountForm();
+    expect(showError).toHaveBeenCalledWith(
+      "OAuth provider is required for OAuth mode.",
+      4000,
+    );
+
+    // 2. Missing client ID in OAuth mode
+    providerSelect.value = "github";
+    clientIdInput.value = "";
+    await el.saveAccountForm();
+    expect(showError).toHaveBeenCalledWith(
+      "OAuth client ID is required for OAuth mode.",
+      4000,
+    );
+
+    // 3. Missing token in OAuth mode
+    clientIdInput.value = "client-123";
+    el.pendingOauthResult = null;
+    await el.saveAccountForm();
+    expect(showError).toHaveBeenCalledWith(
+      "Connect OAuth first to obtain an access token for this account.",
+      5000,
+    );
+
+    // 4. Valid OAuth save with pending result
+    el.pendingOauthResult = {
+      providerId: "github",
+      accessToken: "access-token-999",
+      refreshToken: "refresh-token-888",
+      expiresAt: Date.now() + 3600000,
+      scope: "repo",
+      tokenType: "Bearer",
+    };
+
+    await el.saveAccountForm();
+    expect(el.accounts).toHaveLength(1);
+    expect(el.accounts[0].authMode).toBe("oauth");
+    expect(el.defaultAccountId).toBe(el.accounts[0].id);
+
+    // 5. Updating an existing account with OAuth secret and configured scopes
+    el.showAccountForm(el.accounts[0].id);
+    const secretInput = slot.querySelector(
+      '[data-field="acct-oauth-client-secret"]',
+    ) as HTMLInputElement;
+    const scopeInput = slot.querySelector(
+      '[data-field="acct-oauth-scope"]',
+    ) as HTMLInputElement;
+    secretInput.value = "new-client-secret";
+    scopeInput.value = "read:user write:repo";
+
+    el.pendingOauthResult = {
+      providerId: "github",
+      accessToken: "new-access-token",
+      refreshToken: "new-refresh-token",
+      expiresAt: Date.now() + 3600000,
+      scope: "", // empty so it falls back to configuredScopes
+      tokenType: "Bearer",
+    };
+
+    await el.saveAccountForm();
+    expect(el.accounts[0].scopes).toEqual(["read:user", "write:repo"]);
+
+    // 6. Error handling in saveAccountForm
+    const { encryptValue } = await import("../../../security/crypto.js");
+    (encryptValue as jest.Mock).mockRejectedValueOnce(
+      new Error("Encrypt failure"),
+    );
+    el.showAccountForm("new");
+    (
+      slot.querySelector('[data-field="acct-label"]') as HTMLInputElement
+    ).value = "Crash Account";
+    (slot.querySelector('[data-field="acct-host"]') as HTMLInputElement).value =
+      "crash.com";
+    (
+      slot.querySelector('[data-field="acct-token"]') as HTMLInputElement
+    ).value = "crash-token";
+    await el.saveAccountForm();
+    expect(showError).toHaveBeenCalledWith(
+      expect.stringContaining("Error saving account: Encrypt failure"),
+      6000,
+    );
+
+    document.body.removeChild(el);
+  });
+
+  it("handles showAccountForm placeholders and auth fields visibility toggling", async () => {
+    const el = new ShadowClawGit();
+    document.body.appendChild(el);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    el.accounts = [
+      {
+        id: "acc-rich",
+        label: "Rich Account",
+        hostPattern: "github.com",
+        authMode: "oauth",
+        token: "tok-1",
+        oauthClientSecret: "encrypted-secret",
+        password: "encrypted-password",
+        oauthReauthRequired: true,
+      },
+      {
+        id: "acc-saved-tok",
+        label: "Saved Tok",
+        hostPattern: "github.com",
+        authMode: "oauth",
+        token: "tok-2",
+        oauthReauthRequired: false,
+      },
+    ] as any;
+
+    // Rich account form placeholders
+    el.showAccountForm("acc-rich");
+    const slot = el.shadowRoot?.querySelector(
+      '[data-region="account-form-slot"]',
+    ) as HTMLElement;
+    expect(slot.innerHTML).toContain("Reconnect required");
+    expect(slot.innerHTML).toContain("•••••••••••• (Saved)");
+
+    // Saved token account form
+    el.showAccountForm("acc-saved-tok");
+    expect(slot.innerHTML).toContain("OAuth token already saved");
+
+    // Toggle auth mode visibility
+    const authModeSelect = slot.querySelector(
+      '[data-field="acct-auth-mode"]',
+    ) as HTMLSelectElement;
+    const oauthRegion = slot.querySelector(
+      '[data-region="oauth-fields"]',
+    ) as HTMLElement;
+    const patRegion = slot.querySelector(
+      '[data-region="pat-fields"]',
+    ) as HTMLElement;
+
+    authModeSelect.value = "token";
+    authModeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(patRegion.style.display).toBe("block");
+    expect(oauthRegion.style.display).toBe("none");
+
+    authModeSelect.value = "oauth";
+    authModeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(patRegion.style.display).toBe("none");
+    expect(oauthRegion.style.display).toBe("block");
+
+    // Toggle custom proxy fields visibility
+    const root = el.shadowRoot!;
+    const customRadio = root.querySelector(
+      '[data-setting="git-proxy-custom"]',
+    ) as HTMLInputElement;
+    const localRadio = root.querySelector(
+      '[data-setting="git-proxy-local"]',
+    ) as HTMLInputElement;
+    const customField = root.querySelector(
+      '[data-region="git-custom-proxy-field"]',
+    ) as HTMLElement;
+
+    customRadio.checked = true;
+    customRadio.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(customField.style.display).toBe("block");
+
+    localRadio.checked = true;
+    customRadio.checked = false;
+    localRadio.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(customField.style.display).toBe("none");
+
+    document.body.removeChild(el);
+  });
+
+  it("handles saveGitSettings fallback defaults and error handling", async () => {
+    const el = new ShadowClawGit();
+    document.body.appendChild(el);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    el.db = {} as any;
+
+    const { setConfig } = await import("../../../db/set-config.js");
+    const { showError } = await import("../../../ui/toast.js");
+
+    const root = el.shadowRoot!;
+    const nameInput = root.querySelector(
+      '[data-setting="git-author-name-input"]',
+    ) as HTMLInputElement;
+    const emailInput = root.querySelector(
+      '[data-setting="git-author-email-input"]',
+    ) as HTMLInputElement;
+
+    // Empty name and email fallback to defaults
+    nameInput.value = "";
+    emailInput.value = "";
+    await el.saveGitSettings();
+    expect(setConfig).toHaveBeenCalledWith(
+      el.db,
+      "git_author_name",
+      "ShadowClaw",
+    );
+    expect(setConfig).toHaveBeenCalledWith(
+      el.db,
+      "git_author_email",
+      "agent@example.com",
+    );
+
+    // setConfig throwing error
+    (setConfig as jest.Mock).mockRejectedValueOnce(
+      new Error("Config DB crash"),
+    );
+    await el.saveGitSettings();
+    expect(showError).toHaveBeenCalledWith(
+      "Error saving Git settings: Config DB crash",
+      6000,
+    );
+
+    document.body.removeChild(el);
+  });
+
+  it("handles saveGitSettings proxy modes, author settings, and updateGitWarning", async () => {
+    const el = new ShadowClawGit();
+    document.body.appendChild(el);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    el.db = {} as any;
+
+    const { setConfig } = await import("../../../db/set-config.js");
+    const { orchestratorStore } =
+      await import("../../../stores/orchestrator.js");
+
+    const root = el.shadowRoot!;
+    const customRadio = root.querySelector(
+      '[data-setting="git-proxy-custom"]',
+    ) as HTMLInputElement;
+    const publicRadio = root.querySelector(
+      '[data-setting="git-proxy-public"]',
+    ) as HTMLInputElement;
+    const localRadio = root.querySelector(
+      '[data-setting="git-proxy-local"]',
+    ) as HTMLInputElement;
+    const customUrlInput = root.querySelector(
+      '[data-setting="git-proxy-url-input"]',
+    ) as HTMLInputElement;
+    const nameInput = root.querySelector(
+      '[data-setting="git-author-name-input"]',
+    ) as HTMLInputElement;
+    const emailInput = root.querySelector(
+      '[data-setting="git-author-email-input"]',
+    ) as HTMLInputElement;
+
+    // 1. Custom proxy mode
+    customRadio.checked = true;
+    publicRadio.checked = false;
+    localRadio.checked = false;
+    customUrlInput.value = "https://my-proxy.com";
+    nameInput.value = "Custom Dev";
+    emailInput.value = "dev@custom.com";
+
+    await el.saveGitSettings();
+    expect(setConfig).toHaveBeenCalledWith(el.db, "git_cors_proxy", "custom");
+    expect(orchestratorStore.setGitProxyUrl).toHaveBeenCalledWith(
+      el.db,
+      "https://my-proxy.com",
+    );
+    expect(setConfig).toHaveBeenCalledWith(
+      el.db,
+      "git_author_name",
+      "Custom Dev",
+    );
+    expect(setConfig).toHaveBeenCalledWith(
+      el.db,
+      "git_author_email",
+      "dev@custom.com",
+    );
+
+    // 2. Local proxy mode
+    localRadio.checked = true;
+    customRadio.checked = false;
+    publicRadio.checked = false;
+    await el.saveGitSettings();
+    expect(setConfig).toHaveBeenCalledWith(el.db, "git_cors_proxy", "local");
+
+    // 3. updateGitWarning when publicRadio is checked with accounts having tokens
+    el.accounts = [{ id: "a1", token: "tok" } as any];
+    publicRadio.checked = true;
+    await el.updateGitWarning();
+    const warningEl = root.querySelector(
+      '[data-setting="git-proxy-warning"]',
+    ) as HTMLElement;
+    expect(warningEl.style.display).toBe("block");
+
+    // Public unchecked
+    publicRadio.checked = false;
+    await el.updateGitWarning();
+    expect(warningEl.style.display).toBe("none");
+
+    document.body.removeChild(el);
+  });
+
+  it("handles null db guards and setDefaultAccount error catch", async () => {
+    const el = new ShadowClawGit();
+    document.body.appendChild(el);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // null db guards
+    el.db = null;
+    await el.deleteAccount("acc-1");
+    await el.migrateLegacyAccount();
+    await el.saveAccountForm();
+    await el.saveGitSettings();
+    await el.setDefaultAccount("acc-1");
+
+    // setDefaultAccount error handling
+    el.db = {} as any;
+    const { setConfig } = await import("../../../db/set-config.js");
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    (setConfig as jest.Mock).mockRejectedValueOnce(
+      new Error("Set default error"),
+    );
+    await el.setDefaultAccount("acc-1");
+    expect(warnSpy).toHaveBeenCalledWith(
+      "Error setting default account:",
+      expect.any(Error),
+    );
+    warnSpy.mockRestore();
+
+    document.body.removeChild(el);
+  });
+
+  it("handles connectOAuthFromForm timeout and custom proxy URL fallback", async () => {
+    const el = new ShadowClawGit();
+    document.body.appendChild(el);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    el.db = {} as any;
+
+    const { showError } = await import("../../../ui/toast.js");
+
+    el.showAccountForm("new");
+    const slot = el.shadowRoot?.querySelector(
+      '[data-region="account-form-slot"]',
+    ) as HTMLElement;
+    (
+      slot.querySelector(
+        '[data-field="acct-oauth-provider"]',
+      ) as HTMLSelectElement
+    ).value = "github";
+    (
+      slot.querySelector(
+        '[data-field="acct-oauth-client-id"]',
+      ) as HTMLInputElement
+    ).value = "client-id";
+    (
+      slot.querySelector('[data-field="acct-oauth-scope"]') as HTMLInputElement
+    ).value = "repo, user";
+
+    const originalFetch = globalThis.fetch;
+    const originalOpen = window.open;
+    window.open = jest.fn() as any;
+
+    // Mock setTimeout so loop runs synchronously and terminates after 60 iterations
+    globalThis.fetch = jest
+      .fn<any>()
+      .mockImplementation(async (url: string) => {
+        if (url.includes("/oauth/authorize")) {
+          return {
+            ok: true,
+            json: async () => ({
+              state: "s-timeout",
+              authorizeUrl: "http://example.com",
+            }),
+          };
+        }
+        if (url.includes("/oauth/session")) {
+          return {
+            ok: true,
+            json: async () => ({ status: "pending" }),
+          };
+        }
+        return { ok: false };
+      });
+
+    const origSetTimeout = globalThis.setTimeout;
+    globalThis.setTimeout = ((fn: any) => fn()) as any;
+
+    await el.connectOAuthFromForm(slot);
+    expect(showError).toHaveBeenCalledWith(
+      expect.stringContaining("OAuth authorization timed out"),
+      6000,
+    );
+
+    globalThis.setTimeout = origSetTimeout;
+    window.open = originalOpen;
+    globalThis.fetch = originalFetch;
+
+    // Custom proxy URL fallback when input is empty
+    const root = el.shadowRoot!;
+    const customRadio = root.querySelector(
+      '[data-setting="git-proxy-custom"]',
+    ) as HTMLInputElement;
+    const customUrlInput = root.querySelector(
+      '[data-setting="git-proxy-url-input"]',
+    ) as HTMLInputElement;
+    const { orchestratorStore } =
+      await import("../../../stores/orchestrator.js");
+    customRadio.checked = true;
+    customUrlInput.value = "";
+    await el.saveGitSettings();
+    expect(orchestratorStore.setGitProxyUrl).toHaveBeenCalledWith(
+      el.db,
+      "/git-proxy",
+    );
+
+    document.body.removeChild(el);
+  });
+
+  it("handles OAuth account without providerId and null shadowRoot guards", async () => {
+    const el = new ShadowClawGit();
+    document.body.appendChild(el);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // Account with oauth but no oauthProviderId
+    el.accounts = [
+      {
+        id: "acc-oauth-no-provider",
+        label: "No Provider Acct",
+        hostPattern: "custom.git",
+        token: "enc-tok",
+        authMode: "oauth",
+        oauthProviderId: "",
+      } as any,
+    ];
+    el.renderAccountList();
+    const listEl = el.shadowRoot?.querySelector(
+      '[data-region="account-list"]',
+    ) as HTMLElement;
+    const card = listEl.querySelector("shadow-claw-card");
+    expect(card?.getAttribute("meta")).toBe("custom.git · OAuth token saved");
+
+    // null shadowRoot guards
+    Object.defineProperty(el, "shadowRoot", {
+      get: () => null,
+      configurable: true,
+    });
+    el.hideAccountForm();
+    el.renderAccountList();
+    el.showAccountForm("new");
+    el.updateCustomProxyVisibility();
+    await el.saveAccountForm();
+    await el.saveGitSettings();
+    await el.updateGitWarning();
 
     document.body.removeChild(el);
   });

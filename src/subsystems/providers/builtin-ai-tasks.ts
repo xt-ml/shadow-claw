@@ -12,9 +12,9 @@
  * when native browser support is not present.
  */
 
-import { createModelCacheFetch } from "./utils/createModelCacheFetch.js";
+import { createModelCacheFetch } from "./utils/create-model-cache-fetch.js";
 import { getDb } from "../../db/db.js";
-import { getConfig } from "../../db/getConfig.js";
+import { getConfig } from "../../db/get-config.js";
 import {
   CONFIG_KEYS,
   DEFAULT_PROMPT_API_FALLBACK_MODEL,

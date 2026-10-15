@@ -1,30 +1,12 @@
 {
-  "extends": "./tsconfig.base.json",
-  "compilerOptions": {
-    "outDir": "out",
-    "rootDir": "src",
-    "lib": [
-      "ESNext",
-      "DOM"
-    ]
-  },
-  "include": [
-    "src/**/*.css",
-    "src/**/*.html",
-    "src/**/*.ts",
-  ],
-  "exclude": [
-    "**/*.test.ts",
-    "**/*.stories.ts",
-    "coverage",
-    "dist",
-    "e2e",
-    "node_modules",
-    "src/server",
-    "src/cli",
-    "src/worker",
-    "src/service-worker/fetch-proxy.ts",
-    "src/service-worker/push-handler.ts",
-    "src/service-worker/share-target.ts"
+  "files": [],
+  "references": [
+    { "path": "./configs/tsconfig/app.json" },
+    { "path": "./configs/tsconfig/server.json" },
+    { "path": "./configs/tsconfig/cli.json" },
+    { "path": "./configs/tsconfig/worker.json" },
+    { "path": "./configs/tsconfig/service-worker.json" },
+    { "path": "./configs/tsconfig/lib.json" },
+    { "path": "./configs/tsconfig/test.json" }
   ]
 }

@@ -2,7 +2,7 @@
 
 > Workspace-relative pages rendering and sidebar navigation.
 
-**Source:** `src/components/shadow-claw-pages/shadow-claw-pages.ts` · `src/stores/orchestrator.ts` · `src/storage/staticMainSite.ts` · `src/storage/suppressedPages.ts`
+**Source:** `src/components/shadow-claw-pages/shadow-claw-pages.ts` · `src/stores/orchestrator.ts` · `src/storage/static-main-site.ts` · `src/storage/suppressed-pages.ts`
 
 ## Overview
 
@@ -45,7 +45,7 @@ The list of saved pages, default pinned page, and active page are managed centra
 - `_defaultPinnedPage`: The default pinned page reference set by the user or top item.
 - `effectiveDefaultPage`: Computed property returning the top item in the pages list or `null`.
 
-### Static Main Site Seeding (`src/storage/staticMainSite.ts`)
+### Static Main Site Seeding (`src/storage/static-main-site.ts`)
 
 During store initialization, `seedStaticMainSite()` seeds default pages from the special `pages/main/` directory. When that directory is absent, the build and runtime use the built-in `index.html` and `MEMORY.md` pages instead:
 
@@ -55,7 +55,7 @@ During store initialization, `seedStaticMainSite()` seeds default pages from the
 4. **Suppression & Deletion Respect**: Ensures `index.html`, `MEMORY.md`, and default static workspace pages exist unless marked as suppressed. Subsequent reloads skip redundant re-seeding unless storage is cleared or a deployment purge is triggered via `purgeId`. Note that pages containing the `--purge-pages` flag are excluded from DSD pre-rendering and production static site manifests.
 5. **Allow & Deny List Filtering**: Pages and directories configured in `pages.allowList` or `pages.denyList` (or their root counterparts in `shadow-claw.config.json`) are filtered during build-time DSD pre-rendering and runtime static main site seeding. Files placed on `denyList` (such as `pages/main/sidebar.html`) continue to exist on disk and serve other roles (like custom slotted sidebars) while being excluded from the pages viewer, list, and swipe cycling.
 
-### Page Suppression (`src/storage/suppressedPages.ts`)
+### Page Suppression (`src/storage/suppressed-pages.ts`)
 
 To prevent deleted static pages from re-appearing on reload:
 
@@ -72,7 +72,7 @@ The `shadow-claw-pages` web component handles rendering the UI and displaying fi
 ### Navigation & URL State Synchronization
 
 - **URL Sync & App Route Validation**: Selecting or reordering pages dispatches navigation events (`shadow-claw-navigate`) and updates browser URL history via `history.pushState()`, preserving active page state across refreshes. Same-origin link navigation uses `isPossibleAppRoute(pathname)` to validate internal routes against top-level valid pages (`VALID_PAGES`) and static route manifests; same-origin links pointing to non-app paths (such as external demo applications or static deployments) bypass SPA router interception and fall back to native browser navigation (`window.open`).
-- **Root Pretty Path Resolution**: `src/storage/staticRouting.ts` supports mapping root paths (`/` and `/index.html`) directly to page definitions (e.g. `/pages/main/index.html`) via `"prettyPath": "/"`, and reverse-resolves root page routes back to `"/"`.
+- **Root Pretty Path Resolution**: `src/storage/static-routing.ts` supports mapping root paths (`/` and `/index.html`) directly to page definitions (e.g. `/pages/main/index.html`) via `"prettyPath": "/"`, and reverse-resolves root page routes back to `"/"`.
 - **In-Feed Scroll & Navigation Guarding**: `replaceState` navigations with state flags (`inFeedScroll: true`, `scrollSpy: true`, or `suppressRouter: true` in history or Navigation API destination state) are bypassed by the router in `getRoute` and `popstateListener`, preventing unnecessary page resets and view thrashing during scroll-driven URL synchronization.
 - **Ebook-Style Pagination**: Includes Previous (`[data-pages-prev]`) and Next (`[data-pages-next]`) page controls. Navigation buttons are dynamically enabled/disabled and set to `hidden` (`display: none !important`) based on current page index to avoid layout shifts.
 - **Keyboard & Gesture Navigation**: Supports `ArrowLeft` and `ArrowRight` keyboard navigation for page turning with built-in throttling (`KEY_NAVIGATION_THROTTLE_MS = 300ms`) to prevent rapid page flipping when holding down keys, and strict focus guards to prevent interference when typing in inputs or content-editable regions. Swipe gestures are fully supported via touch and mouse drag interactions, including swipe passthrough from sandboxed iframe previews via `postMessage`.
@@ -111,7 +111,7 @@ The `shadow-claw-pages` web component handles rendering the UI and displaying fi
 2. It is rendered inside a sandboxed `iframe` using `setTrustedSrcdoc`.
 3. To prevent XSS, inline scripts and external scripts are blocked using a nonce-gated Content Security Policy (CSP).
 4. A DOMPurify iframe hook removes unsafe embeds and only preserves iframe `src` values that match the Settings-backed host allowlist.
-5. The iframe loads two bridge scripts: `file-viewer-preview-bridge.js` (intercepts link navigation to prevent iframe self-navigation away from `srcdoc`, relaying application query parameters like `?gameSave=` for generic Web Component re-initialization and routing external links via `window.open`, touch gestures, and `BroadcastChannel` messages under opaque `null` origins) and `iframe-storage-bridge.js` (intercepts `IndexedDB` and `localStorage` security errors caused by opaque origin isolation and proxies CRUD storage requests via `dispatchStorageProxyCommand` in `dispatchStorageProxyCommand.ts` via `shadow-claw-storage-proxy` `postMessage` calls).
+5. The iframe loads two bridge scripts: `file-viewer-preview-bridge.js` (intercepts link navigation to prevent iframe self-navigation away from `srcdoc`, relaying application query parameters like `?gameSave=` for generic Web Component re-initialization and routing external links via `window.open`, touch gestures, and `BroadcastChannel` messages under opaque `null` origins) and `iframe-storage-bridge.js` (intercepts `IndexedDB` and `localStorage` security errors caused by opaque origin isolation and proxies CRUD storage requests via `dispatchStorageProxyCommand` in `dispatch-storage-proxy-command.ts` via `shadow-claw-storage-proxy` `postMessage` calls).
 
 ### Frontmatter and Embed Settings
 
@@ -139,7 +139,7 @@ Applications pre-rendered with Declarative Shadow DOM (DSD) shell via `src/cli/p
   - The pre-render pipeline generates dedicated physical `index.html` files with page-specific DSD templates.
   - If no `routes.json` exists, pretty-path generation is skipped without failing the build.
 - **Static Routing Manifest**:
-  - Embedded via `#shadow-claw-static-routing` JSON script tags or fetched via `static-routing.json` (`src/storage/staticRouting.ts`), allowing client-side router (`app-routes.ts`) and pages component to resolve routes asynchronously (`resolvePrettyPathToRouteAsync`, `parseRouteFromUrlAsync`) across Node.js, Electron, and GitHub Pages.
+  - Embedded via `#shadow-claw-static-routing` JSON script tags or fetched via `static-routing.json` (`src/storage/static-routing.ts`), allowing client-side router (`app-routes.ts`) and pages component to resolve routes asynchronously (`resolvePrettyPathToRouteAsync`, `parseRouteFromUrlAsync`) across Node.js, Electron, and GitHub Pages.
 - **Server Middleware Fallbacks**:
   - Express server includes static file middleware serving fallback content from `pages/main` for `/files/main/`, `/static-main/`, and `/pages/`, alongside SPA redirect fallback middleware for clean URL reloads, serving `index.html` for app routes even when matching directories exist on disk.
 - **DSD Shell Override**:

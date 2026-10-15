@@ -25,7 +25,8 @@ jest.unstable_mockModule("../../ui/toast.js", () => ({
 }));
 
 const { Orchestrator } = await import("./orchestrator.js");
-const { handleWorkerMessage } = await import("./utils/handleWorkerMessage.js");
+const { handleWorkerMessage } =
+  await import("./utils/handle-worker-message.js");
 
 describe("Orchestrator MCP Reauth Handler", () => {
   let orchestrator: any;

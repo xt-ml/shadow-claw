@@ -24,7 +24,7 @@ import {
   type McpToolsListResult,
   type ServerDiscoverResult,
 } from "./types.js";
-import { getPackageVersion } from "../utils/packageVersion.js";
+import { getPackageVersion } from "../utils/package-version.js";
 
 export type McpToolHandler = (
   args: Record<string, unknown>,

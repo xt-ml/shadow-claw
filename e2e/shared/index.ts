@@ -202,3 +202,5 @@ export async function waitForMessageCount(
     `Timeout waiting for ${count} messages (${timeout}ms elapsed)`,
   );
 }
+
+export * from "./mock-llm.js";

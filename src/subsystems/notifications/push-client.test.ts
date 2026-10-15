@@ -43,11 +43,12 @@ jest.unstable_mockModule("../../db/db.js", () => ({
   getDb: (jest.fn() as any).mockResolvedValue({}),
 }));
 
-jest.unstable_mockModule("../../db/getConfig.js", () => ({
+jest.unstable_mockModule("../../db/get-config.js", () => ({
   getConfig: (jest.fn() as any).mockResolvedValue(null),
 }));
 
 const {
+  getPushUrl,
   getVapidPublicKey,
   subscribeToPush,
   syncExistingPushSubscription,
@@ -281,6 +282,74 @@ describe("push-client", () => {
       mockPushManager.getSubscription.mockResolvedValue(mockSubscription);
       const sub = await getCurrentSubscription();
       expect(sub).toBe(mockSubscription);
+    });
+  });
+
+  describe("getPushUrl and targetAddressSpace branches", () => {
+    it("handles getPushUrl with and without proxy configured", async () => {
+      // Without proxy, returns raw path
+      const url1 = await getPushUrl("/push/test");
+      expect(url1).toBe("/push/test");
+
+      // With localStorage proxy URL
+      const origLocalStorage = (globalThis as any).localStorage;
+      const storeMap = new Map<string, string>();
+      (globalThis as any).localStorage = {
+        getItem: (k: string) => storeMap.get(k) || null,
+        setItem: (k: string, v: string) => storeMap.set(k, v),
+        removeItem: (k: string) => storeMap.delete(k),
+      };
+
+      try {
+        localStorage.setItem("push_proxy_url", "https://push-proxy.test/");
+        const url2 = await getPushUrl("push/endpoint");
+        expect(url2).toBe("https://push-proxy.test/push/endpoint");
+      } finally {
+        (globalThis as any).localStorage = origLocalStorage;
+      }
+    });
+
+    it("identifies .lan, .local, .home, and loopback in getPushFetchOptions", () => {
+      expect(getPushFetchOptions("http://myhost.local/path")).toEqual({
+        targetAddressSpace: "private",
+      });
+      expect(getPushFetchOptions("http://box.home/path")).toEqual({
+        targetAddressSpace: "private",
+      });
+      expect(getPushFetchOptions("http://server.lan/path")).toEqual({
+        targetAddressSpace: "private",
+      });
+      expect(getPushFetchOptions("http://[::1]:8080/path")).toEqual({
+        targetAddressSpace: "loopback",
+      });
+      expect(getPushFetchOptions("https://example.com/path")).toEqual({});
+    });
+
+    it("syncExistingPushSubscription returns early when serviceWorker is unavailable", async () => {
+      const origSW = navigator.serviceWorker;
+      delete (navigator as any).serviceWorker;
+      try {
+        await syncExistingPushSubscription("sub-test");
+        expect(mockPushManager.getSubscription).not.toHaveBeenCalled();
+      } finally {
+        (navigator as any).serviceWorker = origSW;
+      }
+    });
+
+    it("handles subscription without toJSON method", async () => {
+      (fetch as any).mockResolvedValueOnce({
+        json: async () => ({ publicKey: "test-key" }),
+      });
+      (fetch as any).mockResolvedValueOnce({ ok: true });
+
+      const plainSub: any = {
+        endpoint: "https://example.com/endpoint",
+        keys: { p256dh: "key", auth: "auth" },
+      };
+      mockPushManager.subscribe.mockResolvedValueOnce(plainSub);
+
+      const sub = await subscribeToPush("client-1", "iPad", "sub-1");
+      expect(sub).toBe(plainSub);
     });
   });
 });

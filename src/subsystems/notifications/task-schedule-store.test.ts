@@ -3,6 +3,7 @@ import {
   closeTaskScheduleStore,
   saveScheduledTask,
   deleteScheduledTask,
+  deleteScheduledTaskForSubscriber,
   getScheduledTask,
   getAllScheduledTasks,
   getEnabledScheduledTasks,
@@ -265,6 +266,80 @@ describe("task-schedule-store", () => {
 
       saveScheduledTask({ ...MOCK_TASK, pushNotifications: false });
       expect(getScheduledTask(MOCK_TASK.id)!.push_enabled).toBe(0);
+    });
+  });
+
+  describe("deleteScheduledTaskForSubscriber and store guards", () => {
+    it("deletes tasks owned by subscriber or with legacy null subscriber", () => {
+      saveScheduledTask({
+        ...MOCK_TASK,
+        id: "task-sub-own",
+        subscriberId: "owner-1",
+      });
+      saveScheduledTask({
+        ...MOCK_TASK,
+        id: "task-sub-legacy",
+        subscriberId: undefined,
+      });
+
+      // Different subscriber cannot delete owner-1 task
+      const notDeleted = deleteScheduledTaskForSubscriber(
+        "task-sub-own",
+        "other-sub",
+      );
+      expect(notDeleted).toBe(0);
+      expect(getScheduledTask("task-sub-own")).toBeDefined();
+
+      // Owner can delete their task
+      const deletedOwner = deleteScheduledTaskForSubscriber(
+        "task-sub-own",
+        "owner-1",
+      );
+      expect(deletedOwner).toBe(1);
+      expect(getScheduledTask("task-sub-own")).toBeUndefined();
+
+      // Legacy task can be deleted by any subscriber
+      const deletedLegacy = deleteScheduledTaskForSubscriber(
+        "task-sub-legacy",
+        "any-sub",
+      );
+      expect(deletedLegacy).toBe(1);
+      expect(getScheduledTask("task-sub-legacy")).toBeUndefined();
+    });
+
+    it("deletes without subscriberId", () => {
+      saveScheduledTask({
+        ...MOCK_TASK,
+        id: "task-no-sub",
+      });
+      const changes = deleteScheduledTaskForSubscriber("task-no-sub");
+      expect(changes).toBe(1);
+      expect(getScheduledTask("task-no-sub")).toBeUndefined();
+    });
+
+    it("throws when methods are called on closed store", () => {
+      closeTaskScheduleStore();
+      expect(() => saveScheduledTask(MOCK_TASK)).toThrow(
+        "Task schedule store not opened.",
+      );
+      expect(() => deleteScheduledTask("id")).toThrow(
+        "Task schedule store not opened.",
+      );
+      expect(() => deleteScheduledTaskForSubscriber("id")).toThrow(
+        "Task schedule store not opened.",
+      );
+      expect(() => getScheduledTask("id")).toThrow(
+        "Task schedule store not opened.",
+      );
+      expect(() => getAllScheduledTasks()).toThrow(
+        "Task schedule store not opened.",
+      );
+      expect(() => getEnabledScheduledTasks()).toThrow(
+        "Task schedule store not opened.",
+      );
+      expect(() => updateScheduledTaskLastRun("id", 123)).toThrow(
+        "Task schedule store not opened.",
+      );
     });
   });
 });

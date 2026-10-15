@@ -98,4 +98,85 @@ describe("backup-controller", () => {
 
     await expect(controller.initiate()).rejects.toThrow(/Upload failed/i);
   });
+
+  it("handles private network IP, binary Uint8Array data, and skipped null data", async () => {
+    mockFetch.mockImplementation(async (url: string) => {
+      const urlStr = url.toString();
+      if (
+        urlStr.includes("/api/backup/upload") ||
+        urlStr.includes("/api/backup/complete")
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => "",
+        };
+      }
+      return { ok: false, status: 404, statusText: "Not Found" };
+    });
+
+    const controller = new BackupController({
+      clientId: "test-binary-client",
+      serverBaseUrl: "http://192.168.1.100:9000",
+      fileEnumerator: async () => ["binary.bin", "empty.txt"],
+      fileReader: async (p) =>
+        p === "binary.bin" ? new Uint8Array([1, 2, 3, 4]) : null,
+    });
+
+    const result = await controller.initiate();
+    expect(result.fileCount).toBe(1);
+    expect(result.totalBytes).toBe(4);
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "http://192.168.1.100:9000/api/backup/upload",
+      expect.objectContaining({
+        targetAddressSpace: "private",
+        body: expect.stringContaining('"encoding":"base64"'),
+      }),
+    );
+  });
+
+  it("throws when complete endpoint fails", async () => {
+    mockFetch.mockImplementation(async (url: string) => {
+      const urlStr = url.toString();
+      if (urlStr.includes("/api/backup/upload")) {
+        return { ok: true, status: 200 };
+      }
+      return {
+        ok: false,
+        status: 500,
+        statusText: "Server Error",
+        text: async () => {
+          throw new Error("Cannot read text");
+        },
+      };
+    });
+
+    const controller = new BackupController({
+      clientId: "test-fail-complete",
+      serverBaseUrl: "http://127.0.0.1:8888",
+      fileEnumerator: async () => ["file.txt"],
+      fileReader: async () => "text content",
+    });
+
+    await expect(controller.initiate()).rejects.toThrow(
+      /Failed to complete backup: Server Error/,
+    );
+  });
+
+  it("works with default constructor options", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => "",
+    });
+
+    const controller = new BackupController({
+      clientId: "minimal-client",
+    });
+
+    const result = await controller.initiate();
+    expect(result.fileCount).toBe(0);
+    expect(result.totalBytes).toBe(0);
+  });
 });

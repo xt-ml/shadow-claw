@@ -1,11 +1,11 @@
 import { jest } from "@jest/globals";
 
-jest.unstable_mockModule("../../../storage/writeGroupFile.js", () => ({
+jest.unstable_mockModule("../../../storage/write-group-file.js", () => ({
   writeGroupFile: jest.fn(),
 }));
 
 const { executeWriteFile } = await import("./write-file.js");
-const { writeGroupFile } = await import("../../../storage/writeGroupFile.js");
+const { writeGroupFile } = await import("../../../storage/write-group-file.js");
 
 describe("executeWriteFile", () => {
   it("writes file content and returns summary", async () => {

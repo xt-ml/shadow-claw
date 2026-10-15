@@ -3,7 +3,7 @@ import type { ShadowClawDatabase } from "../../../db/types.js";
 
 const mockGetConfig = jest.fn<() => Promise<unknown>>();
 
-jest.unstable_mockModule("../../../db/getConfig.js", () => ({
+jest.unstable_mockModule("../../../db/get-config.js", () => ({
   getConfig: mockGetConfig,
 }));
 

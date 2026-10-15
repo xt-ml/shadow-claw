@@ -1,7 +1,7 @@
 import { ShadowClawDatabase } from "../../../db/types.js";
-import { groupFileExists } from "../../../storage/groupFileExists.js";
-import { hasPathTraversal } from "../../../utils/hasPathTraversal.js";
-import { normalizeWorkspacePath } from "../../../utils/normalizeWorkspacePath.js";
+import { groupFileExists } from "../../../storage/group-file-exists.js";
+import { hasPathTraversal } from "../../../utils/has-path-traversal.js";
+import { normalizeWorkspacePath } from "../../../utils/normalize-workspace-path.js";
 
 import { post } from "../../utils/post.js";
 

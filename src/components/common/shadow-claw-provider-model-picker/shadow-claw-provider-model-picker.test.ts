@@ -279,4 +279,89 @@ describe("shadow-claw-provider-model-picker", () => {
 
     el.remove();
   });
+
+  it("handles localOnlyProviderIds instruction models, empty model items, and million-token context", async () => {
+    const el = new ShadowClawProviderModelPicker();
+    document.body.appendChild(el);
+
+    el.setProviders([
+      {
+        id: "llamafile",
+        name: "Llamafile",
+        models: [
+          {
+            id: "Llama-3.2-3B-Instruct.Q4_K_M.llamafile",
+            name: "Llama 3.2 3B Instruct",
+            context_length: 2000000,
+          },
+          {
+            id: "base-model.llamafile",
+            name: "Base Model",
+          },
+          {} as any, // Empty model object
+          "simple-string-model" as any,
+        ],
+      } as any,
+    ]);
+
+    el.setValue({
+      providerId: "llamafile",
+      modelId: "Llama-3.2-3B-Instruct.Q4_K_M.llamafile",
+    });
+    await el.render();
+
+    const root = el.shadowRoot;
+    const modelSelect = root?.querySelector(
+      '[data-role="model-select"]',
+    ) as HTMLSelectElement;
+    expect(modelSelect).not.toBeNull();
+    const options = Array.from(modelSelect.options).map((o) => o.textContent);
+    expect(options.some((t) => t?.includes("2.0M"))).toBe(true);
+    expect(options.some((t) => t?.includes("🛠️"))).toBe(true);
+    expect(options.some((t) => t?.includes("❔🛠️"))).toBe(true);
+
+    el.remove();
+  });
+
+  it("handles race condition when provider is switched while loader is in-flight", async () => {
+    const el = new ShadowClawProviderModelPicker();
+    document.body.appendChild(el);
+
+    let resolveFirstLoader: (models: any[]) => void;
+    let rejectSecondLoader: (err: any) => void;
+
+    const slowLoader = jest.fn((provider: any) => {
+      if (provider.id === "slow-1") {
+        return new Promise<any[]>((resolve) => {
+          resolveFirstLoader = resolve;
+        });
+      }
+      return new Promise<any[]>((_, reject) => {
+        rejectSecondLoader = reject;
+      });
+    });
+
+    el.setModelLoader(slowLoader as any);
+    el.setProviders([
+      { id: "slow-1", name: "Slow 1", modelsUrl: "https://slow1.test" } as any,
+      { id: "slow-2", name: "Slow 2", modelsUrl: "https://slow2.test" } as any,
+    ]);
+
+    // Start loading slow-1
+    el.setValue({ providerId: "slow-1", modelId: null });
+    await el.render();
+
+    // Quickly switch to slow-2
+    el.setValue({ providerId: "slow-2", modelId: null });
+    await el.render();
+
+    // Now resolve first and reject second
+    resolveFirstLoader!(["late-model-1"]);
+    rejectSecondLoader!(new Error("late-error-2"));
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    el.remove();
+  });
 });

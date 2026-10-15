@@ -32,12 +32,12 @@ import {
   normalizeFileOption,
 } from "../utils/load-cli-attachments.js";
 import { persistMessageAttachments } from "../../content/message-attachments.js";
-import { buildAttachmentContentBlocks } from "../../content/buildAttachmentContentBlocks.js";
+import { buildAttachmentContentBlocks } from "../../content/build-attachment-content-blocks.js";
 import {
   getAttachmentCategory,
   getModelAttachmentCapabilities,
 } from "../../content/attachment-capabilities.js";
-import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
+import { readGroupFileBytes } from "../../storage/read-group-file-bytes.js";
 
 const BROWSER_ONLY_TOOLS = new Set([
   "ask_user",
@@ -427,7 +427,8 @@ export async function runAgentClear(
   const { db, core } = await bootstrapHeadlessAgent(options);
   const groupId =
     options.group || core.DEFAULT_SERVER_GROUP_ID || DEFAULT_SERVER_GROUP_ID;
-  const { clearGroupMessages } = await import("../../db/clearGroupMessages.js");
+  const { clearGroupMessages } =
+    await import("../../db/clear-group-messages.js");
 
   await clearGroupMessages(db, groupId);
 
@@ -591,7 +592,7 @@ export async function resolveAgentProvider(
     }
   }
 
-  const providerConfig =
+  let providerConfig =
     typeof core.getProvider === "function"
       ? core.getProvider(providerId)
       : null;
@@ -818,6 +819,16 @@ export async function resolveAgentProvider(
         );
       }
     }
+  }
+
+  const customBaseUrl =
+    options.baseUrl ||
+    options.providerBaseUrl ||
+    workspaceAgent?.baseUrl ||
+    workspaceSettings?.baseUrl ||
+    workspaceSettings?.providerBaseUrl;
+  if (customBaseUrl && providerConfig) {
+    providerConfig = { ...providerConfig, baseUrl: customBaseUrl };
   }
 
   return {
@@ -1510,6 +1521,7 @@ export async function runAgentRun(
     messages: [...history, invokeUserMessage],
     model,
     provider: providerId,
+    ...(providerConfig?.baseUrl ? { baseUrl: providerConfig.baseUrl } : {}),
     streaming: isStreaming,
     verbose: Boolean(options.verbose),
     systemPrompt,
@@ -1855,7 +1867,7 @@ export async function runAgentImport(
       .fetchDiscoveryManifest;
   const importRemoteArtifacts =
     core.importRemoteArtifacts ||
-    (await import("../../subsystems/tools/remote/importArtifacts.js"))
+    (await import("../../subsystems/tools/remote/import-artifacts.js"))
       .importRemoteArtifacts;
 
   const fetchFn = options.fetchFn || globalThis.fetch;

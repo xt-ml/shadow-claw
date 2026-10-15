@@ -110,4 +110,26 @@ describe("shadow-claw-page-header-action-button", () => {
 
     el.remove();
   });
+
+  it("handles early returns when shadowRoot or button is missing", async () => {
+    const el = new ShadowClawPageHeaderActionButton();
+    Object.defineProperty(el, "shadowRoot", {
+      value: null,
+      configurable: true,
+    });
+    await expect(el.render()).resolves.toBeUndefined();
+
+    const el2 = new ShadowClawPageHeaderActionButton();
+    el2.shadowRoot?.querySelector(".action-btn")?.remove();
+    await expect(el2.render()).resolves.toBeUndefined();
+  });
+
+  it("handles empty variant attribute and falls back to default", async () => {
+    const el = new ShadowClawPageHeaderActionButton();
+    el.setAttribute("variant", "");
+    await el.connectedCallback();
+
+    const button = el.shadowRoot?.querySelector(".action-btn");
+    expect(button?.classList.contains("action-btn--default")).toBe(true);
+  });
 });

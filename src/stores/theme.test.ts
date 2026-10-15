@@ -138,7 +138,7 @@ describe("themeStore", () => {
 
   it("handles storage event for tab synchronization", async () => {
     const { getNamespacedStorageKey } =
-      await import("../utils/namespacedStorage.js");
+      await import("../utils/namespaced-storage.js");
     const { themeStore } = await import("./theme.js");
     const targetKey = getNamespacedStorageKey("shadow-claw-theme");
 

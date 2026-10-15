@@ -1,7 +1,7 @@
 import QRCode from "qrcode";
 
 import { effect } from "../../../core/effect.js";
-import { configurePeerJs } from "../../../core/orchestrator/utils/configurePeerJs.js";
+import { configurePeerJs } from "../../../core/orchestrator/utils/configure-peer-js.js";
 
 import {
   getPeerJsConfig,

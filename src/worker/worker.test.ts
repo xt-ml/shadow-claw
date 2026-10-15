@@ -1,6 +1,7 @@
 import { jest } from "@jest/globals";
 
 const mockSandboxedEval = jest.fn();
+let vmStatusSubscriber: ((status: any) => void) | undefined;
 
 describe("worker and worker/agent.js", () => {
   let agentModule: any;
@@ -61,15 +62,20 @@ describe("worker and worker/agent.js", () => {
       buildTriggerPattern: jest.fn(),
     }));
 
-    jest.unstable_mockModule("../db/getConfig.js", () => ({
-      getConfig: jest.fn(),
+    jest.unstable_mockModule("../db/get-config.js", () => ({
+      getConfig: jest.fn(async (_db: any, key: string) => {
+        if (key === "vm_boot_mode") {
+          return "ext2";
+        }
+        return undefined;
+      }),
     }));
 
-    jest.unstable_mockModule("../db/setConfig.js", () => ({
+    jest.unstable_mockModule("../db/set-config.js", () => ({
       setConfig: jest.fn(),
     }));
 
-    jest.unstable_mockModule("../db/openDatabase.js", () => ({
+    jest.unstable_mockModule("../db/open-database.js", () => ({
       openDatabase: jest.fn(),
     }));
 
@@ -89,7 +95,9 @@ describe("worker and worker/agent.js", () => {
       setVMNetworkRelayURLPreference: jest.fn(),
       shutdownVM: jest.fn(),
       subscribeVMBootOutput: jest.fn(),
-      subscribeVMStatus: jest.fn(),
+      subscribeVMStatus: jest.fn((cb: any) => {
+        vmStatusSubscriber = cb;
+      }),
       syncVMWorkspaceFromHost: jest.fn(),
     }));
 
@@ -105,11 +113,11 @@ describe("worker and worker/agent.js", () => {
       executeShell: jest.fn(),
     }));
 
-    jest.unstable_mockModule("../storage/listGroupFiles.js", () => ({
+    jest.unstable_mockModule("../storage/list-group-files.js", () => ({
       listGroupFiles: jest.fn(),
     }));
 
-    jest.unstable_mockModule("../storage/readGroupFile.js", () => ({
+    jest.unstable_mockModule("../storage/read-group-file.js", () => ({
       readGroupFile: jest.fn(),
     }));
 
@@ -122,7 +130,7 @@ describe("worker and worker/agent.js", () => {
       isStaleHandleError: jest.fn(),
     }));
 
-    jest.unstable_mockModule("../storage/writeGroupFile.js", () => ({
+    jest.unstable_mockModule("../storage/write-group-file.js", () => ({
       writeGroupFile: jest.fn(),
     }));
 
@@ -134,7 +142,7 @@ describe("worker and worker/agent.js", () => {
       ulid: jest.fn(() => "01AN4Z07BY79KA1307SR9X4MV3"),
     }));
 
-    jest.unstable_mockModule("./utils/sandboxedEval.js", () => ({
+    jest.unstable_mockModule("./utils/sandboxed-eval.js", () => ({
       sandboxedEval: mockSandboxedEval,
     }));
 
@@ -142,7 +150,7 @@ describe("worker and worker/agent.js", () => {
     agentModule = await import("./agent.js");
 
     // Import extracted utilities
-    const stripHtmlModule = await import("./utils/stripHtml.js");
+    const stripHtmlModule = await import("../utils/html.js");
     stripHtml = stripHtmlModule.stripHtml;
 
     // Import from worker.ts to verify no exports
@@ -153,6 +161,63 @@ describe("worker and worker/agent.js", () => {
     describe("worker module", () => {
       it("should have no exports", () => {
         expect(Object.keys(workerModule)).toEqual([]);
+      });
+
+      it("handles auto and 9p boot modes and string boot hosts", async () => {
+        const { getConfig } = await import("../db/get-config.js");
+        const { setVMBootModePreference, setVMBootHostPreference, bootVM } =
+          await import("../shell/vm.js");
+
+        (getConfig as any).mockImplementation(async (_db: any, key: string) => {
+          if (key === "vm_boot_mode") return "auto";
+          if (key === "vm_boot_host") return "https://example.com/vm";
+          return undefined;
+        });
+
+        const autoSpecifier = "./worker.js?test=auto";
+        await import(autoSpecifier);
+
+        expect(setVMBootModePreference).toHaveBeenCalledWith("auto");
+        expect(setVMBootHostPreference).toHaveBeenCalledWith(
+          "https://example.com/vm",
+        );
+
+        (getConfig as any).mockImplementation(async (_db: any, key: string) => {
+          if (key === "vm_boot_mode") return "9p";
+          return undefined;
+        });
+
+        const ninePSpecifier = "./worker.js?test=9p";
+        await import(ninePSpecifier);
+        expect(setVMBootModePreference).toHaveBeenCalledWith("9p");
+        expect(bootVM).toHaveBeenCalled();
+      });
+
+      it("handles eager boot error gracefully", async () => {
+        const { getConfig } = await import("../db/get-config.js");
+        const { bootVM } = await import("../shell/vm.js");
+        const warnSpy = jest
+          .spyOn(console, "warn")
+          .mockImplementation(() => {});
+
+        (getConfig as any).mockImplementation(async (_db: any, key: string) => {
+          if (key === "vm_boot_mode") return "ext2";
+          return undefined;
+        });
+        (bootVM as any).mockRejectedValueOnce(new Error("VM boot failed"));
+
+        try {
+          const errSpecifier = "./worker.js?test=err";
+          await import(errSpecifier);
+          // wait a microtick for the unhandled promise catch
+          await new Promise((r) => setTimeout(r, 10));
+          expect(warnSpy).toHaveBeenCalledWith(
+            expect.stringContaining("[WebVM] Eager boot failed:"),
+            expect.any(Error),
+          );
+        } finally {
+          warnSpy.mockRestore();
+        }
       });
     });
 
@@ -243,7 +308,7 @@ describe("worker and worker/agent.js", () => {
 
       try {
         // Mock openDatabase failure or success is fine, let's just mock it to return a dummy db
-        const { openDatabase } = await import("../db/openDatabase.js");
+        const { openDatabase } = await import("../db/open-database.js");
         (openDatabase as any).mockResolvedValueOnce({} as any);
 
         // Call handleMessage directly
@@ -271,6 +336,24 @@ describe("worker and worker/agent.js", () => {
             }),
           }),
         );
+      } finally {
+        delete (global as any).self;
+      }
+    });
+
+    it("posts vm-status message when vmStatusSubscriber fires", () => {
+      const postMessageSpy = jest.fn();
+      (global.self as any) = {
+        postMessage: postMessageSpy,
+      };
+
+      try {
+        expect(vmStatusSubscriber).toBeDefined();
+        vmStatusSubscriber?.({ ready: true, mode: "ext2" });
+        expect(postMessageSpy).toHaveBeenCalledWith({
+          type: "vm-status",
+          payload: { ready: true, mode: "ext2" },
+        });
       } finally {
         delete (global as any).self;
       }

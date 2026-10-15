@@ -14,7 +14,7 @@ jest.unstable_mockModule("../security/crypto.js", () => ({
   encryptValue: mockEncryptValue,
 }));
 
-jest.unstable_mockModule("../storage/writeFileHandle.js", () => ({
+jest.unstable_mockModule("../storage/write-file-handle.js", () => ({
   writeFileHandle: mockWriteFileHandle,
 }));
 

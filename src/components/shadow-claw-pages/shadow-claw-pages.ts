@@ -2,7 +2,7 @@ import { Signal } from "signal-polyfill";
 
 import { effect } from "../../core/effect.js";
 
-import { splitFrontmatter } from "../../common/utils/frontmatter.mjs";
+import { splitFrontmatter } from "../../utils/frontmatter.js";
 import { CONFIG_KEYS } from "../../config/config.js";
 import { renderMarkdown } from "../../content/markdown.js";
 
@@ -15,7 +15,7 @@ import {
 } from "../../core/app-routes.js";
 
 import { getDb } from "../../db/db.js";
-import { getConfig } from "../../db/getConfig.js";
+import { getConfig } from "../../db/get-config.js";
 import {
   getApprovedCustomElementScriptDescriptors,
   isAllowedCustomElement,
@@ -28,9 +28,9 @@ import {
   setTrustedSrcdoc,
 } from "../../security/trusted-types.js";
 
-import { readGroupFile } from "../../storage/readGroupFile.js";
-import { getStaticPageContent } from "../../storage/staticMainSite.js";
-import { writeGroupFile } from "../../storage/writeGroupFile.js";
+import { readGroupFile } from "../../storage/read-group-file.js";
+import { getStaticPageContent } from "../../storage/static-main-site.js";
+import { writeGroupFile } from "../../storage/write-group-file.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { toolsStore } from "../../stores/tools.js";
@@ -41,46 +41,46 @@ import {
   getNamespacedItem,
   removeNamespacedItem,
   setNamespacedItem,
-} from "../../utils/namespacedStorage.js";
+} from "../../utils/namespaced-storage.js";
 
-import { announcePageChange } from "./utils/announcePageChange.js";
-import { buildHtmlPageSrcdoc } from "./utils/buildHtmlPageSrcdoc.js";
-import { calculatePaginationDisabledState } from "./utils/calculatePaginationDisabledState.js";
-import { confirmRemoveAllPages } from "./utils/confirmRemoveAllPages.js";
-import { handleStorageProxyMessage } from "./utils/dispatchStorageProxyCommand.js";
-import { ensurePreviewIframe } from "./utils/ensurePreviewIframe.js";
-import { fetchAutoRefreshInterval } from "./utils/fetchAutoRefreshInterval.js";
-import { getSelectedPageIndex } from "./utils/getSelectedPageIndex.js";
-import { groupPagesByGroup } from "./utils/groupPagesByGroup.js";
-import { handleAnchorNavigation } from "./utils/handleAnchorNavigation.js";
-import { handleAutoRefreshConfigEvent } from "./utils/handleAutoRefreshConfigEvent.js";
-import { handleFileSavedEvent } from "./utils/handleFileSavedEvent.js";
+import { announcePageChange } from "./utils/announce-page-change.js";
+import { buildHtmlPageSrcdoc } from "./utils/build-html-page-srcdoc.js";
+import { calculatePaginationDisabledState } from "./utils/calculate-pagination-disabled-state.js";
+import { confirmRemoveAllPages } from "./utils/confirm-remove-all-pages.js";
+import { handleStorageProxyMessage } from "./utils/dispatch-storage-proxy-command.js";
+import { ensurePreviewIframe } from "./utils/ensure-preview-iframe.js";
+import { fetchAutoRefreshInterval } from "./utils/fetch-auto-refresh-interval.js";
+import { getSelectedPageIndex } from "./utils/get-selected-page-index.js";
+import { groupPagesByGroup } from "./utils/group-pages-by-group.js";
+import { handleAnchorNavigation } from "./utils/handle-anchor-navigation.js";
+import { handleAutoRefreshConfigEvent } from "./utils/handle-auto-refresh-config-event.js";
+import { handleFileSavedEvent } from "./utils/handle-file-saved-event.js";
 import {
   handleKeyDownNavigation,
   type KeyNavigationState,
-} from "./utils/handleKeyDownNavigation.js";
-import { handleMouseDownGesture } from "./utils/handleMouseDownGesture.js";
-import { handleMouseUpGesture } from "./utils/handleMouseUpGesture.js";
-import { handlePageReorder } from "./utils/handlePageReorder.js";
-import { handleTouchEndGesture } from "./utils/handleTouchEndGesture.js";
-import { handleTouchStartGesture } from "./utils/handleTouchStartGesture.js";
-import { handleVisibilityStateChange } from "./utils/handleVisibilityStateChange.js";
-import { handleWindowFocusEvent } from "./utils/handleWindowFocusEvent.js";
+} from "./utils/handle-key-down-navigation.js";
+import { handleMouseDownGesture } from "./utils/handle-mouse-down-gesture.js";
+import { handleMouseUpGesture } from "./utils/handle-mouse-up-gesture.js";
+import { handlePageReorder } from "./utils/handle-page-reorder.js";
+import { handleTouchEndGesture } from "./utils/handle-touch-end-gesture.js";
+import { handleTouchStartGesture } from "./utils/handle-touch-start-gesture.js";
+import { handleVisibilityStateChange } from "./utils/handle-visibility-state-change.js";
+import { handleWindowFocusEvent } from "./utils/handle-window-focus-event.js";
 import { IframeBroadcastProxy } from "./utils/iframe-broadcast-proxy.js";
-import { isNavigationSuppressed } from "./utils/isNavigationSuppressed.js";
-import { isHtmlPath, isMarkdownPath } from "./utils/pageFileTypes.js";
-import { pageRefKey } from "./utils/pageRefKey.js";
-import { parseIframeMessage } from "./utils/parseIframeMessage.js";
-import { readImageAsDataUrl } from "./utils/readImageAsDataUrl.js";
-import { removePreviewIframe } from "./utils/removePreviewIframe.js";
-import { requestConfirmation } from "./utils/requestConfirmation.js";
-import { resolveFrontmatterToggle } from "./utils/resolveFrontmatterToggle.js";
-import { resolveMarkdownImages } from "./utils/resolveMarkdownImages.js";
-import { resolveWorkspaceLinkPath } from "./utils/resolveWorkspaceLinkPath.js";
-import { rewriteWorkspacePreviewHtml } from "./utils/rewriteWorkspacePreviewHtml.js";
-import { shouldRunAutoRefresh } from "./utils/shouldRunAutoRefresh.js";
-import { syncIframeTheme } from "./utils/syncIframeTheme.js";
-import { toggleSidebarState } from "./utils/toggleSidebarState.js";
+import { isNavigationSuppressed } from "./utils/is-navigation-suppressed.js";
+import { isHtmlPath, isMarkdownPath } from "./utils/page-file-types.js";
+import { pageRefKey } from "./utils/page-ref-key.js";
+import { parseIframeMessage } from "./utils/parse-iframe-message.js";
+import { readImageAsDataUrl } from "./utils/read-image-as-data-url.js";
+import { removePreviewIframe } from "./utils/remove-preview-iframe.js";
+import { requestConfirmation } from "./utils/request-confirmation.js";
+import { resolveFrontmatterToggle } from "./utils/resolve-frontmatter-toggle.js";
+import { resolveMarkdownImages } from "./utils/resolve-markdown-images.js";
+import { resolveWorkspaceLinkPath } from "./utils/resolve-workspace-link-path.js";
+import { rewriteWorkspacePreviewHtml } from "./utils/rewrite-workspace-preview-html.js";
+import { shouldRunAutoRefresh } from "./utils/should-run-auto-refresh.js";
+import { syncIframeTheme } from "./utils/sync-iframe-theme.js";
+import { toggleSidebarState } from "./utils/toggle-sidebar-state.js";
 
 import ShadowClawElement from "../shadow-claw-element.js";
 

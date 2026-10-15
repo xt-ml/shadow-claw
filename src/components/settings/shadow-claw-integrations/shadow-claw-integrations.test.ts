@@ -11,11 +11,11 @@ jest.unstable_mockModule("../../../db/db.js", () => ({
   getDb: jest.fn<any>().mockResolvedValue({}),
 }));
 
-jest.unstable_mockModule("../../../db/getConfig.js", () => ({
+jest.unstable_mockModule("../../../db/get-config.js", () => ({
   getConfig: jest.fn<any>().mockResolvedValue([]),
 }));
 
-jest.unstable_mockModule("../../../db/setConfig.js", () => ({
+jest.unstable_mockModule("../../../db/set-config.js", () => ({
   setConfig: jest.fn<any>().mockResolvedValue(undefined),
 }));
 
@@ -62,7 +62,7 @@ jest.unstable_mockModule("../../../security/trusted-types.js", () => ({
 }));
 
 const { setSanitizedHtml } = await import("../../../security/trusted-types.js");
-const { getEmailPluginManifest } =
+const { getEmailPluginManifest, listEmailPluginManifests } =
   await import("../../../subsystems/email/catalog.js");
 const { ShadowClawIntegrations } =
   await import("./shadow-claw-integrations.js");
@@ -70,6 +70,14 @@ const { ShadowClawIntegrations } =
 describe("shadow-claw-integrations", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (listEmailPluginManifests as jest.Mock).mockReturnValue([
+      {
+        id: "imap",
+        name: "IMAP",
+        configurableFields: ["port", "secure", "smtpSecure"],
+        description: "",
+      },
+    ]);
   });
 
   it("registers custom element", () => {
@@ -825,6 +833,970 @@ describe("shadow-claw-integrations", () => {
     ) as HTMLButtonElement;
     cancelBtn.click();
     expect(slot.hidden).toBe(true);
+
+    document.body.removeChild(el);
+  });
+
+  it("handles renderConnectionList empty state and disabled connection toggle", async () => {
+    const el = new ShadowClawIntegrations();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    el.db = {} as any;
+
+    // 1. Empty list
+    el.connections = [];
+    el.renderConnectionList();
+    const list = el.shadowRoot?.querySelector(
+      '[data-region="connection-list"]',
+    );
+    expect(list?.textContent).toContain("No email connections configured");
+
+    // Click handler ignores clicks on empty / non-action targets
+    list?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+
+    // 2. Disabled connection
+    const { upsertEmailConnection } =
+      await import("../../../subsystems/email/connections.js");
+    const { showSuccess, showError } = await import("../../../ui/toast.js");
+
+    el.connections = [
+      {
+        id: "conn-disabled",
+        label: "Disabled Conn",
+        pluginId: "imap",
+        enabled: false,
+        config: { executionMode: "manual" },
+        credentialRef: null,
+      },
+    ] as any;
+    el.renderConnectionList();
+
+    const badge = list?.querySelector(".connection-badge");
+    expect(badge?.classList.contains("disabled")).toBe(true);
+    expect(badge?.textContent?.trim()).toBe("Disabled");
+
+    const toggleBtn = list?.querySelector(
+      'button[data-action="toggle"]',
+    ) as HTMLButtonElement;
+    expect(toggleBtn.textContent?.trim()).toBe("Enable");
+
+    // Toggle to enable
+    await el.toggleConnection("conn-disabled");
+    expect(upsertEmailConnection).toHaveBeenCalledWith(
+      el.db,
+      expect.objectContaining({ id: "conn-disabled", enabled: true }),
+    );
+    expect(showSuccess).toHaveBeenCalledWith("Email enabled", 2500);
+
+    // Toggle error handling
+    // Re-set connections before testing second toggle failure
+    el.connections = [
+      {
+        id: "conn-disabled",
+        label: "Disabled Conn",
+        pluginId: "imap",
+        enabled: true,
+        config: { executionMode: "manual" },
+        credentialRef: null,
+      },
+    ] as any;
+    (upsertEmailConnection as jest.Mock).mockRejectedValueOnce(
+      new Error("Toggle failed"),
+    );
+    await el.toggleConnection("conn-disabled");
+    expect(showError).toHaveBeenCalledWith(
+      "Failed to update email connection: Toggle failed",
+      6000,
+    );
+
+    // Delete connection confirmed
+    el.connections = [
+      {
+        id: "conn-disabled",
+        label: "Disabled Conn",
+        pluginId: "imap",
+        enabled: true,
+        config: { executionMode: "manual" },
+        credentialRef: null,
+      },
+    ] as any;
+    el.requestConfirmation = jest.fn<any>().mockResolvedValue(true);
+    const { deleteEmailConnection } =
+      await import("../../../subsystems/email/connections.js");
+    (deleteEmailConnection as jest.Mock).mockResolvedValueOnce(true);
+    (showSuccess as jest.Mock).mockClear();
+    await el.deleteConnection("conn-disabled");
+    expect(deleteEmailConnection).toHaveBeenCalledWith(el.db, "conn-disabled");
+    expect(showSuccess).toHaveBeenCalledWith("Email connection deleted", 2500);
+
+    // Delete connection error handling
+    el.connections = [
+      {
+        id: "conn-disabled",
+        label: "Disabled Conn",
+        pluginId: "imap",
+        enabled: true,
+        config: { executionMode: "manual" },
+        credentialRef: null,
+      },
+    ] as any;
+    (deleteEmailConnection as jest.Mock).mockRejectedValueOnce(
+      new Error("Delete failed"),
+    );
+    await el.deleteConnection("conn-disabled");
+    expect(showError).toHaveBeenCalledWith(
+      "Failed to delete email connection: Delete failed",
+      6000,
+    );
+
+    document.body.removeChild(el);
+  });
+
+  it("handles requestConfirmation with appShell and without appShell", async () => {
+    const el = new ShadowClawIntegrations();
+    document.body.appendChild(el);
+
+    // Without appShell
+    expect(await el.requestConfirmation({ title: "T", message: "M" })).toBe(
+      false,
+    );
+
+    // With appShell
+    const mockAppShell = document.createElement("shadow-claw") as any;
+    mockAppShell.requestDialog = jest.fn<any>().mockResolvedValue(true);
+    document.body.appendChild(mockAppShell);
+
+    expect(await el.requestConfirmation({ title: "T", message: "M" })).toBe(
+      true,
+    );
+    expect(mockAppShell.requestDialog).toHaveBeenCalledWith(
+      expect.objectContaining({ mode: "confirm", title: "T", message: "M" }),
+    );
+
+    document.body.removeChild(mockAppShell);
+    document.body.removeChild(el);
+  });
+
+  it("renders showForm for an existing connection with linked OAuth account", async () => {
+    const el = new ShadowClawIntegrations();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    el.db = {} as any;
+
+    el.accounts = [
+      {
+        id: "acc-oauth-1",
+        label: "Google Account",
+        service: "google",
+        hostPattern: "imap.gmail.com",
+        token: "enc-token",
+        authMode: "oauth",
+        oauthProviderId: "google",
+        oauthClientId: "client-id-123",
+        oauthClientSecret: "enc-secret",
+        oauthReauthRequired: true,
+      },
+    ] as any;
+
+    el.connections = [
+      {
+        id: "conn-oauth",
+        label: "My Gmail OAuth",
+        pluginId: "imap",
+        enabled: true,
+        config: {
+          executionMode: "scheduled",
+          pollIntervalSec: 60,
+          unreadOnly: true,
+        },
+        credentialRef: {
+          authType: "oauth",
+          accountId: "acc-oauth-1",
+        },
+      },
+    ] as any;
+
+    el.manifests = [
+      {
+        id: "imap",
+        name: "IMAP",
+        configurableFields: ["host", "port"],
+        description: "",
+      } as any,
+    ];
+    (getEmailPluginManifest as jest.Mock).mockReturnValue(el.manifests[0]);
+
+    el.showForm("conn-oauth");
+    const slot = el.shadowRoot?.querySelector(
+      '[data-region="connection-form"]',
+    ) as HTMLElement;
+
+    expect(slot.hidden).toBe(false);
+    expect((slot.querySelector("#int-label") as HTMLInputElement).value).toBe(
+      "My Gmail OAuth",
+    );
+    expect((slot.querySelector("#int-mode") as HTMLSelectElement).value).toBe(
+      "scheduled",
+    );
+    expect(
+      (slot.querySelector("#int-unread-only") as HTMLInputElement).checked,
+    ).toBe(true);
+
+    document.body.removeChild(el);
+  });
+
+  it("handles testConnection branches for validation, auth resolution, and API response", async () => {
+    const el = new ShadowClawIntegrations();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    el.db = {} as any;
+
+    const { showError, showSuccess } = await import("../../../ui/toast.js");
+    const { resolveConnectionTestAuth } =
+      await import("./connection-test-auth.js");
+
+    el.manifests = [
+      {
+        id: "imap",
+        name: "IMAP",
+        configurableFields: ["host", "port"],
+        description: "",
+      } as any,
+    ];
+    (getEmailPluginManifest as jest.Mock).mockReturnValue(el.manifests[0]);
+    el.showForm(null);
+
+    const slot = el.shadowRoot?.querySelector(
+      '[data-region="connection-form"]',
+    ) as HTMLElement;
+    const usernameInput = slot.querySelector(
+      "#int-username",
+    ) as HTMLInputElement;
+    const hostInput = slot.querySelector("#cfg-host") as HTMLInputElement;
+    const portInput = slot.querySelector("#cfg-port") as HTMLInputElement;
+    const authModeSelect = slot.querySelector(
+      "#int-auth-mode",
+    ) as HTMLSelectElement;
+
+    // 1. Missing username
+    usernameInput.value = "";
+    await el.testConnectionFromForm(slot);
+    expect(showError).toHaveBeenCalledWith(
+      "Auth username (email login) is required.",
+      4000,
+    );
+
+    // 2. Missing host
+    usernameInput.value = "user@test.com";
+    hostInput.value = "";
+    await el.testConnectionFromForm(slot);
+    expect(showError).toHaveBeenCalledWith("IMAP host is required.", 4000);
+
+    hostInput.value = "imap.test.com";
+    portInput.value = "993";
+
+    // 3. OAuth mode with resolveConnectionTestAuth returning error
+    authModeSelect.value = "oauth";
+    (resolveConnectionTestAuth as jest.Mock).mockReturnValueOnce({
+      error: "OAuth token missing",
+    });
+    await el.testConnectionFromForm(slot);
+    expect(showError).toHaveBeenCalledWith("OAuth token missing", 6000);
+
+    // 4. Basic userpass with resolveConnectionTestAuth returning error
+    authModeSelect.value = "basic_userpass";
+    (resolveConnectionTestAuth as jest.Mock).mockReturnValueOnce({
+      error: "Password missing",
+    });
+    await el.testConnectionFromForm(slot);
+    expect(showError).toHaveBeenCalledWith("Password missing", 6000);
+
+    // 5. Successful test call returning count
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = jest.fn<any>().mockResolvedValue({
+      ok: true,
+      json: async () => ({ count: 12 }),
+    }) as any;
+
+    (resolveConnectionTestAuth as jest.Mock).mockReturnValueOnce({
+      authType: "basic_userpass",
+      password: "secretpassword",
+    });
+    await el.testConnectionFromForm(slot);
+    expect(showSuccess).toHaveBeenCalledWith(
+      expect.stringContaining("IMAP login succeeded (12 messages returned)."),
+      4500,
+    );
+
+    // 6. Test call failing with HTTP error
+    globalThis.fetch = jest.fn<any>().mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: "Internal Error",
+      json: async () => ({ error: "Auth rejected" }),
+    }) as any;
+    (resolveConnectionTestAuth as jest.Mock).mockReturnValueOnce({
+      authType: "basic_userpass",
+      password: "secretpassword",
+    });
+    await el.testConnectionFromForm(slot);
+    expect(showError).toHaveBeenCalledWith(
+      "Connection test failed (500): Auth rejected",
+      7000,
+    );
+
+    // 7. Network exception thrown
+    globalThis.fetch = jest
+      .fn<any>()
+      .mockRejectedValue(new Error("Network drop"));
+    (resolveConnectionTestAuth as jest.Mock).mockReturnValueOnce({
+      authType: "basic_userpass",
+      password: "secretpassword",
+    });
+    await el.testConnectionFromForm(slot);
+    expect(showError).toHaveBeenCalledWith(
+      "Connection test failed: Network drop",
+      7000,
+    );
+
+    globalThis.fetch = originalFetch;
+    document.body.removeChild(el);
+  });
+
+  it("handles startOauthFlow error and success paths", async () => {
+    const el = new ShadowClawIntegrations();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    el.db = {} as any;
+
+    const { showError, showSuccess } = await import("../../../ui/toast.js");
+
+    el.manifests = [
+      {
+        id: "imap",
+        name: "IMAP",
+        configurableFields: [],
+        description: "",
+      } as any,
+    ];
+    (getEmailPluginManifest as jest.Mock).mockReturnValue(el.manifests[0]);
+    el.showForm(null);
+
+    const slot = el.shadowRoot?.querySelector(
+      '[data-region="connection-form"]',
+    ) as HTMLElement;
+    const clientIdInput = slot.querySelector(
+      "#int-oauth-client-id",
+    ) as HTMLInputElement;
+
+    // 1. Missing clientId
+    clientIdInput.value = "";
+    await el.connectOAuthFromForm(slot);
+    expect(showError).toHaveBeenCalledWith(
+      "OAuth client ID is required.",
+      4000,
+    );
+
+    clientIdInput.value = "my-client-id";
+
+    const originalFetch = globalThis.fetch;
+    const originalOpen = window.open;
+    window.open = jest.fn() as any;
+
+    // 2. Authorize fails
+    globalThis.fetch = jest.fn<any>().mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({ error: "Invalid client" }),
+    });
+    await el.connectOAuthFromForm(slot);
+    expect(showError).toHaveBeenCalledWith(
+      "Gmail (Google OAuth) connect failed: Invalid client",
+      6000,
+    );
+
+    // 3. Successful flow
+    globalThis.fetch = jest
+      .fn<any>()
+      // Authorize
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          state: "s-123",
+          authorizeUrl: "https://auth.example.com",
+        }),
+      })
+      // Session status
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: "authorized" }),
+      })
+      // Token exchange
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          accessToken: "token-abc",
+          refreshToken: "refresh-xyz",
+          expiresIn: 3600,
+          scope: "email imap",
+        }),
+      });
+
+    await el.connectOAuthFromForm(slot);
+    expect(showSuccess).toHaveBeenCalledWith(
+      expect.stringContaining("connected"),
+      3000,
+    );
+    expect(el.pendingOauthResult?.accessToken).toBe("token-abc");
+
+    window.open = originalOpen;
+    globalThis.fetch = originalFetch;
+    document.body.removeChild(el);
+  });
+
+  it("handles upsertLinkedOAuthAccount validation and account storage", async () => {
+    const el = new ShadowClawIntegrations();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    el.db = {} as any;
+
+    const slot = document.createElement("div");
+
+    // Missing username
+    await expect(
+      el.upsertLinkedOAuthAccount(slot, { id: "c-1", label: "C1" } as any),
+    ).rejects.toThrow("Email login address is required");
+
+    // Missing clientId
+    slot.innerHTML = '<input id="int-username" value="user@gmail.com" />';
+    await expect(
+      el.upsertLinkedOAuthAccount(slot, { id: "c-1", label: "C1" } as any),
+    ).rejects.toThrow("OAuth client ID is required");
+
+    // Missing token
+    slot.innerHTML =
+      '<input id="int-username" value="user@gmail.com" />' +
+      '<input id="int-oauth-client-id" value="client-123" />';
+    await expect(
+      el.upsertLinkedOAuthAccount(slot, { id: "c-1", label: "C1" } as any),
+    ).rejects.toThrow("Connect OAuth first to obtain an access token");
+
+    // With pending OAuth result and client secret
+    slot.innerHTML =
+      '<input id="int-username" value="user@gmail.com" />' +
+      '<input id="int-oauth-client-id" value="client-123" />' +
+      '<input id="int-oauth-client-secret" value="secret-xyz" />';
+
+    el.pendingOauthResult = {
+      providerId: "google",
+      accessToken: "access-token-123",
+      refreshToken: "refresh-token-456",
+      expiresAt: Date.now() + 3600000,
+      scope: "read write",
+      tokenType: "Bearer",
+    };
+
+    const account = await el.upsertLinkedOAuthAccount(slot, {
+      id: "c-1",
+      label: "C1",
+    } as any);
+
+    expect(account.authMode).toBe("oauth");
+    expect(account.id).toBeDefined();
+    expect(el.accounts.length).toBe(1);
+
+    // Update existing account path
+    el.connections = [
+      {
+        id: "c-1",
+        label: "C1",
+        pluginId: "imap",
+        enabled: true,
+        config: {},
+        credentialRef: { accountId: account.id },
+      },
+    ] as any;
+    const updated = await el.upsertLinkedOAuthAccount(slot, {
+      id: "c-1",
+      label: "C1",
+    } as any);
+    expect(updated.id).toBe(account.id);
+
+    document.body.removeChild(el);
+  });
+
+  it("handles buildCredentialRef branches for oauth and password credentials", async () => {
+    const el = new ShadowClawIntegrations();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    el.db = {} as any;
+
+    const { encryptValue } = await import("../../../security/crypto.js");
+
+    const slot = document.createElement("div");
+
+    // 1. Neither username nor password -> returns null
+    slot.innerHTML =
+      '<select id="int-auth-mode"><option value="basic_userpass">Basic</option></select>';
+    expect(await el.buildCredentialRef(slot, { id: "c-1" } as any)).toBeNull();
+
+    // 2. Username without password -> throws
+    slot.innerHTML =
+      '<select id="int-auth-mode"><option value="basic_userpass">Basic</option></select>' +
+      '<input id="int-username" value="user@mail.com" />';
+    await expect(
+      el.buildCredentialRef(slot, { id: "c-1" } as any),
+    ).rejects.toThrow("Auth password is required when username is configured");
+
+    // 3. Password without username -> throws
+    slot.innerHTML =
+      '<select id="int-auth-mode"><option value="basic_userpass">Basic</option></select>' +
+      '<input id="int-password" value="mysecret" />';
+    await expect(
+      el.buildCredentialRef(slot, { id: "c-1" } as any),
+    ).rejects.toThrow(
+      "Auth username is required when a password is configured",
+    );
+
+    // 4. encryptValue fails -> throws
+    (encryptValue as jest.Mock).mockResolvedValueOnce(undefined as any);
+    slot.innerHTML =
+      '<select id="int-auth-mode"><option value="basic_userpass">Basic</option></select>' +
+      '<input id="int-username" value="user@mail.com" />' +
+      '<input id="int-password" value="mysecret" />';
+    await expect(
+      el.buildCredentialRef(slot, { id: "c-1" } as any),
+    ).rejects.toThrow("Could not encrypt email password");
+
+    // 5. OAuth mode without username -> throws
+    slot.innerHTML =
+      '<select id="int-auth-mode"><option value="oauth">OAuth</option></select>';
+    await expect(
+      el.buildCredentialRef(slot, { id: "c-1" } as any),
+    ).rejects.toThrow(
+      "Email login address is required for OAuth authentication",
+    );
+
+    // 6. OAuth mode valid -> calls upsertLinkedOAuthAccount
+    slot.innerHTML =
+      '<select id="int-auth-mode"><option value="oauth">OAuth</option></select>' +
+      '<input id="int-username" value="user@mail.com" />';
+    el.upsertLinkedOAuthAccount = jest.fn<any>().mockResolvedValue({
+      id: "acc-1",
+      oauthProviderId: "google",
+    });
+
+    const ref = await el.buildCredentialRef(slot, { id: "c-1" } as any);
+    expect(ref?.authType).toBe("oauth");
+    expect(ref?.accountId).toBe("acc-1");
+
+    document.body.removeChild(el);
+  });
+
+  it("handles OAuth session errors, timeouts, and non-Error rejections", async () => {
+    const el = new ShadowClawIntegrations();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    el.db = {} as any;
+
+    const { showError } = await import("../../../ui/toast.js");
+
+    el.manifests = [
+      {
+        id: "imap",
+        name: "IMAP",
+        configurableFields: [],
+        description: "",
+      } as any,
+    ];
+    (getEmailPluginManifest as jest.Mock).mockReturnValue(el.manifests[0]);
+    el.showForm(null);
+
+    const slot = el.shadowRoot?.querySelector(
+      '[data-region="connection-form"]',
+    ) as HTMLElement;
+    const clientIdInput = slot.querySelector(
+      "#int-oauth-client-id",
+    ) as HTMLInputElement;
+    clientIdInput.value = "test-client";
+
+    const originalFetch = globalThis.fetch;
+    const originalOpen = window.open;
+    window.open = jest.fn() as any;
+
+    // 1. Session returns not ok
+    globalThis.fetch = jest
+      .fn<any>()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          state: "s-1",
+          authorizeUrl: "http://example.com",
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ error: "Session missing" }),
+      });
+
+    await el.connectOAuthFromForm(slot);
+    expect(showError).toHaveBeenCalledWith(
+      expect.stringContaining("Session missing"),
+      6000,
+    );
+
+    // 2. Session returns status === 'error'
+    globalThis.fetch = jest
+      .fn<any>()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          state: "s-1",
+          authorizeUrl: "http://example.com",
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: "error", error: "User denied consent" }),
+      });
+
+    await el.connectOAuthFromForm(slot);
+    expect(showError).toHaveBeenCalledWith(
+      expect.stringContaining("User denied consent"),
+      6000,
+    );
+
+    // 3. Token exchange returns not ok
+    globalThis.fetch = jest
+      .fn<any>()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          state: "s-1",
+          authorizeUrl: "http://example.com",
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ status: "authorized" }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ error: "Token expired" }),
+      });
+
+    await el.connectOAuthFromForm(slot);
+    expect(showError).toHaveBeenCalledWith(
+      expect.stringContaining("Token expired"),
+      6000,
+    );
+
+    window.open = originalOpen;
+    globalThis.fetch = originalFetch;
+    document.body.removeChild(el);
+  });
+
+  it("handles applyImapPreset with and without matching preset and mailbox", async () => {
+    const el = new ShadowClawIntegrations();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+
+    el.manifests = [
+      {
+        id: "imap",
+        name: "IMAP",
+        configurableFields: [
+          "host",
+          "port",
+          "secure",
+          "mailboxPath",
+          "fromAddress",
+        ],
+        description: "",
+      } as any,
+    ];
+    (getEmailPluginManifest as jest.Mock).mockReturnValue(el.manifests[0]);
+    el.showForm(null);
+
+    const slot = el.shadowRoot?.querySelector(
+      '[data-region="connection-form"]',
+    ) as HTMLElement;
+    const presetSelect = slot.querySelector(
+      "#int-imap-preset",
+    ) as HTMLSelectElement;
+    const usernameInput = slot.querySelector(
+      "#int-username",
+    ) as HTMLInputElement;
+    const mailboxInput = slot.querySelector(
+      "#cfg-mailboxPath",
+    ) as HTMLInputElement;
+
+    // 1. Preset with no match -> returns early
+    presetSelect.value = "auto";
+    usernameInput.value = "user@customdomain.org";
+    el.applyImapPreset(slot);
+
+    // 2. Preset with match and empty mailbox -> populates mailbox and fromAddress
+    usernameInput.value = "user@gmail.com";
+    if (mailboxInput) mailboxInput.value = "";
+    el.applyImapPreset(slot);
+    if (mailboxInput) expect(mailboxInput.value).toBe("INBOX");
+
+    // 3. Preset with presetSelect null
+    const dummyDiv = document.createElement("div");
+    el.applyImapPreset(dummyDiv);
+
+    document.body.removeChild(el);
+  });
+
+  it("handles renderConfigFieldRows with boolean options", async () => {
+    const el = new ShadowClawIntegrations();
+    const manifest: any = {
+      id: "imap",
+      configurableFields: ["secure", "smtpSecure"],
+    };
+
+    // Config with boolean false and boolean true
+    const html = el.renderConfigFieldRows(manifest, {
+      secure: false,
+      smtpSecure: true,
+    });
+    expect(html).toContain('value="false" selected');
+    expect(html).toContain('value="true" selected');
+  });
+
+  it("handles handleConnectionListClick event routing for toggle and delete actions", async () => {
+    const el = new ShadowClawIntegrations();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    el.db = {} as any;
+
+    el.connections = [
+      {
+        id: "conn-1",
+        label: "Conn 1",
+        pluginId: "imap",
+        enabled: true,
+        config: { executionMode: "event-driven" },
+        credentialRef: { encryptedSecret: "secret" },
+      },
+    ] as any;
+    el.renderConnectionList();
+
+    const list = el.shadowRoot?.querySelector(
+      '[data-region="connection-list"]',
+    ) as HTMLElement;
+
+    const toggleSpy = jest
+      .spyOn(el, "toggleConnection")
+      .mockResolvedValue(undefined as any);
+    const deleteSpy = jest
+      .spyOn(el, "deleteConnection")
+      .mockResolvedValue(undefined as any);
+
+    // Click toggle button
+    const toggleBtn = list.querySelector(
+      'button[data-action="toggle"]',
+    ) as HTMLButtonElement;
+    toggleBtn.click();
+    expect(toggleSpy).toHaveBeenCalledWith("conn-1");
+
+    // Click delete button
+    const deleteBtn = list.querySelector(
+      'button[data-action="delete"]',
+    ) as HTMLButtonElement;
+    deleteBtn.click();
+    expect(deleteSpy).toHaveBeenCalledWith("conn-1");
+
+    // Click on element without data-action or data-id
+    const badge = list.querySelector(".connection-badge") as HTMLElement;
+    badge.click();
+
+    document.body.removeChild(el);
+  });
+
+  it("handles saveForm editing existing connection, null db, and error handling", async () => {
+    const el = new ShadowClawIntegrations();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    el.db = {} as any;
+
+    const { showError } = await import("../../../ui/toast.js");
+    const { upsertEmailConnection } =
+      await import("../../../subsystems/email/connections.js");
+
+    el.manifests = [
+      {
+        id: "imap",
+        name: "IMAP",
+        configurableFields: ["port"],
+        description: "",
+      } as any,
+    ];
+    (getEmailPluginManifest as jest.Mock).mockReturnValue(el.manifests[0]);
+
+    // 1. Save with db = null -> early return
+    el.db = null;
+    await el.saveForm();
+
+    // Restore db
+    el.db = {} as any;
+
+    // 2. Editing existing connection
+    el.connections = [
+      {
+        id: "existing-conn-123",
+        label: "Old Label",
+        pluginId: "imap",
+        enabled: true,
+        config: {},
+        credentialRef: null,
+      },
+    ] as any;
+    el.showForm("existing-conn-123");
+
+    const slot = el.shadowRoot?.querySelector(
+      '[data-region="connection-form"]',
+    ) as HTMLElement;
+    (slot.querySelector("#int-label") as HTMLInputElement).value =
+      "Updated Label";
+    el.buildCredentialRef = jest.fn<any>().mockResolvedValue(null);
+
+    await el.saveForm();
+    expect(upsertEmailConnection).toHaveBeenCalledWith(
+      el.db,
+      expect.objectContaining({
+        id: "existing-conn-123",
+        label: "Updated Label",
+      }),
+    );
+
+    // 3. Upsert throws error
+    (showError as jest.Mock).mockClear();
+    el.showForm(null);
+    const slot2 = el.shadowRoot?.querySelector(
+      '[data-region="connection-form"]',
+    ) as HTMLElement;
+    (slot2.querySelector("#int-label") as HTMLInputElement).value =
+      "Error Label";
+    (upsertEmailConnection as jest.Mock).mockRejectedValueOnce(
+      new Error("Disk write error"),
+    );
+    await el.saveForm();
+    expect(showError).toHaveBeenCalledWith(
+      "Failed to save email connection: Disk write error",
+      6000,
+    );
+
+    document.body.removeChild(el);
+  });
+
+  it("handles non-IMAP manifests, getInitialPluginId variations, and showForm OAuth statuses", async () => {
+    const el = new ShadowClawIntegrations();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+
+    // 1. getInitialPluginId branches
+    expect(el.getInitialPluginId({ pluginId: "custom" } as any)).toBe("custom");
+    el.manifests = [
+      { id: "other", name: "Other", configurableFields: [] } as any,
+    ];
+    expect(el.getInitialPluginId(null)).toBe("other");
+    el.manifests = [];
+    expect(el.getInitialPluginId(null)).toBe("");
+
+    // 2. renderConfigFieldRows with non-imap manifest
+    const nonImapManifest: any = {
+      id: "smtp",
+      configurableFields: ["customField"],
+    };
+    const html = el.renderConfigFieldRows(nonImapManifest, {
+      customField: "hello",
+    });
+    expect(html).toContain('label for="cfg-customField">customField</label>');
+
+    // 3. showForm with event-driven execution mode, saved OAuth token, and no-token OAuth account
+    el.manifests = [
+      {
+        id: "imap",
+        name: "IMAP",
+        configurableFields: ["fromAddress", "mailboxPath"],
+        description: "",
+      } as any,
+    ];
+    el.accounts = [
+      {
+        id: "acc-with-token",
+        token: "existing-valid-token",
+        oauthReauthRequired: false,
+      },
+      {
+        id: "acc-no-token",
+        token: "",
+        oauthReauthRequired: false,
+      },
+    ] as any;
+
+    el.connections = [
+      {
+        id: "conn-saved-token",
+        label: "Saved Token Conn",
+        pluginId: "imap",
+        enabled: true,
+        config: { executionMode: "event-driven" },
+        credentialRef: { authType: "oauth", accountId: "acc-with-token" },
+      },
+      {
+        id: "conn-no-token",
+        label: "No Token Conn",
+        pluginId: "imap",
+        enabled: true,
+        config: {},
+        credentialRef: { authType: "oauth", accountId: "acc-no-token" },
+      },
+    ] as any;
+
+    el.showForm("conn-saved-token");
+    const slot1 = el.shadowRoot?.querySelector(
+      '[data-region="connection-form"]',
+    ) as HTMLElement;
+    expect(slot1.innerHTML).toContain("OAuth token already saved");
+    expect(slot1.innerHTML).toContain('value="event-driven" selected');
+
+    // fromAddress in applyImapPreset
+    const usernameInput = slot1.querySelector(
+      "#int-username",
+    ) as HTMLInputElement;
+    const fromInput = slot1.querySelector(
+      "#cfg-fromAddress",
+    ) as HTMLInputElement;
+    if (usernameInput && fromInput) {
+      usernameInput.value = "myfrom@gmail.com";
+      fromInput.value = "";
+      el.applyImapPreset(slot1);
+      expect(fromInput.value).toBe("myfrom@gmail.com");
+    }
+
+    el.showForm("conn-no-token");
+    const slot2 = el.shadowRoot?.querySelector(
+      '[data-region="connection-form"]',
+    ) as HTMLElement;
+    expect(slot2.innerHTML).toContain("Not connected");
+
+    // showForm with non-imap plugin
+    el.manifests = [
+      { id: "sendgrid", name: "SendGrid", configurableFields: [] } as any,
+    ];
+    el.connections = [
+      {
+        id: "conn-sg",
+        label: "SendGrid",
+        pluginId: "sendgrid",
+        enabled: true,
+        config: {},
+        credentialRef: null,
+      },
+    ] as any;
+    el.showForm("conn-sg");
 
     document.body.removeChild(el);
   });

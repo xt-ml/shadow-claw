@@ -1,11 +1,11 @@
-import { describe, it, expect } from "@jest/globals";
+import { describe, it, expect, jest } from "@jest/globals";
 import { McpServer } from "./mcp-server.js";
 import {
   MCP_ERROR_CODES,
   MCP_PROTOCOL_VERSION_2026_07_28,
   type McpTool,
 } from "./types.js";
-import { getPackageVersion } from "../utils/packageVersion.js";
+import { getPackageVersion } from "../utils/package-version.js";
 
 describe("McpServer", () => {
   function createServer(tools: McpTool[] = []) {
@@ -295,6 +295,146 @@ describe("McpServer", () => {
 
       // Notification returns null or accepted
       expect(res).toBeNull();
+    });
+  });
+
+  describe("error handling and task methods", () => {
+    it("returns InvalidParams error when tool name parameter is missing", async () => {
+      const server = createServer();
+      const res = await server.handleRequest({
+        jsonrpc: "2.0",
+        id: 11,
+        method: "tools/call",
+        params: {},
+      });
+      expect(res).toEqual(
+        expect.objectContaining({
+          error: expect.objectContaining({
+            code: MCP_ERROR_CODES.InvalidParams,
+            message: "Missing required parameter 'name'",
+          }),
+        }),
+      );
+    });
+
+    it("returns complete result with isError: true when tool handler throws an exception", async () => {
+      const server = createServer([
+        {
+          name: "failing_tool",
+          description: "Fails always",
+          inputSchema: { type: "object", properties: {} },
+        },
+      ]);
+      server.registerToolHandler("failing_tool", async () => {
+        throw new Error("Something broke inside handler");
+      });
+      const res = await server.handleRequest({
+        jsonrpc: "2.0",
+        id: 12,
+        method: "tools/call",
+        params: { name: "failing_tool" },
+      });
+      expect(res).toEqual(
+        expect.objectContaining({
+          result: expect.objectContaining({
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: "Error executing tool 'failing_tool': Something broke inside handler",
+              },
+            ],
+          }),
+        }),
+      );
+    });
+
+    it("handles tasks/get and tasks/update methods", async () => {
+      const server = createServer();
+
+      // tasks/get missing taskId
+      const errRes = await server.handleRequest({
+        jsonrpc: "2.0",
+        id: 13,
+        method: "tasks/get",
+        params: {},
+      });
+      expect(errRes).toEqual(
+        expect.objectContaining({
+          error: expect.objectContaining({
+            code: MCP_ERROR_CODES.InvalidParams,
+            message: "Missing taskId parameter",
+          }),
+        }),
+      );
+
+      // tasks/get valid taskId
+      const getRes = await server.handleRequest({
+        jsonrpc: "2.0",
+        id: 14,
+        method: "tasks/get",
+        params: { taskId: "task-123" },
+      });
+      expect(getRes).toEqual(
+        expect.objectContaining({
+          result: expect.objectContaining({
+            task: { taskId: "task-123", status: "completed" },
+          }),
+        }),
+      );
+
+      // tasks/update with taskId
+      const updateRes1 = await server.handleRequest({
+        jsonrpc: "2.0",
+        id: 15,
+        method: "tasks/update",
+        params: { taskId: "task-456" },
+      });
+      expect(updateRes1).toEqual(
+        expect.objectContaining({
+          result: expect.objectContaining({
+            task: { taskId: "task-456", status: "running" },
+          }),
+        }),
+      );
+
+      // tasks/update without taskId defaults to 'unknown'
+      const updateRes2 = await server.handleRequest({
+        jsonrpc: "2.0",
+        id: 16,
+        method: "tasks/update",
+        params: {},
+      });
+      expect(updateRes2).toEqual(
+        expect.objectContaining({
+          result: expect.objectContaining({
+            task: { taskId: "unknown", status: "running" },
+          }),
+        }),
+      );
+    });
+
+    it("returns null for unknown notifications without id", async () => {
+      const server = createServer();
+      const res = await server.handleRequest({
+        jsonrpc: "2.0",
+        method: "custom/unknown_notification",
+      });
+      expect(res).toBeNull();
+    });
+
+    it("warns and continues when dynamic tool provider throws", async () => {
+      const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+      const server = new McpServer({
+        name: "dynamic-server",
+        toolProvider: async () => {
+          throw new Error("Failed to load dynamic tools");
+        },
+      });
+      const tools = await server.getTools();
+      expect(tools).toEqual([]);
+      expect(warnSpy).toHaveBeenCalled();
+      warnSpy.mockRestore();
     });
   });
 });

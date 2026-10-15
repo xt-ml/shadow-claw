@@ -5,7 +5,7 @@
 
 ## Context
 
-Originally, ShadowClaw's agent loop (`handleInvoke` → `executeTool`) was architecturally coupled to the browser: it was dispatched from a Web Worker (`worker-isolated-agent-runtime.md`), and every tool handler was written directly against `IDBDatabase`/`IDBTransaction` via the `ShadowClawDatabase` type (`src/db/types.ts`, `src/worker/utils/executeTool.ts`), with file tools writing to OPFS (`indexeddb-and-opfs-storage.md`).
+Originally, ShadowClaw's agent loop (`handleInvoke` → `executeTool`) was architecturally coupled to the browser: it was dispatched from a Web Worker (`worker-isolated-agent-runtime.md`), and every tool handler was written directly against `IDBDatabase`/`IDBTransaction` via the `ShadowClawDatabase` type (`src/db/types.ts`, `src/worker/utils/execute-tool.ts`), with file tools writing to OPFS (`indexeddb-and-opfs-storage.md`).
 
 Server-side automation previously existed only as "push-notification-triggered client-side automation": `task-scheduler-server.ts` polled a SQLite-backed `task-schedule-store.ts` on a 60s tick and fired a Web Push to wake a _browser tab_, which then ran the real agent loop. There was no way to run a skill, slash command, or task end-to-end without a live, connected browser/Electron client — `bin/cli.mjs`'s `send`/`tasks` commands and the MCP `client-tool-relay.ts` both required a connected client and errored out otherwise.
 
@@ -45,5 +45,5 @@ Introduce a **headless runtime target** for the agent loop that is a full partic
 
 - `src/db/types.ts` widens `ShadowClawDatabase` to include `ShadowClawSqliteDatabase`.
 - `src/storage/storage.ts` adds `setStorageRootFromPath()`.
-- `src/worker/utils/executeTool.ts` adds the `BROWSER_ONLY_TOOLS` capability gate.
+- `src/worker/utils/execute-tool.ts` adds the `BROWSER_ONLY_TOOLS` capability gate.
 - `bin/cli.mjs` provides the `agent` command group.

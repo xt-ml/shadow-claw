@@ -28,7 +28,7 @@ const BACKEND_ROUTE_PREFIXES = [
   "/peerjs/",
 ];
 
-const LOCAL_DOMAINS = [".local", ".lan", ".home", ".internal"];
+import { isLocalOrPrivateHost } from "../utils/network.js";
 
 export function shouldBypassFetchProxy(
   requestUrl: URL,
@@ -79,30 +79,7 @@ export function shouldBypassFetchProxy(
     return true;
   }
 
-  const isLoopback =
-    hostname === "localhost" ||
-    hostname === "127.0.0.1" ||
-    hostname === "::1" ||
-    hostname === "[::1]";
-
-  if (isLoopback) {
-    return true;
-  }
-
-  const isPrivateIp = /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(
-    hostname,
-  );
-
-  if (isPrivateIp) {
-    return true;
-  }
-
-  // Local/private hostnames: single-label (no dots, e.g. "hostname") or local network domain suffixes
-  const isLocalHostname =
-    !hostname.includes(".") ||
-    LOCAL_DOMAINS.some((domain) => hostname.endsWith(domain));
-
-  if (isLocalHostname) {
+  if (isLocalOrPrivateHost(hostname)) {
     return true;
   }
 

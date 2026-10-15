@@ -1,6 +1,6 @@
 import { ShadowClawDatabase } from "../../../db/types.js";
-import { deleteGroupDirectory } from "../../../storage/deleteGroupDirectory.js";
-import { deleteGroupFile } from "../../../storage/deleteGroupFile.js";
+import { deleteGroupDirectory } from "../../../storage/delete-group-directory.js";
+import { deleteGroupFile } from "../../../storage/delete-group-file.js";
 
 export async function executeDeleteFile(
   db: ShadowClawDatabase,

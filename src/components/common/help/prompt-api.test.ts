@@ -110,6 +110,12 @@ describe("prompt-api help and capability utilities", () => {
       delete (globalThis as any).ai;
       expect(await isNativePromptApiAvailable()).toBe(false);
     });
+
+    it("should return true when LanguageModel is present without availability method", async () => {
+      const mockLm = { create: () => {} };
+      (globalThis as any).LanguageModel = mockLm;
+      expect(await isNativePromptApiAvailable()).toBe(true);
+    });
   });
 
   describe("isPromptApiPotentiallySupported", () => {

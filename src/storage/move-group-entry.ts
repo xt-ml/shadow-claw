@@ -1,0 +1,45 @@
+import { copyGroupEntry } from "./copy-group-entry.js";
+import { getGroupDir } from "./get-group-dir.js";
+import { parsePath } from "./parse-path.js";
+import type { ShadowClawDatabase } from "../db/types.js";
+
+/**
+ * Move (rename and/or relocate) a file or directory in a group's workspace.
+ */
+export async function moveGroupEntry(
+  db: ShadowClawDatabase,
+  sourceGroupId: string,
+  targetGroupId: string,
+  sourcePath: string,
+  targetPath: string,
+): Promise<void> {
+  const normSource = sourcePath.replace(/\/$/, "");
+  const normTarget = targetPath.replace(/\/$/, "");
+
+  if (sourceGroupId === targetGroupId && normSource === normTarget) {
+    return; // No-op
+  }
+
+  // 1. Copy source to target
+  await copyGroupEntry(
+    db,
+    sourceGroupId,
+    targetGroupId,
+    normSource,
+    normTarget,
+  );
+
+  // 2. Remove source
+  const { dirs, filename } = parsePath(normSource);
+  if (!filename) {
+    throw new Error("Invalid source path");
+  }
+
+  const groupDir = await getGroupDir(db, sourceGroupId);
+  let parentDir = groupDir;
+  for (const seg of dirs) {
+    parentDir = await parentDir.getDirectoryHandle(seg);
+  }
+
+  await parentDir.removeEntry(filename, { recursive: true });
+}

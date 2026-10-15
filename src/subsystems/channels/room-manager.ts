@@ -40,7 +40,7 @@ import type {
 import { ROOM_METHOD } from "./peer-protocol.js";
 
 /** Build the `[A2UI ACTION]` prompt that drives owner-side action processing. */
-import { formatA2UIActionPrompt } from "../../ui/a2ui/utils/formatA2UIActionPrompt.js";
+import { formatA2UIActionPrompt } from "../../ui/a2ui/utils/format-a2ui-action-prompt.js";
 
 /** Transport surface the {@link RoomManager} depends on. */
 export interface RoomTransport {

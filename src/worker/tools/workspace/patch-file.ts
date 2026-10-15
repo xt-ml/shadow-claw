@@ -1,6 +1,6 @@
 import { ShadowClawDatabase } from "../../../db/types.js";
-import { readGroupFile } from "../../../storage/readGroupFile.js";
-import { writeGroupFile } from "../../../storage/writeGroupFile.js";
+import { readGroupFile } from "../../../storage/read-group-file.js";
+import { writeGroupFile } from "../../../storage/write-group-file.js";
 
 export async function executePatchFile(
   db: ShadowClawDatabase,

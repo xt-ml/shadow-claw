@@ -130,6 +130,108 @@ describe("provider help", () => {
     expect(isTransformersJsResolutionError("network error")).toBe(false);
   });
 
+  it("returns null when reason is empty or unhandled", () => {
+    expect(detectProviderHelpType("openrouter", "", true)).toBeNull();
+    expect(
+      detectProviderHelpType("openrouter", "completely unknown message", false),
+    ).toBeNull();
+  });
+
+  it("does not match api key error types when requiresApiKey is false", () => {
+    expect(
+      detectProviderHelpType("openrouter", "401 Unauthorized", false),
+    ).toBeNull();
+    expect(
+      detectProviderHelpType("openrouter", "API key not configured", false),
+    ).toBeNull();
+  });
+
+  it("detects rate-limited reasons for various keywords", () => {
+    expect(
+      detectProviderHelpType("openrouter", "429 Too Many Requests", false),
+    ).toBe("rate-limited");
+    expect(
+      detectProviderHelpType("openrouter", "Rate limit exceeded", false),
+    ).toBe("rate-limited");
+    expect(
+      detectProviderHelpType(
+        "openrouter",
+        "Server received too many requests",
+        false,
+      ),
+    ).toBe("rate-limited");
+  });
+
+  it("detects network and status code connectivity failures", () => {
+    expect(
+      detectProviderHelpType("ollama", "connect ECONNREFUSED 127.0.0.1", false),
+    ).toBe("provider-unreachable");
+    expect(
+      detectProviderHelpType(
+        "ollama",
+        "connection refused by target host",
+        false,
+      ),
+    ).toBe("provider-unreachable");
+    expect(
+      detectProviderHelpType(
+        "openrouter",
+        "request timed out after 30000ms",
+        false,
+      ),
+    ).toBe("provider-unreachable");
+    expect(
+      detectProviderHelpType(
+        "openrouter",
+        "gateway timeout 504 or 503 Service Unavailable",
+        false,
+      ),
+    ).toBe("provider-unreachable");
+    expect(
+      detectProviderHelpType(
+        "openrouter",
+        "502 Bad Gateway from upstream",
+        false,
+      ),
+    ).toBe("provider-unreachable");
+    expect(
+      detectProviderHelpType(
+        "openrouter",
+        "NetworkError when attempting to fetch resource",
+        false,
+      ),
+    ).toBe("provider-unreachable");
+    expect(
+      detectProviderHelpType(
+        "openrouter",
+        "getaddrinfo ENOTFOUND api.openrouter.ai",
+        false,
+      ),
+    ).toBe("provider-unreachable");
+  });
+
+  it("handles unknown provider with no help links", () => {
+    const dialog = buildProviderHelpDialogOptions(
+      "custom-unknown-provider",
+      "provider-unreachable",
+      "Network error",
+    );
+    expect(dialog.links).toEqual([]);
+    expect(dialog.title).toContain("custom-unknown-provider Not Reachable");
+  });
+
+  it("builds llamafile and transformers help dialogs without reason", () => {
+    const llamaDialog = buildLlamafileHelpDialogOptions();
+    expect(llamaDialog.details?.some((d) => d.startsWith("Details:"))).toBe(
+      false,
+    );
+
+    const transformersDialog = buildTransformersJsHelpDialogOptions();
+    expect(
+      transformersDialog.details?.some((d) => d.startsWith("Details:")),
+    ).toBe(false);
+  });
+
   it("builds dialogs for api-key-invalid and provider-unreachable", () => {
     const invalidDialog = buildProviderHelpDialogOptions(
       "openrouter",

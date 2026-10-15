@@ -14,8 +14,8 @@ import {
   LlamafileManagerService,
 } from "../../server/services/llamafile-manager.js";
 import { ulid } from "../../utils/ulid.js";
-import { setNodeLlamafileCompletionExecutor } from "../utils/handleInvoke.js";
-import { setNodeLlamafileTaskExecutor } from "../../subsystems/providers/executeNativeAiTask.js";
+import { setNodeLlamafileCompletionExecutor } from "../utils/handle-invoke.js";
+import { setNodeLlamafileTaskExecutor } from "../../subsystems/providers/execute-native-ai-task.js";
 
 let defaultService: LlamafileManagerService | null = null;
 

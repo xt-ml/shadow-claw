@@ -13,31 +13,31 @@ import {
 
 import { themeStore } from "../../stores/theme.js";
 
-import { applyRoute } from "./utils/applyRoute.js";
-import { applyRouteFromCurrentLocation } from "./utils/applyRouteFromCurrentLocation.js";
-import { bindEventListeners } from "./utils/bindEventListeners.js";
-import { clearBootPendingClass } from "../../core/utils/clearBootPendingClass.js";
-import { getDefaultSidebarPage } from "./utils/getDefaultSidebarPage.js";
-import { getRoute } from "./utils/getRoute.js";
-import { getTargetPath } from "./utils/getTargetPath.js";
-import { handleOrchestratorAskUser } from "./utils/handleOrchestratorAskUser.js";
-import { handleOrchestratorOpenFile } from "./utils/handleOrchestratorOpenFile.js";
-import { handleOrchestratorProviderHelp } from "./utils/handleOrchestratorProviderHelp.js";
-import { handleOrchestratorRoomInvite } from "./utils/handleOrchestratorRoomInvite.js";
-import { handleShadowClawNavigate } from "./utils/handleShadowClawNavigate.js";
-import { historyState } from "./utils/historyState.js";
-import { loadPagesSidebarVisibilityPreference } from "./utils/loadPagesSidebarVisibilityPreference.js";
-import { processPeerQueryParam } from "./utils/processPeerQueryParam.js";
-import { processPendingSharedPayloads } from "./utils/processPendingSharedPayloads.js";
-import { processRoomQueryParam } from "./utils/processRoomQueryParam.js";
-import { requestDialog } from "./utils/requestDialog.js";
-import { scheduleTerminalPlacement } from "./utils/scheduleTerminalPlacement.js";
-import { setupEffects } from "./utils/setupEffects.js";
-import { showPage } from "./utils/showPage.js";
-import { syncPageHeaderMainVisibilityOverride } from "./utils/syncPageHeaderMainVisibilityOverride.js";
-import { updateActivityLogToggleVisibility } from "./utils/updateActivityLogToggleVisibility.js";
-import { updateHeaderMainToggle } from "./utils/updateHeaderMainToggle.js";
-import { updateTerminalToggle } from "./utils/updateTerminalToggle.js";
+import { applyRoute } from "./utils/apply-route.js";
+import { applyRouteFromCurrentLocation } from "./utils/apply-route-from-current-location.js";
+import { bindEventListeners } from "./utils/bind-event-listeners.js";
+import { clearBootPendingClass } from "../../core/utils/clear-boot-pending-class.js";
+import { getDefaultSidebarPage } from "./utils/get-default-sidebar-page.js";
+import { getRoute } from "./utils/get-route.js";
+import { getTargetPath } from "./utils/get-target-path.js";
+import { handleOrchestratorAskUser } from "./utils/handle-orchestrator-ask-user.js";
+import { handleOrchestratorOpenFile } from "./utils/handle-orchestrator-open-file.js";
+import { handleOrchestratorProviderHelp } from "./utils/handle-orchestrator-provider-help.js";
+import { handleOrchestratorRoomInvite } from "./utils/handle-orchestrator-room-invite.js";
+import { handleShadowClawNavigate } from "./utils/handle-shadow-claw-navigate.js";
+import { historyState } from "./utils/history-state.js";
+import { loadPagesSidebarVisibilityPreference } from "./utils/load-pages-sidebar-visibility-preference.js";
+import { processPeerQueryParam } from "./utils/process-peer-query-param.js";
+import { processPendingSharedPayloads } from "./utils/process-pending-shared-payloads.js";
+import { processRoomQueryParam } from "./utils/process-room-query-param.js";
+import { requestDialog } from "./utils/request-dialog.js";
+import { scheduleTerminalPlacement } from "./utils/schedule-terminal-placement.js";
+import { setupEffects } from "./utils/setup-effects.js";
+import { showPage } from "./utils/show-page.js";
+import { syncPageHeaderMainVisibilityOverride } from "./utils/sync-page-header-main-visibility-override.js";
+import { updateActivityLogToggleVisibility } from "./utils/update-activity-log-toggle-visibility.js";
+import { updateHeaderMainToggle } from "./utils/update-header-main-toggle.js";
+import { updateTerminalToggle } from "./utils/update-terminal-toggle.js";
 
 import type { RoomInvitePayload } from "../../subsystems/channels/peer-protocol.js";
 import type { OpenFilePayload } from "../../subsystems/worker/types.js";
@@ -221,7 +221,7 @@ export class ShadowClaw extends ShadowClawElement {
       }
 
       const { isMemoryStorageFallbackActive } =
-        await import("../../storage/memoryStorage.js");
+        await import("../../storage/memory-storage.js");
       if (isMemoryStorageFallbackActive()) {
         const { showWarning } = await import("../../ui/toast.js");
         showWarning(
@@ -384,15 +384,15 @@ export class ShadowClaw extends ShadowClawElement {
 
     if (this.db) {
       try {
-        const { getConfig } = await import("../../db/getConfig.js");
-        const { parseConfigBoolean } =
-          await import("./utils/parseConfigBoolean.js");
+        const { getConfig } = await import("../../db/get-config.js");
+        const { isTruthyConfigValue } =
+          await import("../../utils/parse-boolean-config.js");
         const { CONFIG_KEYS } = await import("../../config/config.js");
         const rawSplit = await getConfig(
           this.db,
           CONFIG_KEYS.CHAT_SPLIT_VIEW_ENABLED,
         );
-        this.chatSplitViewEnabled = parseConfigBoolean(rawSplit);
+        this.chatSplitViewEnabled = isTruthyConfigValue(rawSplit);
       } catch {
         this.chatSplitViewEnabled = false;
       }
@@ -403,7 +403,7 @@ export class ShadowClaw extends ShadowClawElement {
     );
     if (this.shadowRoot && chatSplitHandle instanceof HTMLElement) {
       const { initChatSplitResize } =
-        await import("./utils/initChatSplitResize.js");
+        await import("./utils/init-chat-split-resize.js");
       await initChatSplitResize(
         this.shadowRoot,
         this,

@@ -2,18 +2,18 @@ import { CONFIG_KEYS } from "../../../config/config.js";
 import { effect } from "../../../core/effect.js";
 
 import { getDb } from "../../../db/db.js";
-import { getConfig } from "../../../db/getConfig.js";
+import { getConfig } from "../../../db/get-config.js";
 
 import { setSanitizedHtml } from "../../../security/trusted-types.js";
-import { getStorageEstimate } from "../../../storage/getStorageEstimate.js";
-import { isPersistent } from "../../../storage/isPersistent.js";
-import { requestPersistentStorage } from "../../../storage/requestPersistentStorage.js";
-import { selectStorageDirectory } from "../../../storage/selectStorageDirectory.js";
+import { getStorageEstimate } from "../../../storage/get-storage-estimate.js";
+import { isPersistent } from "../../../storage/is-persistent.js";
+import { requestPersistentStorage } from "../../../storage/request-persistent-storage.js";
+import { selectStorageDirectory } from "../../../storage/select-storage-directory.js";
 import { resetStorageDirectory } from "../../../storage/storage.js";
 
 import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { showError, showSuccess, showWarning } from "../../../ui/toast.js";
-import { isTruthyConfigValue } from "../../../utils/parseBooleanConfig.js";
+import { isTruthyConfigValue } from "../../../utils/parse-boolean-config.js";
 
 import type { ShadowClawDatabase } from "../../../db/types.js";
 
@@ -291,7 +291,7 @@ export class ShadowClawStorage extends ShadowClawElement {
     }
 
     try {
-      const { setConfig } = await import("../../../db/setConfig.js");
+      const { setConfig } = await import("../../../db/set-config.js");
       await setConfig(
         this.db,
         CONFIG_KEYS.FILES_UPLOAD_APPEND_ULID,

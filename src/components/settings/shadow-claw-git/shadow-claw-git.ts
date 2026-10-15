@@ -2,9 +2,9 @@ import {
   CONFIG_KEYS,
   OAUTH_PROVIDER_DEFINITIONS,
 } from "../../../config/config.js";
-import { getConfig } from "../../../db/getConfig.js";
+import { getConfig } from "../../../db/get-config.js";
 import { showError, showSuccess } from "../../../ui/toast.js";
-import { escapeHtml } from "../../../utils/utils.js";
+import { escapeHtml } from "../../../utils/html.js";
 import { setSanitizedHtml } from "../../../security/trusted-types.js";
 import {
   resolveStoredCredentialAuthMode,
@@ -602,7 +602,7 @@ export class ShadowClawGit extends ShadowClawElement {
     }
 
     try {
-      const { setConfig } = await import("../../../db/setConfig.js");
+      const { setConfig } = await import("../../../db/set-config.js");
       await setConfig(this.db, CONFIG_KEYS.GIT_ACCOUNTS, this.accounts);
       await setConfig(
         this.db,
@@ -652,7 +652,7 @@ export class ShadowClawGit extends ShadowClawElement {
     this.accounts = [legacy];
     this.defaultAccountId = legacy.id;
 
-    const { setConfig } = await import("../../../db/setConfig.js");
+    const { setConfig } = await import("../../../db/set-config.js");
     await setConfig(this.db, CONFIG_KEYS.GIT_ACCOUNTS, this.accounts);
     await setConfig(this.db, CONFIG_KEYS.GIT_DEFAULT_ACCOUNT, legacy.id);
   }
@@ -771,7 +771,7 @@ export class ShadowClawGit extends ShadowClawElement {
 
     try {
       const { encryptValue } = await import("../../../security/crypto.js");
-      const { setConfig } = await import("../../../db/setConfig.js");
+      const { setConfig } = await import("../../../db/set-config.js");
 
       const tokenRaw = (
         slot.querySelector('[data-field="acct-token"]') as HTMLInputElement
@@ -1015,7 +1015,7 @@ export class ShadowClawGit extends ShadowClawElement {
     }
 
     try {
-      const { setConfig } = await import("../../../db/setConfig.js");
+      const { setConfig } = await import("../../../db/set-config.js");
 
       // Proxy preference
       const publicRadio: HTMLInputElement | null = root.querySelector(
@@ -1090,7 +1090,7 @@ export class ShadowClawGit extends ShadowClawElement {
     this.defaultAccountId = id;
 
     try {
-      const { setConfig } = await import("../../../db/setConfig.js");
+      const { setConfig } = await import("../../../db/set-config.js");
       await setConfig(this.db, CONFIG_KEYS.GIT_DEFAULT_ACCOUNT, id);
     } catch (err) {
       console.warn("Error setting default account:", err);

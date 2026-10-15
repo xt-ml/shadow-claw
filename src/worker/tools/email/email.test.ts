@@ -100,15 +100,21 @@ describe("worker/tools/email", () => {
       }),
     );
 
-    jest.unstable_mockModule("../../../storage/readGroupFileBytes.js", () => ({
-      readGroupFileBytes: mockReadGroupFileBytes,
-    }));
+    jest.unstable_mockModule(
+      "../../../storage/read-group-file-bytes.js",
+      () => ({
+        readGroupFileBytes: mockReadGroupFileBytes,
+      }),
+    );
 
-    jest.unstable_mockModule("../../../storage/writeGroupFileBytes.js", () => ({
-      writeGroupFileBytes: mockWriteGroupFileBytes,
-    }));
+    jest.unstable_mockModule(
+      "../../../storage/write-group-file-bytes.js",
+      () => ({
+        writeGroupFileBytes: mockWriteGroupFileBytes,
+      }),
+    );
 
-    jest.unstable_mockModule("../../../storage/groupFileExists.js", () => ({
+    jest.unstable_mockModule("../../../storage/group-file-exists.js", () => ({
       groupFileExists: mockGroupFileExists,
     }));
 
@@ -823,9 +829,9 @@ describe("worker/tools/email", () => {
 
   it("parses email attachment inputs and guesses mime types correctly", async () => {
     const { asEmailAttachmentInputs } =
-      await import("./utils/asEmailAttachmentInputs.js");
+      await import("./utils/as-email-attachment-inputs.js");
     const { guessMimeTypeFromFilename } =
-      await import("./utils/guessMimeTypeFromFilename.js");
+      await import("../../../utils/mime.js");
 
     // asEmailAttachmentInputs
     expect(asEmailAttachmentInputs(null)).toEqual([]);

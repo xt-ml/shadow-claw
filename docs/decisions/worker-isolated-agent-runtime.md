@@ -47,11 +47,11 @@ graph TD
 ### What runs in the worker
 
 - LLM API calls (`fetch()`)
-- Tool execution (`executeTool.ts`)
+- Tool execution (`src/worker/utils/execute-tool.ts`)
 - JS shell emulator (`src/shell/shell.ts`)
 - WebVM initialization and operation (`src/shell/vm.ts`)
 - Git operations (`src/subsystems/git/git.ts`)
-- SSE stream parsing (`parseSSEStream.ts`, `StreamAccumulator.ts`)
+- SSE stream parsing (`src/worker/utils/parse-sse-stream.ts`, `src/worker/stream-accumulator/stream-accumulator.ts`)
 
 ### What runs on the main thread
 
@@ -75,14 +75,14 @@ The WebVM (v86) is **worker-owned**. This was an explicit choice:
 
 - **Non-blocking UI** — the UI never freezes during LLM calls, tool execution, or VM ops
 - **Crash isolation** — a fatal error in the agent loop doesn't crash the main thread
-- **Security** — the `javascript` tool sandbox (`sandboxedEval.ts`) runs inside the worker, already isolated from the DOM
+- **Security** — the `javascript` tool sandbox (`sandboxed-eval.ts`) runs inside the worker, already isolated from the DOM
 - **Clean cancellation** — `AbortController` can cancel in-flight requests without affecting the UI
 
 ### Disadvantages
 
 - **No shared memory** — worker and main thread can't share JavaScript objects; everything must be serialized via `postMessage`
 - **Structured clone limitations** — not all types can be transferred (e.g., OPFS file handles must be re-acquired in the worker)
-- **Message protocol overhead** — adding new worker capabilities requires defining new message types in `src/subsystems/worker/types.ts` and handlers in `src/worker/utils/handleMessage.ts`
+- **Message protocol overhead** — adding new worker capabilities requires defining new message types in `src/subsystems/worker/types.ts` and handlers in `src/worker/utils/handle-message.ts`
 - **Debugging complexity** — breakpoints in the worker require separate DevTools targeting
 
 ## Alternatives Considered
@@ -99,4 +99,4 @@ The WebVM (v86) is **worker-owned**. This was an explicit choice:
 - All LLM calls, tool execution, and VM ops are in `src/worker/`
 - The worker is the **only** non-test runtime importer of `src/shell/vm.ts`
 - Terminal UI components talk to the orchestrator's terminal bridge methods — never directly to `vm.ts`
-- New agent capabilities go in `src/worker/utils/executeTool.ts` (new tools) or `src/worker/utils/handleMessage.ts` (new message types)
+- New agent capabilities go in `src/worker/utils/execute-tool.ts` (new tools) or `src/worker/utils/handle-message.ts` (new message types)

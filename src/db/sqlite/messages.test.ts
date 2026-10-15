@@ -23,20 +23,20 @@ describe("SQLite messages dual-dispatch", () => {
   beforeEach(async () => {
     tmpDir = await mkdtemp(path.join(tmpdir(), "sc-msgs-test-"));
     const { openSqliteDatabase, closeSqliteDatabase } =
-      await import("./openSqliteDatabase.js");
+      await import("./open-sqlite-database.js");
     closeSqliteDatabase();
     db = openSqliteDatabase(path.join(tmpDir, "test.db"));
   });
 
   afterEach(async () => {
-    const { closeSqliteDatabase } = await import("./openSqliteDatabase.js");
+    const { closeSqliteDatabase } = await import("./open-sqlite-database.js");
     closeSqliteDatabase();
     await rm(tmpDir, { recursive: true, force: true });
   });
 
   it("saveMessage + getRecentMessages round-trips a message", async () => {
-    const { saveMessage } = await import("../saveMessage.js");
-    const { getRecentMessages } = await import("../getRecentMessages.js");
+    const { saveMessage } = await import("../save-message.js");
+    const { getRecentMessages } = await import("../get-recent-messages.js");
     const msg = makeMsg({ content: "Test message" });
     await saveMessage(db, msg);
     const msgs = await getRecentMessages(db, "br:main", 10);
@@ -46,8 +46,8 @@ describe("SQLite messages dual-dispatch", () => {
   });
 
   it("getRecentMessages returns messages oldest-first", async () => {
-    const { saveMessage } = await import("../saveMessage.js");
-    const { getRecentMessages } = await import("../getRecentMessages.js");
+    const { saveMessage } = await import("../save-message.js");
+    const { getRecentMessages } = await import("../get-recent-messages.js");
     const base = Date.now();
     await saveMessage(
       db,
@@ -66,8 +66,8 @@ describe("SQLite messages dual-dispatch", () => {
   });
 
   it("getRecentMessages respects the limit parameter", async () => {
-    const { saveMessage } = await import("../saveMessage.js");
-    const { getRecentMessages } = await import("../getRecentMessages.js");
+    const { saveMessage } = await import("../save-message.js");
+    const { getRecentMessages } = await import("../get-recent-messages.js");
     const base = Date.now();
     for (let i = 0; i < 5; i++) {
       await saveMessage(db, makeMsg({ id: `m${i}`, timestamp: base + i * 10 }));
@@ -78,8 +78,8 @@ describe("SQLite messages dual-dispatch", () => {
   });
 
   it("getRecentMessages scopes to groupId", async () => {
-    const { saveMessage } = await import("../saveMessage.js");
-    const { getRecentMessages } = await import("../getRecentMessages.js");
+    const { saveMessage } = await import("../save-message.js");
+    const { getRecentMessages } = await import("../get-recent-messages.js");
     await saveMessage(
       db,
       makeMsg({ id: "a1", groupId: "group-a", content: "in A" }),
@@ -94,15 +94,15 @@ describe("SQLite messages dual-dispatch", () => {
   });
 
   it("getRecentMessages returns empty array when no messages", async () => {
-    const { getRecentMessages } = await import("../getRecentMessages.js");
+    const { getRecentMessages } = await import("../get-recent-messages.js");
     const msgs = await getRecentMessages(db, "br:main", 10);
     expect(msgs).toEqual([]);
   });
 
   it("clearGroupMessages removes all messages for a group", async () => {
-    const { saveMessage } = await import("../saveMessage.js");
-    const { clearGroupMessages } = await import("../clearGroupMessages.js");
-    const { getRecentMessages } = await import("../getRecentMessages.js");
+    const { saveMessage } = await import("../save-message.js");
+    const { clearGroupMessages } = await import("../clear-group-messages.js");
+    const { getRecentMessages } = await import("../get-recent-messages.js");
     await saveMessage(db, makeMsg({ id: "x1", groupId: "grp-x" }));
     await saveMessage(db, makeMsg({ id: "x2", groupId: "grp-x" }));
     await saveMessage(db, makeMsg({ id: "y1", groupId: "grp-y" }));
@@ -113,8 +113,8 @@ describe("SQLite messages dual-dispatch", () => {
   });
 
   it("getAllGroupIds returns distinct group IDs over SQLite", async () => {
-    const { saveMessage } = await import("../saveMessage.js");
-    const { getAllGroupIds } = await import("../getAllGroupIds.js");
+    const { saveMessage } = await import("../save-message.js");
+    const { getAllGroupIds } = await import("../get-all-group-ids.js");
     await saveMessage(db, makeMsg({ id: "g1", groupId: "group-alpha" }));
     await saveMessage(db, makeMsg({ id: "g2", groupId: "group-beta" }));
     await saveMessage(db, makeMsg({ id: "g3", groupId: "group-alpha" }));
@@ -124,7 +124,7 @@ describe("SQLite messages dual-dispatch", () => {
 
   it("getOrCreateSubscriberId creates and persists subscriber ID over SQLite", async () => {
     const { getOrCreateSubscriberId } =
-      await import("../getOrCreateSubscriberId.js");
+      await import("../get-or-create-subscriber-id.js");
     const id1 = await getOrCreateSubscriberId(db);
     expect(typeof id1).toBe("string");
     expect(id1.length).toBeGreaterThan(0);

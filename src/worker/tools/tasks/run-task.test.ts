@@ -4,12 +4,12 @@ jest.unstable_mockModule("../../utils/post.js", () => ({
   post: jest.fn(),
 }));
 
-jest.unstable_mockModule("./tasks-utils.js", () => ({
+jest.unstable_mockModule("../../../db/get-group-tasks.js", () => ({
   getGroupTasks: jest.fn(),
 }));
 
 const { post } = await import("../../utils/post.js");
-const { getGroupTasks } = await import("./tasks-utils.js");
+const { getGroupTasks } = await import("../../../db/get-group-tasks.js");
 const { executeRunTask } = await import("./run-task.js");
 
 describe("executeRunTask", () => {

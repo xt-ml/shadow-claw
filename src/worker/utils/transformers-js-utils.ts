@@ -55,33 +55,3 @@ export const getHuggingFaceDomain = async () => {
 
   return mainDomain;
 };
-
-export function isRemoteEnvironment() {
-  const hostname = typeof location !== "undefined" ? location.hostname : "";
-
-  // Check if localhost
-  if (
-    hostname === "localhost" ||
-    hostname === "127.0.0.1" ||
-    hostname === "::1"
-  ) {
-    return false;
-  }
-
-  // Check if intranet (private IP)
-  if (
-    /^10\./.test(hostname) ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
-    /^192\.168\./.test(hostname)
-  ) {
-    return false;
-  }
-
-  if (hostname.endsWith(".local")) {
-    return false;
-  }
-
-  // Default: if it has a domain name and is not local/intranet, likely remote
-
-  return hostname.includes(".");
-}

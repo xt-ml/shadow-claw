@@ -7,8 +7,8 @@ import {
 } from "../../core/orchestrator/utils/operations/provider.js";
 
 import { getDb, ShadowClawDatabase } from "../../db/db.js";
-import { getConfig } from "../../db/getConfig.js";
-import { setConfig } from "../../db/setConfig.js";
+import { getConfig } from "../../db/get-config.js";
+import { setConfig } from "../../db/set-config.js";
 import { setSanitizedHtml } from "../../security/trusted-types.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { toolsStore } from "../../stores/tools.js";

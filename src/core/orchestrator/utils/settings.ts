@@ -2,8 +2,8 @@ import {
   CONFIG_KEYS,
   DEFAULT_TASK_SERVER_URL,
 } from "../../../config/config.js";
-import { setConfig as _defaultSetConfig } from "../../../db/setConfig.js";
-import { syncProxyConfigToServiceWorker } from "./syncProxyConfigToServiceWorker.js";
+import { setConfig as _defaultSetConfig } from "../../../db/set-config.js";
+import { syncProxyConfigToServiceWorker } from "./sync-proxy-config-to-service-worker.js";
 
 import type { ShadowClawDatabase } from "../../../db/db.js";
 import type { OrchestratorState } from "../orchestrator-state.js";

@@ -1607,5 +1607,250 @@ describe("providers.js", () => {
       const parsed = parseResponse(provider, response);
       expect(parsed.content).toEqual([{ type: "text", text: "Result text" }]);
     });
+
+    it("returns GoogleAdapter for google format and handles formatRequest and parseResponse", () => {
+      const provider: any = { format: "google" };
+      const adapter = getAdapter(provider);
+      expect(adapter.constructor.name).toBe("GoogleAdapter");
+
+      const messages = [
+        { role: "system", content: "Ignore me" },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Hello Gemini" },
+            {
+              type: "image_url",
+              image_url: { url: "data:image/png;base64,iVBORw0KGgo=" },
+            },
+            {
+              type: "audio_url",
+              audio_url: { url: "data:audio/mp3;base64,//uQZA==" },
+            },
+            {
+              type: "document_url",
+              document_url: { url: "data:application/pdf;base64,JVBERi0=" },
+            },
+            { type: "tool_use", name: "search", input: { query: "kittens" } },
+            { type: "tool_result", name: "search", content: "results here" },
+            {
+              type: "tool_result",
+              name: "rich_tool",
+              content: [{ type: "text", text: "rich text" }],
+            },
+            {
+              type: "tool_result",
+              name: "output_str",
+              output: "string output",
+            },
+            {
+              type: "tool_result",
+              name: "output_obj",
+              output: { key: "value" },
+            },
+            { type: "other_block" },
+          ],
+        },
+        { role: "assistant", content: "Understood" },
+        { role: "tool", content: "tool output" },
+      ];
+
+      const tools = [
+        {
+          name: "search",
+          description: "Search web",
+          input_schema: {
+            type: "object",
+            properties: { query: { type: "string" } },
+          },
+        },
+      ];
+
+      const request = adapter.formatRequest(messages, tools, {
+        model: "gemini-1.5-pro",
+        maxTokens: 2048,
+        system: "System instruction here",
+      });
+
+      expect(request.contents).toHaveLength(3);
+      expect(request.contents[0].role).toBe("user");
+      expect(request.contents[1].role).toBe("model");
+      expect(request.contents[2].role).toBe("function");
+      expect(request.system_instruction?.parts[0]?.text).toBe(
+        "System instruction here",
+      );
+      expect(request.tools[0]?.function_declarations[0]?.name).toBe("search");
+
+      const parts = request.contents[0].parts;
+      expect(parts[0]).toEqual({ text: "Hello Gemini" });
+      expect(parts[1].inlineData).toEqual({
+        mimeType: "image/png",
+        data: "iVBORw0KGgo=",
+      });
+      expect(parts[2].inlineData).toEqual({
+        mimeType: "audio/mp3",
+        data: "//uQZA==",
+      });
+      expect(parts[3].inlineData).toEqual({
+        mimeType: "application/pdf",
+        data: "JVBERi0=",
+      });
+      expect(parts[4].functionCall).toEqual({
+        name: "search",
+        args: { query: "kittens" },
+      });
+      expect(parts[5].functionResponse).toEqual({
+        name: "search",
+        response: { result: "results here" },
+      });
+
+      const geminiResponse = {
+        candidates: [
+          {
+            content: {
+              parts: [
+                { text: "Gemini text response" },
+                { functionCall: { name: "search", args: { query: "dogs" } } },
+              ],
+            },
+            finishReason: "STOP",
+          },
+        ],
+        usageMetadata: { promptTokenCount: 15, candidatesTokenCount: 25 },
+      };
+
+      const parsed = adapter.parseResponse(geminiResponse);
+      expect(parsed.content[0]).toEqual({
+        type: "text",
+        text: "Gemini text response",
+      });
+      expect(parsed.content[1]).toEqual(
+        expect.objectContaining({
+          type: "tool_use",
+          name: "search",
+          input: { query: "dogs" },
+        }),
+      );
+      expect(parsed.stop_reason).toBe("tool_use");
+      expect(parsed.usage).toEqual({ input_tokens: 15, output_tokens: 25 });
+
+      expect(() => adapter.parseResponse({})).toThrow(
+        "No candidates in Gemini response",
+      );
+      expect(() =>
+        adapter.parseResponse({
+          candidates: [{ finishReason: "SAFETY" }],
+        }),
+      ).toThrow("Gemini response blocked by safety filters");
+    });
+
+    it("handles getContextLimit for specific model families", () => {
+      expect(getContextLimit("gpt-4.1-mini")).toBe(1_047_576);
+      expect(getContextLimit("gpt-5-preview")).toBe(400_000);
+      expect(getContextLimit("gpt-4-turbo-2024-04-09")).toBe(128_000);
+      expect(getContextLimit("gpt-3.5-legacy")).toBe(4_096);
+    });
+
+    it("formats audio formats for OpenAI correctly", () => {
+      const openAiProvider: any = { format: "openai" };
+      const adapter = getAdapter(openAiProvider);
+
+      const makeAudioMessage = (mimeType: string) => [
+        {
+          role: "user",
+          content: [
+            {
+              type: "attachment",
+              mediaType: "audio",
+              mimeType,
+              data: "AAAA",
+            },
+          ],
+        },
+      ];
+
+      const rFlac = adapter.formatRequest(makeAudioMessage("audio/flac"), [], {
+        model: "gpt-4o-audio",
+      } as any);
+      expect(rFlac.messages[0].content[0].input_audio.format).toBe("flac");
+
+      const rOgg = adapter.formatRequest(makeAudioMessage("audio/ogg"), [], {
+        model: "gpt-4o-audio",
+      } as any);
+      expect(rOgg.messages[0].content[0].input_audio.format).toBe("ogg");
+
+      const rAac = adapter.formatRequest(makeAudioMessage("audio/aac"), [], {
+        model: "gpt-4o-audio",
+      } as any);
+      expect(rAac.messages[0].content[0].input_audio.format).toBe("aac");
+
+      const rWebm = adapter.formatRequest(makeAudioMessage("audio/webm"), [], {
+        model: "gpt-4o-audio",
+      } as any);
+      expect(rWebm.messages[0].content[0].input_audio.format).toBe("webm");
+
+      const rMp4 = adapter.formatRequest(makeAudioMessage("audio/mp4"), [], {
+        model: "gpt-4o-audio",
+      } as any);
+      expect(rMp4.messages[0].content[0].input_audio.format).toBe("mp4");
+
+      const rOther = adapter.formatRequest(
+        makeAudioMessage("audio/unknown"),
+        [],
+        { model: "gpt-4o-audio" } as any,
+      );
+      expect(rOther.messages[0].content[0].input_audio.format).toBe("mp3");
+    });
+
+    it("resolves reasoning effort budget ratios in AnthropicAdapter", () => {
+      const anthropicProvider: any = {
+        format: "anthropic",
+        reasoningParam: "thinking",
+      };
+      const adapter = getAdapter(anthropicProvider);
+
+      // Explicit max_tokens
+      const reqMaxTokens = adapter.formatRequest(
+        [{ role: "user", content: "think" }],
+        [],
+        {
+          model: "claude-3-7-sonnet-20250219",
+          maxTokens: 10000,
+          system: "",
+          reasoning: { max_tokens: 3000 },
+        } as any,
+      );
+      expect(reqMaxTokens.thinking).toEqual({
+        type: "enabled",
+        budget_tokens: 3000,
+      });
+
+      for (const effort of [
+        "max",
+        "high",
+        "medium",
+        "low",
+        "minimal",
+        "none",
+      ]) {
+        const req = adapter.formatRequest(
+          [{ role: "user", content: "think" }],
+          [],
+          {
+            model: "claude-3-7-sonnet-20250219",
+            maxTokens: 10000,
+            system: "",
+            reasoning: { effort, enabled: true },
+          } as any,
+        );
+        if (effort !== "none") {
+          expect(req.thinking).toBeDefined();
+          expect(req.thinking.type).toBe("enabled");
+          expect(typeof req.thinking.budget_tokens).toBe("number");
+        } else {
+          expect(req.thinking).toBeUndefined();
+        }
+      }
+    });
   });
 });

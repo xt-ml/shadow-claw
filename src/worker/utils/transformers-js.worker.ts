@@ -6,21 +6,19 @@ import {
   env,
 } from "@huggingface/transformers";
 
-import { createModelCacheFetch } from "../../subsystems/providers/utils/createModelCacheFetch.js";
+import { createModelCacheFetch } from "../../subsystems/providers/utils/create-model-cache-fetch.js";
 import {
   normalizeMessagesForChatTemplate,
   mapToolsForChatTemplate,
-} from "../../subsystems/providers/utils/chatTemplate.js";
+} from "../../subsystems/providers/utils/chat-template.js";
 
 import {
   getPreferredDtypes,
   normalizeDtypeStrategy,
 } from "./transformers-js-load-options.js";
 
-import {
-  getHuggingFaceDomain,
-  isRemoteEnvironment,
-} from "./transformers-js-utils.js";
+import { getHuggingFaceDomain } from "./transformers-js-utils.js";
+import { isRemoteEnvironment } from "../../utils/network.js";
 
 // Configure Transformers.js
 if (isRemoteEnvironment()) {

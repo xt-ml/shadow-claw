@@ -1,5 +1,5 @@
 import { ShadowClawDatabase } from "../../../db/types.js";
-import { writeGroupFile } from "../../../storage/writeGroupFile.js";
+import { writeGroupFile } from "../../../storage/write-group-file.js";
 
 export async function executeUpdateMemory(
   db: ShadowClawDatabase,

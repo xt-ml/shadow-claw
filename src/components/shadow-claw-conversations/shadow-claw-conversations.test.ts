@@ -25,11 +25,11 @@ jest.unstable_mockModule("../../db/groups.js", () => ({
   updateGroupToolTags: (jest.fn() as any).mockResolvedValue(undefined),
 }));
 
-jest.unstable_mockModule("../../db/clearGroupMessages.js", () => ({
+jest.unstable_mockModule("../../db/clear-group-messages.js", () => ({
   clearGroupMessages: mockClearGroupMessages,
 }));
 
-jest.unstable_mockModule("../../db/setConfig.js", () => ({
+jest.unstable_mockModule("../../db/set-config.js", () => ({
   setConfig: mockSetConfig,
 }));
 
@@ -1402,6 +1402,10 @@ describe("ShadowClawConversations", () => {
 });
 
 describe("shadow-claw-conversations dialog submission methods", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it("submits create dialog", async () => {
     const el = new ShadowClawConversations() as any;
     document.body.appendChild(el);
@@ -2303,5 +2307,1049 @@ describe("shadow-claw-conversations dialog submission methods", () => {
     await el._persistHeight();
 
     document.body.removeChild(el);
+  });
+
+  it("handles openCloneDialog, openCreateDialog, openDeleteDialog, and openDetailsDialog edge cases", async () => {
+    const el = new ShadowClawConversations() as any;
+    document.body.appendChild(el);
+    el.db = {};
+
+    // 1. openCloneDialog when dialog is missing or has nameSpan
+    const root = el.shadowRoot;
+    const cloneDialog = root.querySelector(".conversations__clone-dialog");
+    const cloneNameSpan = cloneDialog.querySelector(
+      ".conversations__clone-name",
+    );
+    el.openCloneDialog("My Clone");
+    expect(cloneNameSpan.textContent).toBe("My Clone");
+
+    cloneDialog.remove();
+    expect(() => el.openCloneDialog("Test")).not.toThrow();
+    root.appendChild(cloneDialog);
+
+    // 2. openCreateDialog when dialog is missing or has input
+    const createDialog = root.querySelector(".conversations__create-dialog");
+    const createInput = root.querySelector(
+      ".conversations__create-dialog .conversations__input",
+    );
+    createInput.value = "dirty text";
+    el.openCreateDialog();
+    expect(createInput.value).toBe("");
+
+    createDialog.remove();
+    expect(() => el.openCreateDialog()).not.toThrow();
+    root.appendChild(createDialog);
+
+    // 3. openDeleteDialog when dialog is missing or has nameSpan
+    const deleteDialog = root.querySelector(".conversations__delete-dialog");
+    const deleteNameSpan = deleteDialog.querySelector(
+      ".conversations__delete-name",
+    );
+    el.openDeleteDialog("Delete Me");
+    expect(deleteNameSpan.textContent).toBe("Delete Me");
+
+    deleteDialog.remove();
+    expect(() => el.openDeleteDialog("Test")).not.toThrow();
+    root.appendChild(deleteDialog);
+
+    // 4. openDetailsDialog with non-peer groupId and copy button click
+    const origClipboard = navigator.clipboard;
+    let writtenText = "";
+    (navigator as any).clipboard = {
+      writeText: jest.fn().mockImplementation(async (text: string) => {
+        writtenText = text;
+      }),
+    };
+
+    el._pendingDetailsToolTags = ["bash"];
+    el.openDetailsDialog("General Chat", "conv:123");
+    const copyBtn = root.querySelector(
+      "#conversations-group-id-copy-btn",
+    ) as HTMLButtonElement;
+    copyBtn?.click();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(writtenText).toBe("conv-123");
+
+    // Copy button fallback when clipboard throws
+    (navigator as any).clipboard.writeText = jest
+      .fn()
+      .mockRejectedValue(new Error("denied"));
+    const groupIdInput = root.querySelector(
+      "#conversations-details-group-id",
+    ) as HTMLInputElement;
+    const selectSpy = jest.spyOn(groupIdInput, "select");
+    copyBtn?.click();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(selectSpy).toHaveBeenCalled();
+
+    // Copy button when input has empty value
+    groupIdInput.value = "";
+    copyBtn?.click();
+
+    // 5. openDetailsDialog with peer:groupId
+    mockOrchStore.orchestrator = {
+      peerjs: {
+        connectedPeersSignal: {
+          get: () => ["peer-123", "peer-456"],
+        },
+      },
+      peerjsPeerAliases: {
+        Alice: "peer-123",
+      },
+    };
+
+    // Peer connected with alias
+    el.openDetailsDialog("Alice Peer", "peer:peer-123");
+    let participantsList = root.querySelector(
+      "#conversations-details-participants-list",
+    ) as HTMLElement;
+    const peerInput1 = participantsList.querySelector(
+      "input",
+    ) as HTMLInputElement;
+    expect(peerInput1?.value).toContain("Alice (peer-123)");
+
+    // Click copy peer id button
+    const peerCopyBtn = participantsList.querySelector(
+      ".conversations__group-id-copy-btn",
+    ) as HTMLButtonElement;
+    peerCopyBtn?.click();
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Peer connected without alias
+    el.openDetailsDialog("Bob Peer", "peer:peer-456");
+    participantsList = root.querySelector(
+      "#conversations-details-participants-list",
+    ) as HTMLElement;
+    const peerInput2 = participantsList.querySelector(
+      "input",
+    ) as HTMLInputElement;
+    expect(peerInput2?.value).toContain("peer-456");
+
+    // Peer not connected
+    el.openDetailsDialog("Offline Peer", "peer:peer-999");
+    participantsList = root.querySelector(
+      "#conversations-details-participants-list",
+    ) as HTMLElement;
+    expect(participantsList.textContent).toContain(
+      "Peer is not currently connected.",
+    );
+
+    (navigator as any).clipboard = origClipboard;
+    document.body.removeChild(el);
+  });
+
+  it("handles tool tags manipulation and subagent settings in details dialog", async () => {
+    const el = new ShadowClawConversations() as any;
+    document.body.appendChild(el);
+    el.db = {};
+    const root = el.shadowRoot;
+
+    el._pendingDetailsToolTags = ["bash", "fetch_url"];
+    el._pendingDetailsPinnedMaxTokens = 4096;
+    el._pendingDetailsSubagentMaxTokens = 2048;
+    el._pendingDetailsSubagentMode = "manual";
+    el._pendingDetailsPinnedProvider = "openai";
+    el.openDetailsDialog("Tools Dialog", "grp-tools");
+
+    // 1. Remove chip
+    const removeBtn = root.querySelector(
+      ".conversations__tool-chip-remove",
+    ) as HTMLButtonElement;
+    removeBtn?.click();
+    expect(el._pendingDetailsToolTags).not.toContain("bash");
+
+    // 2. Add tool via input & button
+    const toolInput = root.querySelector(
+      "#conversations-tool-input",
+    ) as HTMLInputElement;
+    const toolAddBtn = root.querySelector(
+      "#conversations-add-tool-btn",
+    ) as HTMLButtonElement;
+
+    // 2a. Empty value
+    toolInput.value = "   ";
+    toolAddBtn.click();
+
+    // 2b. Invalid name
+    toolInput.value = "INVALID NAME!@#";
+    toolAddBtn.click();
+
+    // 2c. Valid tool name
+    toolInput.value = "web_search";
+    toolAddBtn.click();
+    expect(el._pendingDetailsToolTags).toContain("web_search");
+
+    // 2d. Duplicate tool name
+    toolInput.value = "web_search";
+    toolAddBtn.click();
+
+    // 2e. Enter key on toolInput
+    toolInput.value = "new_tool";
+    toolInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+    expect(el._pendingDetailsToolTags).toContain("new_tool");
+
+    // 3. Subagent mode change
+    const subagentModeSelect = root.querySelector(
+      "#conversations-subagent-mode",
+    ) as HTMLSelectElement;
+    subagentModeSelect.value = "automatic";
+    subagentModeSelect.onchange?.({} as any);
+    expect(el._pendingDetailsSubagentMode).toBe("automatic");
+
+    subagentModeSelect.value = "manual";
+    subagentModeSelect.onchange?.({} as any);
+    expect(el._pendingDetailsSubagentMode).toBe("manual");
+
+    // 4. Token inputs
+    const agentMaxTokensInput = root.querySelector(
+      "#conversations-agent-max-tokens",
+    ) as HTMLInputElement;
+    agentMaxTokensInput.value = "8192";
+    agentMaxTokensInput.dispatchEvent(new Event("input"));
+    expect(el._pendingDetailsPinnedMaxTokens).toBe(8192);
+
+    agentMaxTokensInput.value = "invalid";
+    agentMaxTokensInput.dispatchEvent(new Event("input"));
+    expect(el._pendingDetailsPinnedMaxTokens).toBeNull();
+
+    const subagentMaxTokensInput = root.querySelector(
+      "#conversations-subagent-max-tokens",
+    ) as HTMLInputElement;
+    subagentMaxTokensInput.value = "1024";
+    subagentMaxTokensInput.dispatchEvent(new Event("input"));
+    expect(el._pendingDetailsSubagentMaxTokens).toBe(1024);
+
+    subagentMaxTokensInput.value = "-5";
+    subagentMaxTokensInput.dispatchEvent(new Event("input"));
+    expect(el._pendingDetailsSubagentMaxTokens).toBeNull();
+
+    // 5. Main picker and subagent picker event handlers
+    const mainPicker = root.querySelector("#conversations-main-picker");
+    mainPicker?.dispatchEvent(
+      new CustomEvent("provider-model-change", {
+        detail: { providerId: "anthropic", modelId: "claude-3-sonnet" },
+      }),
+    );
+    expect(el._pendingDetailsPinnedProvider).toBe("anthropic");
+    expect(el._pendingDetailsPinnedModel).toBe("claude-3-sonnet");
+
+    const subagentPicker = root.querySelector("#conversations-subagent-picker");
+    subagentPicker?.dispatchEvent(
+      new CustomEvent("provider-model-change", {
+        detail: { providerId: "google", modelId: "gemini-2.5-pro" },
+      }),
+    );
+    expect(el._pendingDetailsSubagentProvider).toBe("google");
+    expect(el._pendingDetailsSubagentModel).toBe("gemini-2.5-pro");
+
+    // 6. Provider module settings change
+    const mainSettings = root.querySelector(
+      "#conversations-main-provider-module-settings",
+    );
+    mainSettings?.dispatchEvent(
+      new CustomEvent("provider-module-settings-change", {
+        detail: {
+          providerId: "llamafile",
+          overrides: { llamafile: { port: 8080 } },
+        },
+      }),
+    );
+    expect(el._pendingDetailsProviderRuntimeOverrides.llamafile).toEqual({
+      port: 8080,
+    });
+
+    mainSettings?.dispatchEvent(
+      new CustomEvent("provider-module-settings-change", {
+        detail: {
+          providerId: "bedrock_proxy",
+          overrides: { bedrock_proxy: { region: "us-east-1" } },
+        },
+      }),
+    );
+    expect(el._pendingDetailsProviderRuntimeOverrides.bedrock_proxy).toEqual({
+      region: "us-east-1",
+    });
+
+    mainSettings?.dispatchEvent(
+      new CustomEvent("provider-module-settings-change", {
+        detail: {},
+      }),
+    );
+
+    const subagentSettings = root.querySelector(
+      "#conversations-subagent-provider-module-settings",
+    );
+    subagentSettings?.dispatchEvent(
+      new CustomEvent("provider-module-settings-change", {
+        detail: {
+          providerId: "llamafile",
+          overrides: { llamafile: { port: 9090 } },
+        },
+      }),
+    );
+    expect(el._pendingDetailsProviderRuntimeOverrides.llamafile).toEqual({
+      port: 9090,
+    });
+
+    document.body.removeChild(el);
+  });
+
+  it("handles handleClone, handleCreate, handleDelete, handleDetails, handleReorder, and handleSwitch branches", async () => {
+    const el = new ShadowClawConversations() as any;
+    document.body.appendChild(el);
+
+    // 1. Without db
+    el.db = null;
+    await el.handleClone("br:main");
+    await el.handleCreate();
+    await el.handleDelete("br:main", "Main");
+    await el.handleDetails("br:main", "Main");
+    await el.handleReorder("g1", "g2");
+
+    // 2. With db
+    el.db = {};
+    mockOrchStore.groups = [
+      {
+        groupId: "g1",
+        name: "Group 1",
+        toolTags: ["bash"],
+        pinnedMaxTokens: 2000,
+        pinnedProvider: "openai",
+        pinnedModel: "gpt-4",
+        subagentModelSelectionMode: "manual",
+        subagentMaxTokens: 1000,
+        subagentPinnedProvider: "anthropic",
+        subagentPinnedModel: "claude",
+      },
+      { groupId: "g2", name: "Group 2" },
+      { groupId: "g3", name: "Group 3" },
+    ];
+
+    // handleClone with unknown group
+    await el.handleClone("unknown-group");
+
+    // handleClone with known group
+    await el.handleClone("g1");
+    expect(el._pendingCloneGroupId).toBe("g1");
+
+    // handleDetails with group
+    await el.handleDetails("g1", "Group 1");
+    expect(el._pendingRenameGroupId).toBe("g1");
+
+    // handleReorder with precomputedIds
+    await el.handleReorder("g1", "g2", ["g3", "g2", "g1"]);
+    expect(mockOrchStore.reorderConversations).toHaveBeenCalledWith(el.db, [
+      "g3",
+      "g2",
+      "g1",
+    ]);
+
+    // handleReorder with invalid IDs
+    await el.handleReorder("invalid", "g2");
+
+    // handleReorder normal swap
+    await el.handleReorder("g1", "g3");
+    expect(mockOrchStore.reorderConversations).toHaveBeenCalledWith(el.db, [
+      "g2",
+      "g3",
+      "g1",
+    ]);
+
+    // handleSwitch branches
+    mockOrchStore.activeGroupId = "g1";
+    await el.handleSwitch("g1"); // already active -> return
+
+    let navDetail: any = null;
+    const navListener = (e: any) => {
+      navDetail = e.detail;
+    };
+    document.addEventListener("shadow-claw-navigate", navListener);
+
+    mockOrchStore.activePage = "tasks";
+    await el.handleSwitch("g2");
+    expect(navDetail).toEqual({ page: "tasks", groupId: "g2" });
+
+    mockOrchStore.activePage = "files";
+    await el.handleSwitch("g3");
+    expect(navDetail).toEqual({ page: "files", groupId: "g3" });
+
+    mockOrchStore.activePage = "chat";
+    await el.handleSwitch("g2");
+    expect(navDetail).toEqual({ page: "chat", groupId: "g2" });
+
+    mockOrchStore.activePage = "unknown";
+    mockOrchStore.sidebarDefaultPage = "tasks";
+    await el.handleSwitch("g3");
+    expect(navDetail).toEqual({ page: "tasks", groupId: "g3" });
+
+    mockOrchStore.activePage = "unknown";
+    mockOrchStore.sidebarDefaultPage = "files";
+    await el.handleSwitch("g3");
+    expect(navDetail).toEqual({ page: "files", groupId: "g3" });
+
+    mockOrchStore.activePage = "unknown";
+    mockOrchStore.sidebarDefaultPage = "pages";
+    await el.handleSwitch("g3");
+    expect(navDetail).toEqual({ page: "chat", groupId: "g3" });
+
+    document.removeEventListener("shadow-claw-navigate", navListener);
+    document.body.removeChild(el);
+  });
+
+  it("handles keyboard navigation, selection, and grab/drop reordering", async () => {
+    const el = new ShadowClawConversations() as any;
+    document.body.appendChild(el);
+    el.db = {};
+    mockOrchStore.groups = [
+      { groupId: "g1", name: "Group 1" },
+      { groupId: "g2", name: "Group 2" },
+      { groupId: "g3", name: "Group 3" },
+    ];
+    el.render();
+
+    const root = el.shadowRoot;
+    const items = root.querySelectorAll(".conversation-item");
+    const item1 = items[0] as HTMLElement;
+
+    // 1. Navigation when not grabbed
+    item1.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+    );
+    item1.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }),
+    );
+    item1.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
+    );
+    item1.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }),
+    );
+
+    // Selection via Space / Enter
+    const switchSpy = jest
+      .spyOn(el, "handleSwitch")
+      .mockResolvedValue(undefined);
+    item1.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+    );
+    expect(switchSpy).toHaveBeenCalledWith("g1");
+
+    item1.dispatchEvent(
+      new KeyboardEvent("keydown", { key: " ", bubbles: true }),
+    );
+    expect(switchSpy).toHaveBeenCalledTimes(2);
+
+    // 2. Grab with 'm'
+    item1.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "m", bubbles: true }),
+    );
+    expect(el._keyboardGrabbedId).toBe("g1");
+
+    // ArrowUp at top boundary (index 0) -> does not move
+    item1.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }),
+    );
+    expect(el._keyboardGrabbedId).toBe("g1");
+
+    // ArrowDown -> moves down
+    const reorderSpy = jest
+      .spyOn(el, "handleReorder")
+      .mockResolvedValue(undefined);
+    item1.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+    );
+    expect(reorderSpy).toHaveBeenCalledWith("g1", "g2", ["g2", "g1", "g3"]);
+
+    // Escape cancels reorder
+    item1.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+    expect(el._keyboardGrabbedId).toBeNull();
+
+    // Grab again and drop with Enter
+    item1.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "M", bubbles: true }),
+    );
+    expect(el._keyboardGrabbedId).toBe("g1");
+    item1.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+    );
+    expect(el._keyboardGrabbedId).toBeNull();
+
+    document.body.removeChild(el);
+  });
+
+  it("handles touch drag-drop, autoscroll, and resize handle pointer events", async () => {
+    const el = new ShadowClawConversations() as any;
+    document.body.appendChild(el);
+    el.db = {};
+    await new Promise((r) => setTimeout(r, 20));
+    mockOrchStore.groups = [
+      { groupId: "g1", name: "Group 1" },
+      { groupId: "g2", name: "Group 2" },
+    ];
+    el.render();
+
+    const root = el.shadowRoot;
+    const list = root.querySelector(".conversation-list") as HTMLElement;
+    const item1 = root.querySelector('[data-group-id="g1"]') as HTMLElement;
+    const handle1 = item1.querySelector(".drag-handle") as HTMLElement;
+
+    // 1. Touch start on handle
+    const emptyTouch = new CustomEvent("touchstart", { bubbles: true }) as any;
+    emptyTouch.touches = [];
+    handle1.dispatchEvent(emptyTouch);
+
+    const touchObj = { identifier: 42, clientX: 10, clientY: 20 };
+    const touchStartEv = new CustomEvent("touchstart", {
+      bubbles: true,
+    }) as any;
+    touchStartEv.touches = [touchObj];
+    touchStartEv.preventDefault = jest.fn();
+    handle1.dispatchEvent(touchStartEv);
+    expect(el._touchId).toBe(42);
+    expect(el._touchDraggedGroupId).toBe("g1");
+
+    // 2. Touch move on list
+    el._itemAtPoint = jest
+      .fn()
+      .mockReturnValue(root.querySelector('[data-group-id="g2"]'));
+    const touchMoveEv = new CustomEvent("touchmove", { bubbles: true }) as any;
+    touchMoveEv.touches = [touchObj];
+    touchMoveEv.preventDefault = jest.fn();
+    list.dispatchEvent(touchMoveEv);
+
+    // 3. Touch end on list
+    const touchEndEv = new CustomEvent("touchend", { bubbles: true }) as any;
+    touchEndEv.changedTouches = [touchObj];
+    const reorderSpy = jest
+      .spyOn(el, "handleReorder")
+      .mockResolvedValue(undefined);
+    list.dispatchEvent(touchEndEv);
+    expect(reorderSpy).toHaveBeenCalledWith("g1", "g2");
+    expect(el._touchDraggedGroupId).toBeNull();
+
+    // 4. Touch cancel on list
+    el._touchDraggedGroupId = "g1";
+    el._touchId = 42;
+    list.dispatchEvent(new Event("touchcancel"));
+    expect(el._touchDraggedGroupId).toBeNull();
+
+    // 5. Auto-scroll logic
+    el._startAutoScroll();
+    expect(el._autoScrollActive).toBe(true);
+    el._startAutoScroll(); // already active branch
+
+    list.getBoundingClientRect = () =>
+      ({ top: 100, bottom: 500, height: 400 }) as any;
+    el._updateAutoScrollSpeed(120); // distTop = 20 < 50 -> scroll up
+    expect(el._autoScrollSpeed).toBeLessThan(0);
+
+    el._updateAutoScrollSpeed(480); // distBottom = 20 < 50 -> scroll down
+    expect(el._autoScrollSpeed).toBeGreaterThan(0);
+
+    el._updateAutoScrollSpeed(300); // middle -> speed 0
+    expect(el._autoScrollSpeed).toBe(0);
+
+    el._stopAutoScroll();
+    expect(el._autoScrollActive).toBe(false);
+
+    // 6. Resize handle pointer interactions
+    el._initResizeHandle();
+    const resizeHandle = root.querySelector(".resize-handle") as HTMLElement;
+    resizeHandle.setPointerCapture = jest.fn();
+
+    // pointerdown with right click (ignored)
+    const pdRight = new CustomEvent("pointerdown") as any;
+    pdRight.pointerType = "mouse";
+    pdRight.button = 2;
+    resizeHandle.dispatchEvent(pdRight);
+
+    // pointerdown with left click
+    const pdLeft = new CustomEvent("pointerdown") as any;
+    pdLeft.pointerType = "mouse";
+    pdLeft.button = 0;
+    pdLeft.pointerId = 1;
+    pdLeft.preventDefault = jest.fn();
+    resizeHandle.dispatchEvent(pdLeft);
+    expect(resizeHandle.classList.contains("active")).toBe(true);
+
+    // pointermove on document
+    const pm = new CustomEvent("pointermove") as any;
+    pm.pointerId = 1;
+    pm.clientY = 50;
+    document.dispatchEvent(pm);
+
+    // pointerup with matching pointerId
+    const pu = new CustomEvent("pointerup") as any;
+    pu.pointerId = 1;
+    resizeHandle.dispatchEvent(pu);
+    expect(resizeHandle.classList.contains("active")).toBe(false);
+
+    // dblclick resets height
+    resizeHandle.dispatchEvent(new MouseEvent("dblclick"));
+
+    document.body.removeChild(el);
+  });
+
+  it("handles dialog forms submission and item action clicks", async () => {
+    const el = new ShadowClawConversations() as any;
+    document.body.appendChild(el);
+    el.db = {};
+    el._setupDialogListeners();
+    mockOrchStore.groups = [
+      { groupId: "g1", name: "Group 1", toolTags: ["bash"] },
+      { groupId: "g2", name: "Group 2" },
+    ];
+    el.render();
+
+    const root = el.shadowRoot;
+    const item1 = root.querySelector('[data-group-id="g1"]') as HTMLElement;
+
+    // 1. Actions toggle click
+    const toggleBtn = item1.querySelector(
+      ".conversation-actions-toggle",
+    ) as HTMLElement;
+    toggleBtn?.click();
+    expect(item1.classList.contains("show-actions")).toBe(true);
+
+    // 2. Clone button click
+    const cloneBtn = item1.querySelector(
+      '[data-action="clone"]',
+    ) as HTMLElement;
+    cloneBtn?.click();
+    expect(el._pendingCloneGroupId).toBe("g1");
+
+    // Submit clone form
+    const cloneForm = root.querySelector(
+      ".conversations__clone-dialog .conversations__form",
+    ) as HTMLFormElement;
+    cloneForm.dispatchEvent(new Event("submit"));
+    expect(mockOrchStore.cloneConversation).toHaveBeenCalledWith(el.db, "g1");
+
+    // 3. Details button click
+    const detailsBtn = item1.querySelector(
+      '[data-action="details"]',
+    ) as HTMLElement;
+    detailsBtn?.click();
+    expect(el._pendingRenameGroupId).toBe("g1");
+
+    // Details form submit with changed name
+    const detailsInput = root.querySelector(
+      ".conversations__details-dialog .conversations__input",
+    ) as HTMLInputElement;
+    detailsInput.value = "New Name For Group 1";
+    const detailsForm = root.querySelector(
+      ".conversations__details-dialog .conversations__form",
+    ) as HTMLFormElement;
+    detailsForm.dispatchEvent(new Event("submit"));
+    expect(mockOrchStore.renameConversation).toHaveBeenCalledWith(
+      el.db,
+      "g1",
+      "New Name For Group 1",
+    );
+
+    // 4. Delete button click
+    const deleteBtn = item1.querySelector(
+      '[data-action="delete"]',
+    ) as HTMLElement;
+    deleteBtn?.click();
+    expect(el._pendingDeleteGroupId).toBe("g1");
+
+    // Delete form submit
+    const deleteForm = root.querySelector(
+      ".conversations__delete-dialog .conversations__form",
+    ) as HTMLFormElement;
+    deleteForm.dispatchEvent(new Event("submit"));
+    expect(mockOrchStore.deleteConversation).toHaveBeenCalledWith(el.db, "g1");
+
+    // 5. Create form submit
+    const createInput = root.querySelector(
+      ".conversations__create-dialog .conversations__input",
+    ) as HTMLInputElement;
+    createInput.value = "Newly Created Group";
+    const createForm = root.querySelector(
+      ".conversations__create-dialog .conversations__form",
+    ) as HTMLFormElement;
+    createForm.dispatchEvent(new Event("submit"));
+    expect(mockOrchStore.createConversation).toHaveBeenCalledWith(
+      el.db,
+      "Newly Created Group",
+    );
+
+    // 6. Dialog cancel buttons
+    const createCancel = root.querySelector(
+      ".conversations__create-dialog .conversations__cancel",
+    ) as HTMLElement;
+    createCancel?.click();
+
+    const detailsCancel = root.querySelector(
+      ".conversations__details-dialog .conversations__cancel",
+    ) as HTMLElement;
+    detailsCancel?.click();
+
+    const deleteCancel = root.querySelector(
+      ".conversations__delete-dialog .conversations__cancel",
+    ) as HTMLElement;
+    deleteCancel?.click();
+
+    const cloneCancel = root.querySelector(
+      ".conversations__clone-dialog .conversations__cancel",
+    ) as HTMLElement;
+    cloneCancel?.click();
+
+    document.body.removeChild(el);
+  });
+
+  it("covers missing branches for shadowRoot, dialogs, drag-and-drop, resize, and provider models", async () => {
+    // 1. Missing root branches
+    const elNoRoot = new ShadowClawConversations() as any;
+    Object.defineProperty(elNoRoot, "shadowRoot", { get: () => null });
+    elNoRoot.openCloneDialog("Test");
+    elNoRoot.openCreateDialog();
+    elNoRoot.openDeleteDialog("Test");
+    elNoRoot.openDetailsDialog("Test");
+    elNoRoot._announce("Test announce");
+    expect(elNoRoot._focusNext(null)).toBeUndefined();
+    expect(elNoRoot._focusNextItem(null)).toBeUndefined();
+    expect(elNoRoot._focusPrev(null)).toBeUndefined();
+    expect(elNoRoot._focusPrevItem(null)).toBeUndefined();
+    expect(elNoRoot._itemAtPoint(0, 0)).toBeNull();
+    await elNoRoot._submitCloneDialog();
+    await elNoRoot._submitCreateDialog();
+    await elNoRoot._submitDeleteDialog();
+    await elNoRoot._submitDetailsDialog();
+
+    // 2. DisconnectedCallback and effectCleanup
+    const elEffect = new ShadowClawConversations() as any;
+    const cleanupSpy = jest.fn();
+    elEffect._effectCleanup = cleanupSpy;
+    elEffect.disconnectedCallback();
+    expect(cleanupSpy).toHaveBeenCalled();
+    elEffect._effectCleanup = null;
+    expect(() => elEffect.disconnectedCallback()).not.toThrow();
+
+    // 3. _announce when region exists
+    const elAnnounce = new ShadowClawConversations() as any;
+    elAnnounce._announce("Testing screen reader announcement");
+
+    // 4. openDetailsDialog with undefined/empty groupId & peer branches
+    const elDetails = new ShadowClawConversations() as any;
+    document.body.appendChild(elDetails);
+    elDetails.db = {};
+    elDetails.openDetailsDialog("No Group");
+    elDetails.openDetailsDialog("Empty Group", "");
+
+    // peerjs connectedPeersSignal fallback to []
+    mockOrchStore.orchestrator = {
+      peerjs: null,
+      peerjsPeerAliases: null,
+      getAvailableProviders: () => null,
+    };
+    elDetails.openDetailsDialog("Peer null", "peer:peer-none");
+
+    // Candidate tools and tool tags branches
+    elDetails._pendingDetailsToolTags = null;
+    elDetails.openDetailsDialog("Tools Tags Null", "g-null");
+    // toolAddBtn with null pending tags
+    const toolInput = elDetails.shadowRoot.querySelector(
+      "#conversations-tool-input",
+    ) as HTMLInputElement;
+    const toolAddBtn = elDetails.shadowRoot.querySelector(
+      "#conversations-add-tool-btn",
+    ) as HTMLButtonElement;
+    toolInput.value = "new_tag_added";
+    toolAddBtn.click();
+    expect(elDetails._pendingDetailsToolTags).toContain("new_tag_added");
+
+    // 5. Provider module events branches
+    const mainSettings = elDetails.shadowRoot.querySelector(
+      "#conversations-main-provider-module-settings",
+    );
+    elDetails._pendingDetailsProviderRuntimeOverrides = null;
+    mainSettings?.dispatchEvent(
+      new CustomEvent("provider-module-settings-change", {
+        detail: { providerId: "unknown_provider", overrides: {} },
+      }),
+    );
+
+    const subSettings = elDetails.shadowRoot.querySelector(
+      "#conversations-subagent-provider-module-settings",
+    );
+    elDetails._pendingDetailsProviderRuntimeOverrides = null;
+    subSettings?.dispatchEvent(
+      new CustomEvent("provider-module-settings-change", {
+        detail: { providerId: "unknown_provider", overrides: {} },
+      }),
+    );
+
+    // subagentModeSelect onchange when mode manual and spawn_subagent enabled
+    const subModeSelect = elDetails.shadowRoot.querySelector(
+      "#conversations-subagent-mode",
+    ) as HTMLSelectElement;
+    elDetails._pendingDetailsToolTags = ["spawn_subagent"];
+    elDetails._pendingDetailsSubagentProvider = "openai";
+    subModeSelect.value = "manual";
+    subModeSelect.onchange?.({} as any);
+    expect(elDetails._pendingDetailsSubagentMode).toBe("manual");
+
+    // subagentMaxTokensInput input events
+    const subTokensInput = elDetails.shadowRoot.querySelector(
+      "#conversations-subagent-max-tokens",
+    ) as HTMLInputElement;
+    subTokensInput.value = "2048";
+    subTokensInput.dispatchEvent(new Event("input"));
+    expect(elDetails._pendingDetailsSubagentMaxTokens).toBe(2048);
+    subTokensInput.value = "-5";
+    subTokensInput.dispatchEvent(new Event("input"));
+    expect(elDetails._pendingDetailsSubagentMaxTokens).toBeNull();
+
+    // 6. Drag-and-drop branches on li
+    mockOrchStore.groups = [
+      { groupId: "g1", name: "G1" },
+      { groupId: "g2", name: "G2" },
+    ];
+    elDetails.render();
+    const li1 = elDetails.shadowRoot.querySelector(
+      '[data-group-id="g1"]',
+    ) as HTMLElement;
+    const li2 = elDetails.shadowRoot.querySelector(
+      '[data-group-id="g2"]',
+    ) as HTMLElement;
+
+    // dragover when _draggedGroupId is null
+    elDetails._draggedGroupId = null;
+    li1.dispatchEvent(new Event("dragover"));
+    expect(li1.classList.contains("drag-over")).toBe(false);
+
+    // dragover when _draggedGroupId is same
+    elDetails._draggedGroupId = "g1";
+    li1.dispatchEvent(new Event("dragover"));
+    expect(li1.classList.contains("drag-over")).toBe(false);
+
+    // dragover when _draggedGroupId is different
+    elDetails._draggedGroupId = "g2";
+    li1.dispatchEvent(new Event("dragover"));
+    expect(li1.classList.contains("drag-over")).toBe(true);
+
+    // dragleave
+    li1.dispatchEvent(new Event("dragleave"));
+    expect(li1.classList.contains("drag-over")).toBe(false);
+
+    // drop when _draggedGroupId is null
+    elDetails._draggedGroupId = null;
+    li1.dispatchEvent(new Event("drop"));
+
+    // drop when _draggedGroupId is same
+    elDetails._draggedGroupId = "g1";
+    li1.dispatchEvent(new Event("drop"));
+
+    // drop when _draggedGroupId is different
+    const reorderSpy = jest
+      .spyOn(elDetails, "handleReorder")
+      .mockResolvedValue(undefined);
+    elDetails._draggedGroupId = "g2";
+    li1.dispatchEvent(new Event("drop"));
+    expect(reorderSpy).toHaveBeenCalledWith("g2", "g1");
+
+    // 7. Touch list drag branches
+    const list = elDetails.shadowRoot.querySelector(
+      ".conversation-list",
+    ) as HTMLElement;
+    // touchmove when _touchDraggedGroupId is null
+    elDetails._touchDraggedGroupId = null;
+    list.dispatchEvent(new CustomEvent("touchmove", { bubbles: true }));
+
+    // touchmove with empty touches
+    elDetails._touchDraggedGroupId = "g1";
+    const tmEmpty = new CustomEvent("touchmove", { bubbles: true }) as any;
+    tmEmpty.touches = [];
+    list.dispatchEvent(tmEmpty);
+
+    // touchend when _touchDraggedGroupId is null
+    elDetails._touchDraggedGroupId = null;
+    list.dispatchEvent(new CustomEvent("touchend", { bubbles: true }));
+
+    // touchend with empty changedTouches
+    elDetails._touchDraggedGroupId = "g1";
+    const teEmpty = new CustomEvent("touchend", { bubbles: true }) as any;
+    teEmpty.changedTouches = [];
+    list.dispatchEvent(teEmpty);
+
+    // _bindTouchListEvents guard when already bound
+    (list as any)._touchBound = true;
+    elDetails._bindTouchListEvents(list);
+
+    // 8. Resize handle pointer branches
+    elDetails._initResizeHandle();
+    const handle = elDetails.shadowRoot.querySelector(
+      ".resize-handle",
+    ) as HTMLElement;
+    handle.setPointerCapture = jest.fn();
+
+    // pointerdown non-primary
+    const pdIgnored = new CustomEvent("pointerdown") as any;
+    pdIgnored.pointerType = "mouse";
+    pdIgnored.button = 1;
+    handle.dispatchEvent(pdIgnored);
+
+    // pointerdown valid
+    const pdValid = new CustomEvent("pointerdown") as any;
+    pdValid.pointerType = "mouse";
+    pdValid.button = 0;
+    pdValid.pointerId = 99;
+    handle.dispatchEvent(pdValid);
+
+    // pointermove with mismatched pointerId
+    const pmMismatch = new CustomEvent("pointermove") as any;
+    pmMismatch.pointerId = 100;
+    document.dispatchEvent(pmMismatch);
+
+    // pointermove with matched pointerId but clamped height (too small and too large)
+    const pmSmall = new CustomEvent("pointermove") as any;
+    pmSmall.pointerId = 99;
+    pmSmall.clientY = 10000;
+    document.dispatchEvent(pmSmall);
+
+    const pmLarge = new CustomEvent("pointermove") as any;
+    pmLarge.pointerId = 99;
+    pmLarge.clientY = -10000;
+    document.dispatchEvent(pmLarge);
+
+    // pointerup with mismatched pointerId
+    const puMismatch = new CustomEvent("pointerup") as any;
+    puMismatch.pointerId = 100;
+    handle.dispatchEvent(puMismatch);
+    expect(handle.classList.contains("active")).toBe(true);
+
+    // pointerup with matched pointerId
+    const puMatch = new CustomEvent("pointerup") as any;
+    puMatch.pointerId = 99;
+    handle.dispatchEvent(puMatch);
+    expect(handle.classList.contains("active")).toBe(false);
+
+    // 9. _persistHeight branches
+    elDetails.db = null;
+    await elDetails._persistHeight();
+    elDetails.db = {};
+    await elDetails._persistHeight(120);
+    await elDetails._persistHeight();
+    await elDetails._persistHeight(0);
+
+    // 10. _loadProviderModels branches
+    // !provider.modelsUrl
+    const resNoUrl = await elDetails._loadProviderModels({ id: "p1" });
+    expect(resNoUrl).toEqual([]);
+
+    // with apiKeyHeader and apiKey
+    mockOrchStore.orchestrator = {
+      getApiKeyForSpecificProvider: jest.fn().mockResolvedValue("api-key-123"),
+    };
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [{ id: "m1" }],
+    }) as any;
+    const resKey = await elDetails._loadProviderModels({
+      id: "p2",
+      modelsUrl: "https://example.com/models",
+      apiKeyHeader: "Authorization",
+      apiKeyHeaderFormat: "Bearer {key}",
+    });
+    expect(resKey).toEqual([{ id: "m1" }]);
+
+    // fetch error !response.ok
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+    }) as any;
+    await expect(
+      elDetails._loadProviderModels({
+        id: "p3",
+        modelsUrl: "https://example.com/models",
+      }),
+    ).rejects.toThrow("HTTP 404");
+
+    // data with custom array property
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ custom_items: [{ id: "m-custom" }] }),
+    }) as any;
+    const resCustom = await elDetails._loadProviderModels({
+      id: "p4",
+      modelsUrl: "https://example.com/models",
+    });
+    expect(resCustom).toEqual([{ id: "m-custom" }]);
+
+    // data as single object with id
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: "m-single", name: "Single Model" }),
+    }) as any;
+    const resSingle = await elDetails._loadProviderModels({
+      id: "p5",
+      modelsUrl: "https://example.com/models",
+    });
+    expect(resSingle).toEqual([{ id: "m-single", name: "Single Model" }]);
+
+    // 11. _submitDetailsDialog branches
+    elDetails._pendingRenameGroupId = "g1";
+    elDetails._pendingRenameName = "Same Name";
+    const detailsInput = elDetails.shadowRoot.querySelector(
+      ".conversations__details-dialog .conversations__input",
+    ) as HTMLInputElement;
+    detailsInput.value = "Same Name"; // no change
+    elDetails._pendingDetailsToolTags = null;
+    await elDetails._submitDetailsDialog();
+    expect(mockOrchStore.renameConversation).not.toHaveBeenCalled();
+
+    // 12. _isSpawnSubagentEnabledInCurrentScope branches
+    elDetails._pendingDetailsToolTags = ["spawn_subagent"];
+    expect(elDetails._isSpawnSubagentEnabledInCurrentScope()).toBe(true);
+    elDetails._pendingDetailsToolTags = ["bash"];
+    expect(elDetails._isSpawnSubagentEnabledInCurrentScope()).toBe(false);
+    elDetails._pendingDetailsToolTags = [];
+    expect(typeof elDetails._isSpawnSubagentEnabledInCurrentScope()).toBe(
+      "boolean",
+    );
+    elDetails._pendingDetailsToolTags = null;
+    expect(typeof elDetails._isSpawnSubagentEnabledInCurrentScope()).toBe(
+      "boolean",
+    );
+
+    // 13. _itemAtPoint branches
+    elDetails.shadowRoot.elementFromPoint = jest
+      .fn()
+      .mockReturnValueOnce(null)
+      .mockReturnValueOnce(document.createElement("div"))
+      .mockReturnValueOnce(li1);
+    expect(elDetails._itemAtPoint(0, 0)).toBeNull();
+    expect(elDetails._itemAtPoint(0, 0)).toBeNull();
+    expect(elDetails._itemAtPoint(0, 0)).toBe(li1);
+
+    // 14. Focus navigation branches
+    elDetails._focusNext(li1);
+    elDetails._focusNext(li2);
+    elDetails._focusNext(document.createElement("button"));
+    elDetails._focusNextItem(li1);
+    elDetails._focusNextItem(li2);
+    elDetails._focusPrev(li2);
+    elDetails._focusPrev(li1);
+    elDetails._focusPrevItem(li2);
+    elDetails._focusPrevItem(li1);
+
+    // 15. Submit dialogs guards when pending variables are null
+    elDetails._pendingRenameGroupId = null;
+    await elDetails._submitDetailsDialog();
+    elDetails._pendingRenameGroupId = "g1";
+    elDetails._pendingRenameName = null;
+    await elDetails._submitDetailsDialog();
+
+    elDetails._pendingDeleteGroupId = null;
+    await elDetails._submitDeleteDialog();
+
+    elDetails._pendingCloneGroupId = null;
+    await elDetails._submitCloneDialog();
+
+    document.body.removeChild(elDetails);
   });
 });

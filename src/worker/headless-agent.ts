@@ -9,14 +9,14 @@ import { nativeBashExecutor } from "./tools/bash/native-bash-executor.js";
 import {
   setNodeTransformersCompletionExecutor,
   setNodeLlamafileCompletionExecutor,
-} from "./utils/handleInvoke.js";
+} from "./utils/handle-invoke.js";
 import {
   setNodeTransformersTaskExecutor,
   setNodeLlamafileTaskExecutor,
-} from "../subsystems/providers/executeNativeAiTask.js";
+} from "../subsystems/providers/execute-native-ai-task.js";
 import { executeNodeTransformersCompletion } from "./tools/node-transformers-executor.js";
 import { executeNodeLlamafileCompletion } from "./tools/node-llamafile-executor.js";
-import { setHeadlessEvalExecutor } from "./utils/sandboxedEval.js";
+import { setHeadlessEvalExecutor } from "./utils/sandboxed-eval.js";
 import { nativeEvalExecutor } from "./utils/native-eval-executor.js";
 import { setPeerClientFactory } from "./tools/peer/prompt-peer.js";
 import { nativePeerClientFactory } from "./tools/peer/native-peer-client.js";
@@ -30,9 +30,9 @@ setNodeLlamafileTaskExecutor(executeNodeLlamafileCompletion);
 setHeadlessEvalExecutor(nativeEvalExecutor);
 setPeerClientFactory(nativePeerClientFactory);
 
-export { executeTool } from "./utils/executeTool.js";
-export { executeToolChain } from "./utils/toolChain.js";
-export { handleInvoke } from "./utils/handleInvoke.js";
+export { executeTool } from "./utils/execute-tool.js";
+export { executeToolChain } from "./utils/tool-chain.js";
+export { handleInvoke } from "./utils/handle-invoke.js";
 export { post, setPostHandler } from "./utils/post.js";
 export {
   setHeadlessMode,
@@ -45,7 +45,7 @@ export { setDB, getDb, resetDB } from "../db/db.js";
 export {
   openSqliteDatabase,
   closeSqliteDatabase,
-} from "../db/sqlite/openSqliteDatabase.js";
+} from "../db/sqlite/open-sqlite-database.js";
 export { isSqliteDatabase, wrapSqliteDatabase } from "../db/sqlite/types.js";
 export {
   setStorageRootFromPath,
@@ -60,7 +60,7 @@ export {
 export {
   discoverSkills,
   loadSkill,
-} from "../subsystems/skills/discoverSkills.js";
+} from "../subsystems/skills/discover-skills.js";
 export { TOOL_DEFINITIONS } from "../subsystems/tools/index.js";
 export { DEFAULT_BUILTIN_PROFILE } from "../subsystems/tools/builtin-profiles.js";
 export { loadDeclarativeTools } from "../subsystems/tools/declarative.js";
@@ -73,7 +73,7 @@ export {
   importRemoteTool,
   importRemoteSkill,
   importRemoteScript,
-} from "../subsystems/tools/remote/importArtifacts.js";
+} from "../subsystems/tools/remote/import-artifacts.js";
 export {
   getProvider,
   getDefaultProvider,
@@ -84,15 +84,15 @@ export {
   CONFIG_KEYS,
 } from "../config/config.js";
 export { getContextLimit } from "../subsystems/providers/providers.js";
-export { getConfig } from "../db/getConfig.js";
-export { setConfig } from "../db/setConfig.js";
-export { saveMessage } from "../db/saveMessage.js";
-export { getRecentMessages } from "../db/getRecentMessages.js";
+export { getConfig } from "../db/get-config.js";
+export { setConfig } from "../db/set-config.js";
+export { saveMessage } from "../db/save-message.js";
+export { getRecentMessages } from "../db/get-recent-messages.js";
 export {
   executeNativeAiTask,
   setNodeTransformersTaskExecutor,
   setNodeLlamafileTaskExecutor,
-} from "../subsystems/providers/executeNativeAiTask.js";
+} from "../subsystems/providers/execute-native-ai-task.js";
 export {
   setNativeAiTaskHandler,
   executeRewriteText,

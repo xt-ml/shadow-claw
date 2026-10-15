@@ -8,10 +8,7 @@
 
 import { env } from "node:process";
 
-import {
-  withRetry,
-  isRetryableHttpError,
-} from "../../worker/utils/withRetry.js";
+import { withRetry, isRetryableHttpError } from "../../utils/retry.js";
 
 import {
   getFirstHeaderValue,

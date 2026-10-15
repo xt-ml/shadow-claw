@@ -5,11 +5,11 @@ jest.unstable_mockModule("../../security/crypto.js", () => ({
   decryptValue: jest.fn(async (val: string) => val.replace("enc:", "")),
 }));
 
-jest.unstable_mockModule("../../db/setConfig.js", () => ({
+jest.unstable_mockModule("../../db/set-config.js", () => ({
   setConfig: jest.fn(async () => {}),
 }));
 
-jest.unstable_mockModule("../../db/getConfig.js", () => ({
+jest.unstable_mockModule("../../db/get-config.js", () => ({
   getConfig: jest.fn(async () => null),
 }));
 

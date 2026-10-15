@@ -1,5 +1,5 @@
 import { ShadowClawDatabase } from "../../../db/types.js";
-import { groupFileExists } from "../../../storage/groupFileExists.js";
+import { groupFileExists } from "../../../storage/group-file-exists.js";
 
 import { post } from "../../utils/post.js";
 

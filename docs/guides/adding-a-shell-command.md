@@ -68,7 +68,7 @@ const result = processData(/* ... */);
 return JSON.stringify(result);
 ```
 
-The sandbox in `src/worker/utils/sandboxedEval.ts` restricts:
+The sandbox in `src/worker/utils/sandboxed-eval.ts` restricts:
 
 - No `eval`
 - No `new Function`

@@ -15,7 +15,7 @@ import {
   DEFAULT_VM_NETWORK_RELAY_URL,
 } from "../config/config.js";
 import { ShadowClawDatabase } from "../db/db.js";
-import { getGroupDir } from "../storage/getGroupDir.js";
+import { getGroupDir } from "../storage/get-group-dir.js";
 import { getStorageRoot, getStorageStatus } from "../storage/storage.js";
 
 export interface V86BootConfig {

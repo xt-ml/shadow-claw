@@ -1,6 +1,6 @@
 import { GlobalWorkerOptions, getDocument } from "pdfjs-dist";
 
-import { installGetOrInsertComputedPolyfill } from "./utils/installGetOrInsertComputedPolyfill.js";
+import { installGetOrInsertComputedPolyfill } from "./utils/install-get-or-insert-computed-polyfill.js";
 
 import type { PdfFile } from "../types.js";
 

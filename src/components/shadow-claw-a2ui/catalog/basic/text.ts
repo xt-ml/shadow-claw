@@ -1,4 +1,4 @@
-import { resolveDynamicString } from "../../../../ui/a2ui/utils/resolveDynamicString.js";
+import { resolveDynamicString } from "../../../../ui/a2ui/utils/resolve-dynamic-string.js";
 import { applyWeight, variantToTag } from "./shared.js";
 
 import type { TextSpec } from "../../../../ui/a2ui/types.js";

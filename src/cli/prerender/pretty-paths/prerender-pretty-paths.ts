@@ -30,8 +30,8 @@ import {
 import { extractDisplayPathFromRouteKey } from "../utils/extract-display-path-from-route-key.js";
 import { injectStaticRoutingScript } from "../utils/inject-static-routing-script.js";
 import { insertBeforeClosingHead } from "../utils/insert-before-closing-head.js";
-import { trimSlashes } from "../utils/trim-slashes.js";
-import { isPagePathAllowed } from "../../../utils/isPagePathAllowed.js";
+import { trimSlashes } from "../../../utils/normalize-workspace-path.js";
+import { isPagePathAllowed } from "../../../utils/is-page-path-allowed.js";
 
 export { injectStaticRoutingScript };
 export { insertBeforeClosingHead };

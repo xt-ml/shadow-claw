@@ -42,7 +42,7 @@ sequenceDiagram
   participant MC as "document.modelContext"
   participant Main as "Main Thread (webmcp.ts)"
   participant Worker as "Agent Worker"
-  participant Exec as "executeTool.ts"
+  participant Exec as "execute-tool.ts"
 
   Browser->>MC: "call tool: fetch_file({url, path})"
   MC->>Main: "execute() callback"

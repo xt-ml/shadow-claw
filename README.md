@@ -420,7 +420,7 @@ A lightweight, headless weather station, forecasting engine, and outdoor operati
 
 A localized news aggregation, automatic deduplication, and topic-centric summarization pipeline powered by ShadowClaw. It monitors configured remote feeds, and compiles clean briefings directly into local markdown snapshots and static HTML.
 
-![News Summary](https://xt-ml.github.io/shadow-claw/assets/screenshots/kherrick.github.io_news-summary-1024x768.png)
+[![News Summary](https://xt-ml.github.io/shadow-claw/assets/screenshots/kherrick.github.io_news-summary-1024x768.png)](https://kherrick.github.io/news-summary/)
 
 ---
 

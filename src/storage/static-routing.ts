@@ -6,6 +6,8 @@ const DEFAULT_GROUP_ID = "br:main";
 
 export interface StaticRouteDefinition {
   prettyPath: string;
+  title?: string;
+  description?: string;
 }
 
 export interface StaticRoutesManifest {

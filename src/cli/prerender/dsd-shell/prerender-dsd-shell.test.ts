@@ -212,7 +212,38 @@ describe("pages DSD prerender parity", () => {
       '<div class="pages__empty" data-pages-empty hidden>',
     );
     expect(next).toContain(
-      '<div class="pages__rendered" data-pages-rendered><h1>Hello</h1></div>',
+      '<div class="pages__rendered" data-pages-rendered data-initial-path="MEMORY.md"><h1>Hello</h1></div>',
+    );
+  });
+
+  it("stamps selected path when data-pages-dropdown-selected has internal whitespace or newlines, and stamps data-initial-path", () => {
+    const pagesTemplateWithWhitespace = [
+      '<shadow-claw-page-header icon="📚" title="Pages">',
+      '  <div slot="status" class="pages__status" data-pages-status></div>',
+      "</shadow-claw-page-header>",
+      '<span class="pages__dropdown-selected"',
+      "      data-pages-dropdown-selected",
+      "      >Select a page...</span >",
+      '<div class="pages__list" data-pages-list role="list"></div>',
+      '<div class="pages__empty" data-pages-empty>empty</div>',
+      '<div class="pages__rendered" data-pages-rendered hidden></div>',
+    ].join("\n");
+
+    const pageHeaderTemplate =
+      '<header class="header"><h2 class="header__title"></h2></header>';
+
+    const next = applyStaticPagesContent(
+      pagesTemplateWithWhitespace,
+      [{ displayPath: "index.html", absolutePath: null }],
+      "<div>Home Content</div>",
+      pageHeaderTemplate,
+    );
+
+    expect(next).toContain(
+      '<span class="pages__dropdown-selected" data-pages-dropdown-selected>index.html</span>',
+    );
+    expect(next).toContain(
+      '<div class="pages__rendered" data-pages-rendered data-initial-path="index.html"><div>Home Content</div></div>',
     );
   });
 });

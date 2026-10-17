@@ -2,7 +2,7 @@
 
 > Runtime guardrails, DOM element isolation, allowlists, and Content Security Policy for custom elements and iframe previews.
 
-**Source:** `src/security/custom-element-security.ts` · `src/security/iframe-sanitizer.ts` · `src/security/custom-element-security.test.ts`
+**Source:** `src/security/custom-element-security.ts` · `src/security/custom-element-guard.ts` · `src/security/utils/parse-host-pattern-match.ts` · `src/security/iframe-sanitizer.ts` · `src/security/custom-element-security.test.ts` · `src/security/custom-element-guard.test.ts`
 
 ## Overview
 
@@ -51,11 +51,11 @@ graph TD
 
 ### 2. Registry Guard (`installCustomElementsRegistryGuard`)
 
-Monkey-patches `customElements.define` at application boot (`src/core/index.ts` and `src/core/theme-init.ts`). If a script attempts to register an unapproved tag name, the guard throws an error and halts execution of that definition.
+Implemented in modular `src/security/custom-element-guard.ts` (re-exported by `src/security/custom-element-security.ts`). Monkey-patches `customElements.define` at application boot (`src/core/index.ts` and early bootstrap `src/core/theme-init.ts`). Because the guard is cleanly separated from heavy HTML sanitizers and CSP builders, bootstrap scripts initialize custom element enforcement without bloating the initial critical render path. If a script attempts to register an unapproved tag name, the guard throws an error and halts execution of that definition.
 
 ### 3. DOM Guard (`installCustomElementDomGuard`)
 
-Installs a `MutationObserver` on the root DOM tree:
+Installs a `MutationObserver` on the root DOM tree (also provided by `src/security/custom-element-guard.ts`):
 
 - Proactively sweeps and removes any existing unapproved custom elements.
 - Continuously observes child list mutations and immediately strips newly injected unapproved custom elements.

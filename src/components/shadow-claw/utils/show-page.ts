@@ -194,7 +194,7 @@ export function showPage(
     }
   }
 
-  // Check Prompt API onboarding when switching to the chat tab
+  // Check local AI onboarding when switching to the chat tab
   if (resolvedPage === "chat") {
     const chatComp = shadow.querySelector("shadow-claw-chat") as any;
     if (chatComp && typeof chatComp.checkPromptApiOnboarding === "function") {

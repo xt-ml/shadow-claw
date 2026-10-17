@@ -180,7 +180,12 @@ export async function enqueue(
   await saveMessage(db, stored);
   o.events.emit("message", stored);
 
-  if (skillCommand?.skill.execution && o.agentWorker) {
+  if (skillCommand?.skill.execution) {
+    await o.ensureWorkerReady?.();
+    if (!o.agentWorker) {
+      throw new Error("Worker is not initialized.");
+    }
+
     const rawTools = skillCommand.skill.execution.tools;
     const tools = rawTools.map((t) => {
       const inputObj =
@@ -222,7 +227,12 @@ export async function enqueue(
     });
   }
 
-  if (directToolCommand && o.agentWorker) {
+  if (directToolCommand) {
+    await o.ensureWorkerReady?.();
+    if (!o.agentWorker) {
+      throw new Error("Worker is not initialized.");
+    }
+
     o.agentWorker.postMessage({
       type: "execute-direct-tool",
       payload: {

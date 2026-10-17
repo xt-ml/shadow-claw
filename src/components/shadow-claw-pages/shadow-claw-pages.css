@@ -183,6 +183,9 @@
 
 article > h1,
 article > h2,
+article header > h1,
+article header > h2,
+article :is(h1, h2),
 .pages__rendered > h1,
 .pages__rendered > h2 {
   margin-top: 0;

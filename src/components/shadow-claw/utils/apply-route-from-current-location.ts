@@ -32,9 +32,10 @@ export async function applyRouteFromCurrentLocation(
   const isRoot =
     parts.length === 0 || (parts.length === 1 && parts[0] === "index.html");
 
-  const defaultPinned =
+  const explicitDefaultPinned =
     oStore.defaultPinnedPage ||
     resolveDefaultPinnedPageRef(getSiteConfigDefaultPinnedPage());
+  const defaultPinned = explicitDefaultPinned || oStore.effectiveDefaultPage;
 
   if (isRoot && defaultPinned) {
     const targetGroup =
@@ -45,15 +46,17 @@ export async function applyRouteFromCurrentLocation(
       path: defaultPinned.path,
     };
 
-    const prettyPath = await resolveRouteToPrettyPathAsync(defaultRoute);
-    if (
-      prettyPath &&
-      prettyPath !== "/" &&
-      typeof window !== "undefined" &&
-      window.history
-    ) {
-      const targetUrl = applyBasePath(prettyPath);
-      window.history.replaceState(null, "", targetUrl);
+    if (explicitDefaultPinned) {
+      const prettyPath = await resolveRouteToPrettyPathAsync(defaultRoute);
+      if (
+        prettyPath &&
+        prettyPath !== "/" &&
+        typeof window !== "undefined" &&
+        window.history
+      ) {
+        const targetUrl = applyBasePath(prettyPath);
+        window.history.replaceState(null, "", targetUrl);
+      }
     }
 
     await applyRoute(shadow, shadowClaw, db, fStore, oStore, defaultRoute);

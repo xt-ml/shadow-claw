@@ -184,6 +184,15 @@ describe("prerenderPrettyPaths", () => {
     );
     const flatHtml = await readFile(flatHtmlPath, "utf8");
     expect(flatHtml).toContain("On Developing Loops");
+    expect(prettyHtml).toContain(
+      "<title>On Developing Loops - ShadowClaw</title>",
+    );
+    expect(prettyHtml).toContain(
+      '<meta property="og:title" content="On Developing Loops - ShadowClaw" />',
+    );
+    expect(prettyHtml).toContain(
+      '<meta name="description" content="This is SSR content for pretty path." />',
+    );
     expect(prettyHtml).toContain("This is SSR content for pretty path.");
     expect(prettyHtml).toContain('id="shadow-claw-static-routing"');
     expect(prettyHtml).toContain('id="shadow-claw-static-manifest"');
@@ -705,5 +714,248 @@ describe("prerenderPrettyPaths", () => {
     );
     expect(staticRouting.routes["/pages/main/MEMORY.md"]).toBeUndefined();
     expect(staticRouting.routes["/pages/main/posts/post1.md"]).toBeDefined();
+  });
+
+  it("prerenders root route '/' at index.html and keeps it in static-routing.json", async () => {
+    const publicDir = path.join(tmpDir, "dist/public");
+    const indexPath = path.join(publicDir, "index.html");
+    const sourcePath = path.join(tmpDir, "pages/main");
+    const routesPath = path.join(tmpDir, "pages/routes.json");
+
+    await mkdir(path.join(publicDir, "components/shadow-claw"), {
+      recursive: true,
+    });
+    await mkdir(path.join(publicDir, "components/shadow-claw-pages"), {
+      recursive: true,
+    });
+    await mkdir(path.join(publicDir, "components/shadow-claw-page-header"), {
+      recursive: true,
+    });
+    await mkdir(sourcePath, { recursive: true });
+
+    await writeFile(
+      path.join(publicDir, "components/shadow-claw/shadow-claw.html"),
+      '<template shadowrootmode="open"><slot></slot></template>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(
+        publicDir,
+        "components/shadow-claw-pages/shadow-claw-pages.html",
+      ),
+      '<template shadowrootmode="open"><div data-pages-rendered></div></template>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(
+        publicDir,
+        "components/shadow-claw-page-header/shadow-claw-page-header.html",
+      ),
+      '<template shadowrootmode="open"><h1>Header</h1></template>',
+      "utf8",
+    );
+
+    await writeFile(
+      indexPath,
+      "<html><head></head><body><shadow-claw><shadow-claw-pages></shadow-claw-pages></shadow-claw></body></html>",
+      "utf8",
+    );
+
+    await writeFile(
+      path.join(sourcePath, "index.html"),
+      "<main><h1>Root Home Page</h1></main>",
+      "utf8",
+    );
+    await writeFile(path.join(sourcePath, "about.md"), "# About Page", "utf8");
+
+    const routesJson = {
+      routes: {
+        "/pages/main/index.html": {
+          prettyPath: "/",
+        },
+        "/pages/main/about.md": {
+          prettyPath: "/about",
+        },
+      },
+    };
+    await writeFile(routesPath, JSON.stringify(routesJson, null, 2), "utf8");
+
+    const result = await prerenderPrettyPaths({
+      publicDir,
+      routesPath,
+      sourcePath,
+      indexPath,
+      prerenderPages: 1,
+    });
+
+    expect(result.count).toBe(2);
+    expect(result.generatedPaths).toContain("index.html");
+    expect(result.generatedPaths).toContain("about/index.html");
+
+    // index.html should be populated with DSD and static manifest containing index.html
+    const updatedIndexHtml = await readFile(indexPath, "utf8");
+    expect(updatedIndexHtml).toContain("Root Home Page");
+    expect(updatedIndexHtml).toContain('id="shadow-claw-static-manifest"');
+    expect(updatedIndexHtml).toContain('id="shadow-claw-static-routing"');
+
+    // static-routing.json should keep root route
+    const staticRouting = JSON.parse(
+      await readFile(path.join(publicDir, "static-routing.json"), "utf8"),
+    );
+    expect(staticRouting.routes["/pages/main/index.html"]).toEqual({
+      prettyPath: "/",
+    });
+    expect(staticRouting.routes["/pages/main/about.md"]).toEqual({
+      prettyPath: "/about",
+    });
+  });
+
+  it("applies Yoast-style SEO titles, route overrides, and canonical URLs to pretty path HTML", async () => {
+    const publicDir = path.join(tmpDir, "dist/public-seo");
+    const indexPath = path.join(publicDir, "index.html");
+    const sourcePath = path.join(tmpDir, "pages/main-seo");
+    const routesPath = path.join(tmpDir, "pages/routes-seo.json");
+    const siteConfigPath = path.join(tmpDir, "pages/site-config-seo.json");
+
+    await mkdir(path.join(publicDir, "components/shadow-claw"), {
+      recursive: true,
+    });
+    await mkdir(path.join(publicDir, "components/shadow-claw-pages"), {
+      recursive: true,
+    });
+    await mkdir(path.join(publicDir, "components/shadow-claw-page-header"), {
+      recursive: true,
+    });
+    await mkdir(sourcePath, { recursive: true });
+
+    await writeFile(
+      indexPath,
+      '<!doctype html><html><head><base href="/shadow-claw/"><title>ShadowClaw</title><link rel="canonical" href="https://xt-ml.github.io/shadow-claw/" /></head><body><shadow-claw></shadow-claw></body></html>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(publicDir, "components/shadow-claw/shadow-claw.html"),
+      '<template><div class="app"><shadow-claw-pages></shadow-claw-pages></div></template>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(
+        publicDir,
+        "components/shadow-claw-pages/shadow-claw-pages.html",
+      ),
+      '<template><div class="pages__list" data-pages-list role="list"></div><div class="pages__rendered" data-pages-rendered hidden></div><div class="pages__empty" data-pages-empty></div><shadow-claw-page-header title="Pages"></shadow-claw-page-header></template>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(
+        publicDir,
+        "components/shadow-claw-page-header/shadow-claw-page-header.html",
+      ),
+      '<template><header class="header"><h2 class="header__title"></h2><details class="header__actions-disclosure"></details><div class="header__actions" id="header-actions-panel"></div></header></template>',
+      "utf8",
+    );
+
+    const siteConfig = {
+      site: {
+        title: "ShadowClaw",
+        titleSeparator: " | ",
+      },
+      branding: {
+        siteUrl: "https://xt-ml.github.io/shadow-claw/",
+      },
+    };
+    await writeFile(
+      siteConfigPath,
+      JSON.stringify(siteConfig, null, 2),
+      "utf8",
+    );
+
+    // Page 1: Uses frontmatter title and frontmatter description
+    const page1Content = `---
+title: "Agent Skills & Skill Creator"
+description: "Build custom declarative agent skills and tool pipelines."
+---
+# Agent Skills & Skill Creator
+
+Welcome to skills.`;
+    await writeFile(
+      path.join(sourcePath, "skill-creator.md"),
+      page1Content,
+      "utf8",
+    );
+
+    // Page 2: Route override in routes.json overrides title & description
+    const page2Content = `---
+title: "Internal Title"
+---
+# Body Title
+
+Body content paragraph for auto description.`;
+    await writeFile(
+      path.join(sourcePath, "custom-page.md"),
+      page2Content,
+      "utf8",
+    );
+
+    const routesJson = {
+      routes: {
+        "/pages/main-seo/skill-creator.md": {
+          prettyPath: "/docs/skill-creator/",
+        },
+        "/pages/main-seo/custom-page.md": {
+          prettyPath: "/custom-url/",
+          title: "Custom Route Title",
+          description: "Explicit route override description.",
+        },
+      },
+    };
+    await writeFile(routesPath, JSON.stringify(routesJson, null, 2), "utf8");
+
+    const result = await prerenderPrettyPaths({
+      publicDir,
+      routesPath,
+      sourcePath,
+      siteConfigPath,
+      indexPath,
+      prerenderPages: 1,
+    });
+
+    expect(result.count).toBe(2);
+
+    // Verify Page 1 (skill creator)
+    const page1Html = await readFile(
+      path.join(publicDir, "docs/skill-creator/index.html"),
+      "utf8",
+    );
+    expect(page1Html).toContain(
+      "<title>Agent Skills &amp; Skill Creator | ShadowClaw</title>",
+    );
+    expect(page1Html).toContain(
+      '<meta name="description" content="Build custom declarative agent skills and tool pipelines." />',
+    );
+    expect(page1Html).toContain(
+      '<link rel="canonical" href="https://xt-ml.github.io/shadow-claw/docs/skill-creator/" />',
+    );
+    expect(page1Html).toContain(
+      '<meta property="og:title" content="Agent Skills &amp; Skill Creator | ShadowClaw" />',
+    );
+    expect(page1Html).toContain(
+      '<meta property="og:url" content="https://xt-ml.github.io/shadow-claw/docs/skill-creator/" />',
+    );
+
+    // Verify Page 2 (route overrides)
+    const page2Html = await readFile(
+      path.join(publicDir, "custom-url/index.html"),
+      "utf8",
+    );
+    expect(page2Html).toContain(
+      "<title>Custom Route Title | ShadowClaw</title>",
+    );
+    expect(page2Html).toContain(
+      '<meta name="description" content="Explicit route override description." />',
+    );
+    expect(page2Html).toContain(
+      '<link rel="canonical" href="https://xt-ml.github.io/shadow-claw/custom-url/" />',
+    );
   });
 });

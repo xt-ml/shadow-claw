@@ -28,6 +28,7 @@ import { setConfig } from "../../db/set-config.js";
 import { decryptValue, encryptValue } from "../../security/crypto.js";
 import { VMBootMode, VMStatus } from "../../shell/vm.js";
 import { readGroupFile } from "../../storage/read-group-file.js";
+import { STATIC_ROUTING_SCRIPT_ID } from "../../storage/static-routing.js";
 
 import {
   OrchestratorDisplayState,
@@ -50,6 +51,7 @@ import { getContextLimit } from "../../subsystems/providers/providers.js";
 import { TaskScheduler } from "../../subsystems/tools/task-scheduler.js";
 import { formatA2UIActionPrompt } from "../../ui/a2ui/utils/format-a2ui-action-prompt.js";
 import { ulid } from "../../utils/ulid.js";
+import { yieldToMain } from "../../utils/delay.js";
 import { buildSystemPrompt } from "../../worker/utils/system-prompt.js";
 import { Router } from "../router.js";
 import { enqueue } from "./utils/enqueue.js";
@@ -231,6 +233,12 @@ export class Orchestrator {
     this.inFlightProviderRequestIds.set(groupId, requestId);
 
     return requestId;
+  }
+
+  async ensureWorkerReady(): Promise<void> {
+    if (!this.agentWorker && this.db) {
+      await initWorkerAndScheduler(this, this.db);
+    }
   }
 
   initializeChannelRegistry(): void {
@@ -452,6 +460,7 @@ export class Orchestrator {
   async init(): Promise<ShadowClawDatabase> {
     const db = await openDatabase();
     this.db = db;
+    await yieldToMain();
 
     // Fast parallel path: these four functions only read from IndexedDB and are
     // fully independent of each other. Running them concurrently saves ~200–400 ms
@@ -462,10 +471,21 @@ export class Orchestrator {
       initLlamafileAndMesh(this, db),
       initFeatureFlagsAndLimits(this, db),
     ]);
+    await yieldToMain();
 
-    // Worker + scheduler need provider/model/flags to be ready, so they still
-    // start synchronously after the parallel group above.
-    await initWorkerAndScheduler(this, db);
+    // Worker + scheduler need provider/model/flags to be ready.
+    // Under static routing, defer worker startup so initial page interactive timing is not blocked.
+    const isStaticSite =
+      typeof document !== "undefined" &&
+      Boolean(document.getElementById(STATIC_ROUTING_SCRIPT_ID));
+
+    if (isStaticSite) {
+      setTimeout(() => {
+        void this.ensureWorkerReady();
+      }, 15_000);
+    } else {
+      await initWorkerAndScheduler(this, db);
+    }
 
     // Channels/rooms are deferred to a background microtask so the UI reaches
     // "ready" without waiting for room metadata reads or peer-channel setup.
@@ -476,10 +496,26 @@ export class Orchestrator {
 
     this.events.emit("ready", undefined);
 
-    await toolsStore.load(db);
-    // syncWebMcpRegistration only installs an effect listener; it is safe to
-    // call before channels are fully ready because it reacts reactively.
-    syncWebMcpRegistration(this, db);
+    // In browser environments with requestIdleCallback, defer toolsStore.load and
+    // syncWebMcpRegistration to an idle frame so initial render and paint unblock completely.
+    const win =
+      typeof globalThis !== "undefined"
+        ? (globalThis as any).window
+        : undefined;
+    if (isStaticSite) {
+      setTimeout(() => {
+        void toolsStore.load(db);
+        syncWebMcpRegistration(this, db);
+      }, 15_000);
+    } else if (win && typeof win.requestIdleCallback === "function") {
+      win.requestIdleCallback(() => {
+        void toolsStore.load(db);
+        syncWebMcpRegistration(this, db);
+      });
+    } else {
+      await toolsStore.load(db);
+      syncWebMcpRegistration(this, db);
+    }
 
     return db;
   }

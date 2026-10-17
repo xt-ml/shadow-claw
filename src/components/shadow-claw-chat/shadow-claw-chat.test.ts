@@ -3041,6 +3041,33 @@ describe("shadow-claw-chat prompt api onboarding", () => {
       document.addEventListener("shadow-claw-navigate", navSpy, { once: true });
       await chatInstance.bypassPromptApiOnboardingToSettings();
       expect(navSpy).toHaveBeenCalled();
+
+      // 6. When embedded static routing script is present, onboarding dialog is still shown
+      const staticScript = document.createElement("script");
+      staticScript.id = "shadow-claw-static-routing";
+      staticScript.type = "application/json";
+      staticScript.textContent = JSON.stringify({ routes: {} });
+      document.head.appendChild(staticScript);
+      try {
+        const staticFetchSpy = jest.fn<any>().mockResolvedValue({
+          ok: true,
+          json: async () => [{ id: "model-1", name: "Model 1" }],
+        });
+        globalThis.fetch = staticFetchSpy;
+        const staticShowModalSpy = jest.fn();
+        if (dialog) dialog.showModal = staticShowModalSpy;
+        chatInstance.db = createConfigDb({
+          provider: "transformers_js_browser",
+          transformers_js_onboarding_seen: "false",
+          prompt_api_onboarding_seen: "false",
+          model: "model-1",
+        });
+        await chatInstance.checkPromptApiOnboarding();
+        await new Promise((r) => setTimeout(r, 10));
+        expect(staticShowModalSpy).toHaveBeenCalled();
+      } finally {
+        staticScript.remove();
+      }
     });
 
     it("handles inferAttachmentModelSupport across multimodal capability combinations", () => {

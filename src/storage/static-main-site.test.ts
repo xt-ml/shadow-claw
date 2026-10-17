@@ -57,6 +57,7 @@ const {
   PURGE_STORAGE_KEY,
   SKILLS_PURGE_STORAGE_KEY,
   getSiteConfigDefaultPinnedPage,
+  getSiteConfigSeoSettings,
 } = await import("./static-main-site.js");
 const { CONFIG_KEYS, DEFAULT_GROUP_ID } = await import("../config/config.js");
 
@@ -863,6 +864,36 @@ describe("seedStaticMainSite – localStorage-gated purge", () => {
 
       try {
         expect(getSiteConfigDefaultPinnedPage()).toBeNull();
+      } finally {
+        siteConfigScript.remove();
+      }
+    });
+  });
+
+  describe("getSiteConfigSeoSettings", () => {
+    it("returns default ShadowClaw settings when no site-config script is present", () => {
+      const settings = getSiteConfigSeoSettings();
+      expect(settings.siteTitle).toBe("ShadowClaw");
+    });
+
+    it("reads site title, separator, and titleTemplate from #shadow-claw-site-config", () => {
+      const siteConfigScript = document.createElement("script");
+      siteConfigScript.id = "shadow-claw-site-config";
+      siteConfigScript.type = "application/json";
+      siteConfigScript.textContent = JSON.stringify({
+        site: {
+          title: "ShadowClaw Template",
+          titleSeparator: " | ",
+          titleTemplate: "%title% — %site%",
+        },
+      });
+      document.head.appendChild(siteConfigScript);
+
+      try {
+        const settings = getSiteConfigSeoSettings();
+        expect(settings.siteTitle).toBe("ShadowClaw Template");
+        expect(settings.separator).toBe(" | ");
+        expect(settings.titleTemplate).toBe("%title% — %site%");
       } finally {
         siteConfigScript.remove();
       }

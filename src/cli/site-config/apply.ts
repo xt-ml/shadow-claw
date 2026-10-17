@@ -34,7 +34,7 @@ export interface SiteConfigBranding {
   appleTouchIconPath?: string;
   titleText?: string;
   siteUrl?: string;
-  logoSlotHtml?: string;
+  logoSlotHtml?: string | null;
   repoUrl?: string;
   repoLabel?: string;
   notFoundPath?: string;
@@ -320,26 +320,62 @@ export function patchIndexHtml(
     }
   }
 
-  if (branding.titleText || branding.siteUrl || branding.logoSlotHtml) {
-    const titleText = branding.titleText || "ShadowClaw";
+  if (
+    branding.titleText ||
+    branding.siteUrl ||
+    branding.logoSlotHtml !== undefined
+  ) {
     const siteUrl = branding.siteUrl || "";
-    const logoHtml = branding.logoSlotHtml || "";
 
     next = next.replace(
-      /<a\b[^>]*\bslot="header-title-link"[^>]*>[\s\S]*?<\/a>/iu,
-      [
-        `<a`,
-        `      aria-label="${escapeHtml(titleText)}"`,
-        `      class="header-title-link"`,
-        siteUrl ? `      href="${escapeHtml(siteUrl)}"` : "",
-        `      slot="header-title-link"`,
-        `    >`,
-        logoHtml ? `      ${logoHtml}` : "",
-        `      <span class="header-title">${escapeHtml(titleText)}</span>`,
-        `    </a>`,
-      ]
-        .filter(Boolean)
-        .join("\n"),
+      /<a\b([^>]*\bslot="header-title-link"[^>]*)>([\s\S]*?)<\/a>/iu,
+      (_match, _attrs, innerContent) => {
+        let logoHtml = "";
+        if (branding.logoSlotHtml !== undefined) {
+          const trimmed =
+            typeof branding.logoSlotHtml === "string"
+              ? branding.logoSlotHtml.trim()
+              : "";
+          if (trimmed !== "" && trimmed.toLowerCase() !== "none") {
+            logoHtml = branding.logoSlotHtml as string;
+          }
+        } else {
+          const logoMatch =
+            innerContent.match(/<svg\b[\s\S]*?<\/svg>/iu) ||
+            innerContent.match(
+              /<img\b[^>]*\bclass="[^"]*header-title-logo[^"]*"[^>]*\/?>/iu,
+            );
+          if (logoMatch) {
+            logoHtml = logoMatch[0];
+          }
+        }
+
+        const titleMatch = innerContent.match(
+          /<(h1|span)\b[^>]*\bclass="[^"]*header-title[^"]*"[^>]*>([\s\S]*?)<\/\1>/iu,
+        );
+        const titleTag = titleMatch
+          ? titleMatch[1]
+          : /<h1\b/i.test(innerContent)
+            ? "h1"
+            : "span";
+        const existingTitle = titleMatch ? titleMatch[2].trim() : "ShadowClaw";
+        const titleText =
+          branding.titleText || config.site?.title || existingTitle;
+
+        return [
+          `<a`,
+          `      aria-label="${escapeHtml(titleText)}"`,
+          `      class="header-title-link"`,
+          siteUrl ? `      href="${escapeHtml(siteUrl)}"` : "",
+          `      slot="header-title-link"`,
+          `    >`,
+          logoHtml ? `      ${logoHtml.trim()}` : "",
+          `      <${titleTag} class="header-title">${escapeHtml(titleText)}</${titleTag}>`,
+          `    </a>`,
+        ]
+          .filter(Boolean)
+          .join("\n");
+      },
     );
   }
 

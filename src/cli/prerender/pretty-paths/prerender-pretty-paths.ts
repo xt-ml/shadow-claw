@@ -32,9 +32,21 @@ import { injectStaticRoutingScript } from "../utils/inject-static-routing-script
 import { insertBeforeClosingHead } from "../utils/insert-before-closing-head.js";
 import { trimSlashes } from "../../../utils/normalize-workspace-path.js";
 import { isPagePathAllowed } from "../../../utils/is-page-path-allowed.js";
+import {
+  extractMarkdownDescription,
+  formatSeoTitle,
+  patchHtmlHeadMetadata,
+  resolveCanonicalUrl,
+} from "../../../utils/seo.js";
 
 export { injectStaticRoutingScript };
 export { insertBeforeClosingHead };
+
+function extractFirstMarkdownHeading(content: string): string {
+  const clean = content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/mu, "");
+  const match = clean.match(/^#+\s+(.+)$/m);
+  return match ? match[1].trim() : "";
+}
 
 export interface PrerenderPrettyPathsOptions {
   publicDir?: string;
@@ -480,12 +492,63 @@ export async function prerenderPrettyPaths(
       embeddedManifestJson,
     );
 
+    const cleanPrettyPath = trimSlashes(routeDef.prettyPath);
+    const isHome =
+      cleanPrettyPath === "" ||
+      cleanPrettyPath === "index.html" ||
+      routeDef.prettyPath === "/";
+
+    const baseHrefMatch = indexHtml.match(/<base\s+href="([^"]*)"/i);
+    const basePath = baseHrefMatch ? baseHrefMatch[1] : undefined;
+    const origin = siteConfig?.branding?.siteUrl || undefined;
+
+    const resolvedPageTitle =
+      routeDef.title ||
+      parsed.data?.seo_title ||
+      parsed.data?.seoTitle ||
+      parsed.data?.title ||
+      extractFirstMarkdownHeading(matchedPage.content || "");
+
+    const formattedTitle = formatSeoTitle({
+      pageTitle: resolvedPageTitle,
+      siteTitle: siteConfig?.site?.title || "ShadowClaw",
+      siteDescription: siteConfig?.site?.description,
+      separator: siteConfig?.site?.titleSeparator ?? siteConfig?.site?.sep,
+      titleTemplate: siteConfig?.site?.titleTemplate,
+      isHome,
+    });
+
+    const pageDescription =
+      routeDef.description ||
+      parsed.data?.seo_description ||
+      parsed.data?.seoDescription ||
+      parsed.data?.description ||
+      parsed.data?.excerpt ||
+      parsed.data?.summary ||
+      extractMarkdownDescription(matchedPage.content || "", {
+        fallback: siteConfig?.site?.description,
+      }) ||
+      siteConfig?.site?.description;
+
+    const canonicalUrl = resolveCanonicalUrl({
+      origin,
+      basePath,
+      prettyPath: routeDef.prettyPath,
+    });
+
+    const htmlWithSeo = patchHtmlHeadMetadata(htmlWithManifest, {
+      title: formattedTitle,
+      description: pageDescription,
+      canonicalUrl,
+      siteTitle: siteConfig?.site?.title || "ShadowClaw",
+      type: isHome ? "website" : "article",
+    });
+
     const minifiedHtml = minifyDsdTemplateHtml(
-      injectStaticRoutingScript(htmlWithManifest, embeddedRoutingJson),
+      injectStaticRoutingScript(htmlWithSeo, embeddedRoutingJson),
     );
     const finalHtml = await inlineCriticalAssets(minifiedHtml, publicDir);
 
-    const cleanPrettyPath = trimSlashes(routeDef.prettyPath);
     let targetRelativePath: string;
     if (cleanPrettyPath.endsWith(".html")) {
       targetRelativePath = cleanPrettyPath;

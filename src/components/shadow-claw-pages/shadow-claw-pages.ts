@@ -3,8 +3,9 @@ import { Signal } from "signal-polyfill";
 import { effect } from "../../core/effect.js";
 
 import { splitFrontmatter } from "../../utils/frontmatter.js";
+import { formatSeoTitle } from "../../utils/seo.js";
+import { getSiteConfigSeoSettings } from "../../storage/static-main-site.js";
 import { CONFIG_KEYS } from "../../config/config.js";
-import { renderMarkdown } from "../../content/markdown.js";
 
 import {
   applyBasePath,
@@ -124,6 +125,17 @@ const previewSanitizeOptions: Config = {
 
 const elementName = "shadow-claw-pages";
 
+function matchesPagePath(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): boolean {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const cleanA = a.replace(/^\/+/, "").replace(/^pages\/[^/]+\//, "");
+  const cleanB = b.replace(/^\/+/, "").replace(/^pages\/[^/]+\//, "");
+  return cleanA === cleanB;
+}
+
 export class ShadowClawPages extends ShadowClawElement {
   static styles = shadowClawPagesStyles;
   static template = shadowClawPagesTemplate;
@@ -167,8 +179,6 @@ export class ShadowClawPages extends ShadowClawElement {
     if (!root) {
       throw new Error("shadowRoot not found");
     }
-
-    const host = this.closest("shadow-claw");
     // Use the authoritative class set synchronously by theme-init.ts rather
     // than re-reading localStorage directly. theme-init.ts applies a
     // null → __PRERENDER_MAIN_MEMORY__ fallback that a plain
@@ -179,19 +189,26 @@ export class ShadowClawPages extends ShadowClawElement {
     const isOverride = document.documentElement.classList.contains(
       "sc-prerender-override",
     );
-    const isNoSeed = host?.getAttribute("data-prerender-no-seed") === "true";
 
-    if (isOverride || isNoSeed) {
+    if (isOverride) {
       const rendered = root.querySelector("[data-pages-rendered]");
       if (rendered instanceof HTMLElement) {
         rendered.hidden = true;
         rendered.textContent = "";
       }
     } else {
+      const rendered = root.querySelector("[data-pages-rendered]");
+      const initialPathAttr =
+        rendered instanceof HTMLElement
+          ? rendered.getAttribute("data-initial-path")?.trim()
+          : null;
       const dsdSelected = root
         .querySelector("[data-pages-dropdown-selected]")
         ?.textContent?.trim();
-      if (dsdSelected) {
+
+      if (initialPathAttr) {
+        this.dsdInitialPath = initialPathAttr;
+      } else if (dsdSelected && dsdSelected !== "Select a page...") {
         this.dsdInitialPath = dsdSelected;
       }
     }
@@ -741,6 +758,18 @@ export class ShadowClawPages extends ShadowClawElement {
       }
     }
 
+    if (typeof document !== "undefined") {
+      const seoSettings = getSiteConfigSeoSettings();
+      const pageTitle = fm?.title || (this.selectedPage ? "" : undefined);
+      document.title = formatSeoTitle({
+        pageTitle,
+        siteTitle: seoSettings.siteTitle,
+        separator: seoSettings.separator,
+        titleTemplate: seoSettings.titleTemplate,
+        isHome: !this.selectedPage,
+      });
+    }
+
     if (
       prevBtn instanceof HTMLButtonElement &&
       nextBtn instanceof HTMLButtonElement
@@ -767,6 +796,7 @@ export class ShadowClawPages extends ShadowClawElement {
       if (!(list instanceof HTMLElement)) {
         return;
       }
+      const fragment = document.createDocumentFragment();
 
       for (const [groupId, groupPages] of pagesByGroup) {
         const details = document.createElement("details");
@@ -987,8 +1017,10 @@ export class ShadowClawPages extends ShadowClawElement {
         });
 
         details.appendChild(groupPagesContainer);
-        list.appendChild(details);
+        fragment.appendChild(details);
       }
+
+      list.appendChild(fragment);
     });
   }
 
@@ -1060,14 +1092,24 @@ export class ShadowClawPages extends ShadowClawElement {
           if (activePinnedPage !== null) {
             this.selectedPage = null;
           }
+        } else if (!activePinnedPage) {
+          this.selectedPage =
+            orchestratorStore.effectiveDefaultPage || pages[0];
         } else if (
-          !activePinnedPage ||
           !pages.some(
             (page) => pageRefKey(page) === pageRefKey(activePinnedPage),
           )
         ) {
-          this.selectedPage =
-            orchestratorStore.effectiveDefaultPage || pages[0];
+          if (
+            typeof orchestratorStore.isPageAllowed === "function" &&
+            !orchestratorStore.isPageAllowed(
+              activePinnedPage.path,
+              activePinnedPage.groupId,
+            )
+          ) {
+            this.selectedPage =
+              orchestratorStore.effectiveDefaultPage || pages[0];
+          }
         }
 
         // Guard: skip renders until URL routing has been applied by the parent
@@ -1189,6 +1231,10 @@ export class ShadowClawPages extends ShadowClawElement {
       return;
     }
 
+    if (!this.db) {
+      this.db = await getDb();
+    }
+
     const empty = root.querySelector("[data-pages-empty]");
     const rendered = root.querySelector("[data-pages-rendered]");
 
@@ -1219,6 +1265,79 @@ export class ShadowClawPages extends ShadowClawElement {
     }
 
     const token = ++this.renderToken;
+    const pageKey = `${selectedPage.groupId}:${selectedPage.path}`;
+
+    // If this initial DSD page is already active and rendered, keep it!
+    const isAlreadyDsdRendered =
+      this.renderedKey === pageKey &&
+      this.dsdInitialPath &&
+      matchesPagePath(this.dsdInitialPath, selectedPage.path) &&
+      isMarkdownPath(selectedPage.path) &&
+      rendered.children.length > 0 &&
+      !rendered.hidden;
+
+    if (isAlreadyDsdRendered) {
+      this.showNavButtonsTemporarily(2500);
+
+      return;
+    }
+
+    // Check if DSD SSR content is already present for this initial page
+    const hasDsdSeed =
+      !this.renderedKey &&
+      this.dsdInitialPath &&
+      matchesPagePath(this.dsdInitialPath, selectedPage.path) &&
+      rendered.children.length > 0 &&
+      !rendered.hidden;
+
+    if (hasDsdSeed && isMarkdownPath(selectedPage.path)) {
+      this.renderedKey = pageKey;
+      empty.hidden = true;
+      rendered.hidden = false;
+      this.renderedFrontmatterToggle = null;
+      removePreviewIframe(root);
+      this.showNavButtonsTemporarily(2500);
+
+      // Lazily cache backing content in background without blocking initial SSR render
+      void (async () => {
+        try {
+          let raw: string;
+          try {
+            raw = await readGroupFile(
+              this.db!,
+              selectedPage.groupId,
+              selectedPage.path,
+            );
+          } catch {
+            const sc = await getStaticPageContent(selectedPage.path);
+            if (typeof sc === "string") {
+              raw = sc;
+            } else {
+              return;
+            }
+          }
+          if (token === this.renderToken) {
+            this.renderedContent = raw;
+            const parsedFm = splitFrontmatter(raw);
+            if (Object.keys(parsedFm.data).length > 0) {
+              this.pageFrontmatter.set(parsedFm.data);
+            }
+            const renderFrontmatter = await resolveFrontmatterToggle(
+              this.db!,
+              CONFIG_KEYS.MARKDOWN_FRONTMATTER_PAGES,
+            );
+            this.renderedFrontmatterToggle = renderFrontmatter;
+            await this.resolveMarkdownImages(
+              rendered,
+              selectedPage.groupId,
+              selectedPage.path,
+            );
+          }
+        } catch {}
+      })();
+
+      return;
+    }
 
     try {
       let content: string;
@@ -1257,6 +1376,42 @@ export class ShadowClawPages extends ShadowClawElement {
 
       const pageKey = `${selectedPage.groupId}:${selectedPage.path}`;
 
+      // Check if DSD SSR content is already present for this initial page
+      const hasDsdSeed =
+        !this.renderedKey &&
+        this.dsdInitialPath &&
+        matchesPagePath(this.dsdInitialPath, selectedPage.path) &&
+        rendered.children.length > 0 &&
+        !rendered.hidden;
+
+      if (hasDsdSeed && isMarkdownPath(selectedPage.path)) {
+        this.renderedKey = pageKey;
+        this.renderedContent = content;
+
+        const parsedFrontmatter = splitFrontmatter(content);
+        const newData =
+          Object.keys(parsedFrontmatter.data).length > 0
+            ? parsedFrontmatter.data
+            : null;
+        const currentData = this.pageFrontmatter.get();
+        if (JSON.stringify(currentData) !== JSON.stringify(newData)) {
+          this.pageFrontmatter.set(newData);
+        }
+        const renderFrontmatter = await resolveFrontmatterToggle(
+          this.db,
+          CONFIG_KEYS.MARKDOWN_FRONTMATTER_PAGES,
+        );
+        this.renderedFrontmatterToggle = renderFrontmatter;
+        await this.resolveMarkdownImages(
+          rendered,
+          selectedPage.groupId,
+          selectedPage.path,
+        );
+        this.showNavButtonsTemporarily(2500);
+
+        return;
+      }
+
       if (isHtmlPath(selectedPage.path)) {
         const parsedFrontmatter = splitFrontmatter(content);
         const newData =
@@ -1271,9 +1426,12 @@ export class ShadowClawPages extends ShadowClawElement {
 
         if (
           this.renderedKey === pageKey &&
-          this.renderedContent === content &&
+          (this.renderedContent === content || this.renderedContent === null) &&
           root.querySelector("[data-pages-iframe]")
         ) {
+          if (this.renderedContent === null) {
+            this.renderedContent = content;
+          }
           this.showNavButtonsTemporarily(2500);
 
           return;
@@ -1282,9 +1440,7 @@ export class ShadowClawPages extends ShadowClawElement {
         this.renderedKey = pageKey;
         this.renderedContent = content;
         this.renderedFrontmatterToggle = null;
-        rendered.hidden = true;
         const iframe = this.ensurePreviewIframe(root, rendered);
-        iframe.hidden = false;
         this.previewFrameWindow = null;
         setTrustedSrcdoc(
           iframe,
@@ -1293,6 +1449,31 @@ export class ShadowClawPages extends ShadowClawElement {
             selectedPage.path,
           ),
         );
+        const hasExistingRendered =
+          rendered.children.length > 0 && !rendered.hidden;
+        if (
+          hasExistingRendered &&
+          (typeof process === "undefined" || process.env?.NODE_ENV !== "test")
+        ) {
+          await new Promise<void>((resolve) => {
+            let done = false;
+            const onDone = () => {
+              if (done) return;
+              done = true;
+              iframe.removeEventListener("load", onDone);
+              iframe.removeEventListener("error", onDone);
+              rendered.hidden = true;
+              iframe.hidden = false;
+              resolve();
+            };
+            iframe.addEventListener("load", onDone, { once: true });
+            iframe.addEventListener("error", onDone, { once: true });
+            setTimeout(onDone, 3000);
+          });
+        } else {
+          rendered.hidden = true;
+          iframe.hidden = false;
+        }
         this.showNavButtonsTemporarily(2500);
 
         return;
@@ -1330,32 +1511,12 @@ export class ShadowClawPages extends ShadowClawElement {
           return;
         }
 
-        // Check if DSD SSR content is already present for this initial page
-        if (
-          !this.renderedKey &&
-          this.dsdInitialPath &&
-          this.dsdInitialPath === selectedPage.path &&
-          rendered.children.length > 0 &&
-          !rendered.hidden
-        ) {
-          this.renderedKey = pageKey;
-          this.renderedContent = content;
-          this.renderedFrontmatterToggle = renderFrontmatter;
-          await this.resolveMarkdownImages(
-            rendered,
-            selectedPage.groupId,
-            selectedPage.path,
-          );
-          this.showNavButtonsTemporarily(2500);
-
-          return;
-        }
-
         this.renderedKey = pageKey;
         this.renderedContent = content;
         this.renderedFrontmatterToggle = renderFrontmatter;
         rendered.hidden = false;
 
+        const { renderMarkdown } = await import("../../content/markdown.js");
         const html = await renderMarkdown(content, {
           renderFrontmatter,
         });

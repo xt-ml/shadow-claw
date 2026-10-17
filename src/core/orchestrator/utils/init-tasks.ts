@@ -20,6 +20,7 @@ import { modelRegistry } from "../../../subsystems/providers/model-registry.js";
 import { isPromptApiSupported } from "../../../subsystems/providers/prompt-api-provider.js";
 import { fetchTokenizerConfig } from "../../../subsystems/providers/utils/chat-template.js";
 import { TaskScheduler } from "../../../subsystems/tools/task-scheduler.js";
+import { STATIC_ROUTING_SCRIPT_ID } from "../../../storage/static-routing.js";
 import { enqueue } from "./enqueue.js";
 import { handleWorkerMessage } from "./handle-worker-message.js";
 import { loadChannelConfigurations } from "./load-channel-configurations.js";
@@ -311,7 +312,20 @@ export async function initProviderAndModel(
   // the model picker in Settings, it is also required to dynamically resolve
   // optimal max_tokens limits for scheduled jobs and background tasks.
   // We defer it until the browser is idle to ensure it doesn't block first paint.
+  // In static site publication mode or for local in-browser models (transformers_js),
+  // model catalogs are static and background network fetches are skipped entirely.
+  const isStaticSite =
+    typeof document !== "undefined" &&
+    Boolean(document.getElementById(STATIC_ROUTING_SCRIPT_ID));
+  const isTransformersJs =
+    orchestrator.providerConfig?.format === "transformers_js";
+  const hasModelsUrl = Boolean(orchestrator.providerConfig?.modelsUrl);
+
   const scheduleFetch = () => {
+    if (isStaticSite || isTransformersJs || !hasModelsUrl) {
+      return;
+    }
+
     const doFetch = () => {
       void getApiKeyForHeaders(orchestrator).then((apiKey) =>
         modelRegistry.fetchModelInfo(
@@ -329,14 +343,16 @@ export async function initProviderAndModel(
     }
   };
 
-  if (typeof window !== "undefined" && typeof document !== "undefined") {
-    if (document.readyState === "complete") {
-      scheduleFetch();
+  if (!isStaticSite && !isTransformersJs && hasModelsUrl) {
+    if (typeof window !== "undefined" && typeof document !== "undefined") {
+      if (document.readyState === "complete") {
+        scheduleFetch();
+      } else {
+        window.addEventListener("load", scheduleFetch, { once: true });
+      }
     } else {
-      window.addEventListener("load", scheduleFetch, { once: true });
+      scheduleFetch();
     }
-  } else {
-    scheduleFetch();
   }
 
   if (storedModel) {

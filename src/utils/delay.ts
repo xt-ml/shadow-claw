@@ -41,3 +41,17 @@ export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
     }
   });
 }
+
+/**
+ * Yield to the browser main thread to avoid blocking long tasks.
+ * Uses scheduler.yield() when supported, or falls back to setTimeout(0).
+ */
+export async function yieldToMain(): Promise<void> {
+  const globalObj =
+    typeof globalThis !== "undefined" ? (globalThis as any) : undefined;
+  if (globalObj?.scheduler && typeof globalObj.scheduler.yield === "function") {
+    await globalObj.scheduler.yield();
+  } else {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}

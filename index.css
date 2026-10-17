@@ -69,6 +69,10 @@
 
   --shadow-claw-hljs-background-color: rgb(40, 44, 52);
 
+  /* Other */
+  --shadow-claw-logo-margin: 0 0 0.375rem;
+  --shadow-claw-logo-size: 1.5rem;
+
   display: contents;
 }
 
@@ -257,6 +261,7 @@ shadow-claw:not(:defined) {
   display: none;
   flex-shrink: 0;
   height: var(--shadow-claw-logo-size, 1.5rem);
+  margin: var(--shadow-claw-logo-margin, 0 0 0.375rem);
   width: var(--shadow-claw-logo-size, 1.5rem);
 }
 
@@ -267,6 +272,10 @@ shadow-claw:not(:defined) {
   font-weight: 700;
   line-height: 1;
   margin: 0 0 0 0.5rem;
+}
+
+.header-title:first-child {
+  margin-left: 0;
 }
 
 @media (min-width: 30rem) {

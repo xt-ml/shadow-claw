@@ -2081,23 +2081,30 @@ export class ShadowClawChat extends ShadowClawElement {
 
         const modelsUrl = PROVIDERS.transformers_js_browser?.modelsUrl;
         if (modelsUrl && typeof fetch === "function") {
-          fetch(modelsUrl)
-            .then((r) => (r.ok ? r.json() : null))
-            .then((data) => {
-              if (!data) return;
-              const items = Array.isArray(data)
-                ? data
-                : data.models || data.data || [];
-              if (Array.isArray(items) && items.length > 0) {
-                const currentSelected = modelSelect.value || currentModel;
-                this.populateOnboardingModelSelect(
-                  modelSelect,
-                  currentSelected,
-                  items,
-                );
-              }
-            })
-            .catch(() => {});
+          try {
+            const fetchPromise = fetch(modelsUrl);
+            if (fetchPromise && typeof fetchPromise.then === "function") {
+              fetchPromise
+                .then((r) => (r && r.ok ? r.json() : null))
+                .then((data) => {
+                  if (!data) return;
+                  const items = Array.isArray(data)
+                    ? data
+                    : data.models || data.data || [];
+                  if (Array.isArray(items) && items.length > 0) {
+                    const currentSelected = modelSelect.value || currentModel;
+                    this.populateOnboardingModelSelect(
+                      modelSelect,
+                      currentSelected,
+                      items,
+                    );
+                  }
+                })
+                .catch(() => {});
+            }
+          } catch {
+            // Ignore fetch initiation errors
+          }
         }
       }
 

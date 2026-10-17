@@ -323,7 +323,7 @@ describe("build without and with pages", () => {
       await rm(tempConsumerRoot, { recursive: true, force: true });
     }
   });
-  it("honours settings.overridePrerenderSkeleton: false from shadow-claw.config.json", async () => {
+  it("honours settings.overridePrerenderSkeleton: false from shadow-claw.config.json with pages pre-rendered", async () => {
     const tempConsumerRoot = await mkdtemp(
       path.join(os.tmpdir(), "shadow-claw-prerender-opt-out-"),
     );
@@ -336,6 +336,15 @@ describe("build without and with pages", () => {
           site: { title: "No Skeleton Site", description: "Test." },
           settings: { overridePrerenderSkeleton: false },
         }),
+        "utf8",
+      );
+
+      // Create pages/main/index.html
+      const mainDir = path.join(tempConsumerRoot, "pages/main");
+      await mkdir(mainDir, { recursive: true });
+      await writeFile(
+        path.join(mainDir, "index.html"),
+        "<main><h1>Welcome to Pre-rendered Site</h1></main>",
         "utf8",
       );
 
@@ -352,10 +361,45 @@ describe("build without and with pages", () => {
         "utf8",
       );
 
-      // When overridePrerenderSkeleton is false the DSD shell must be built
-      // with noSeed=true, which bakes data-prerender-no-seed="true" into the
-      // <shadow-claw> element so no skeleton overlay is shown on first paint.
+      // When overridePrerenderSkeleton is false, data-prerender-no-seed="true" is baked
+      // and the meta tag is present so the skeleton overlay is disabled.
       expect(indexHtml).toMatch(/data-prerender-no-seed="true"/);
+      expect(indexHtml).toContain(
+        '<meta name="shadow-claw-override-prerender-skeleton" content="false" />',
+      );
+      // Pre-rendered page content must be preserved and present in DSD
+      expect(indexHtml).toContain("Welcome to Pre-rendered Site");
+      expect(indexHtml).toContain('data-initial-path="index.html"');
+      // Static manifest must include the pre-rendered page
+      expect(indexHtml).toContain('"displayPath":"index.html"');
+    } finally {
+      logSpy.mockRestore();
+      await rm(tempConsumerRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("cleans stale artifacts in consumer outDir before building", async () => {
+    const tempConsumerRoot = await mkdtemp(
+      path.join(os.tmpdir(), "shadow-claw-consumer-clean-"),
+    );
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const staleFile = path.join(
+        tempConsumerRoot,
+        "dist/public/stale-old-chunk.js",
+      );
+      await mkdir(path.dirname(staleFile), { recursive: true });
+      await writeFile(staleFile, "stale content", "utf8");
+
+      await runConsumerBuild({
+        contentRoot: tempConsumerRoot,
+        toolchainRoot: tempProjectRoot,
+        isProduction: false,
+        quiet: true,
+        stdio: "pipe",
+      });
+
+      expect(fs.existsSync(staleFile)).toBe(false);
     } finally {
       logSpy.mockRestore();
       await rm(tempConsumerRoot, { recursive: true, force: true });

@@ -292,6 +292,116 @@ describe("apply-site-config", () => {
       const patched = patchIndexHtml(baseHtml, {}, customHtml);
       expect(patched).toContain(customHtml);
     });
+
+    it("preserves existing header logo SVG and heading tag when branding specifies siteUrl", () => {
+      const htmlWithLogo = baseHtml.replace(
+        "<shadow-claw></shadow-claw>",
+        `<shadow-claw>
+      <a class="header-title-link" href="/" slot="header-title-link">
+        <svg class="header-title-logo" viewBox="0 0 128 128"><path d="M0 0" /></svg>
+        <h1 class="header-title">ShadowClaw</h1>
+      </a>
+    </shadow-claw>`,
+      );
+
+      const patched = patchIndexHtml(htmlWithLogo, {
+        branding: { siteUrl: "https://xt-ml.github.io/shadow-claw/" },
+      });
+
+      expect(patched).toContain('href="https://xt-ml.github.io/shadow-claw/"');
+      expect(patched).toContain('class="header-title-logo"');
+      expect(patched).toContain(
+        '<svg class="header-title-logo" viewBox="0 0 128 128"><path d="M0 0" /></svg>',
+      );
+      expect(patched).toContain('<h1 class="header-title">ShadowClaw</h1>');
+    });
+
+    it("replaces header logo when branding logoSlotHtml is explicitly provided", () => {
+      const htmlWithLogo = baseHtml.replace(
+        "<shadow-claw></shadow-claw>",
+        `<shadow-claw>
+      <a class="header-title-link" href="/" slot="header-title-link">
+        <svg class="header-title-logo"><path d="M0 0" /></svg>
+        <h1 class="header-title">ShadowClaw</h1>
+      </a>
+    </shadow-claw>`,
+      );
+
+      const customLogo = '<img class="header-title-logo" src="custom.png" />';
+      const patched = patchIndexHtml(htmlWithLogo, {
+        branding: { logoSlotHtml: customLogo },
+      });
+
+      expect(patched).toContain(customLogo);
+      expect(patched).not.toContain('<svg class="header-title-logo">');
+    });
+
+    it("removes header logo when branding logoSlotHtml is set to 'none'", () => {
+      const htmlWithLogo = baseHtml.replace(
+        "<shadow-claw></shadow-claw>",
+        `<shadow-claw>
+      <a class="header-title-link" href="/" slot="header-title-link">
+        <svg class="header-title-logo"><path d="M0 0" /></svg>
+        <h1 class="header-title">ShadowClaw</h1>
+      </a>
+    </shadow-claw>`,
+      );
+
+      const patched = patchIndexHtml(htmlWithLogo, {
+        branding: { logoSlotHtml: "none" },
+      });
+
+      expect(patched).not.toContain('<svg class="header-title-logo">');
+      expect(patched).not.toMatch(
+        /<a[^>]*slot="header-title-link"[^>]*>\s*none/iu,
+      );
+      expect(patched).toContain('<h1 class="header-title">ShadowClaw</h1>');
+    });
+
+    it("removes header logo when branding logoSlotHtml is empty string or null", () => {
+      const htmlWithLogo = baseHtml.replace(
+        "<shadow-claw></shadow-claw>",
+        `<shadow-claw>
+      <a class="header-title-link" href="/" slot="header-title-link">
+        <svg class="header-title-logo"><path d="M0 0" /></svg>
+        <h1 class="header-title">ShadowClaw</h1>
+      </a>
+    </shadow-claw>`,
+      );
+
+      const patchedEmpty = patchIndexHtml(htmlWithLogo, {
+        branding: { logoSlotHtml: "" },
+      });
+      expect(patchedEmpty).not.toContain('<svg class="header-title-logo">');
+      expect(patchedEmpty).toContain(
+        '<h1 class="header-title">ShadowClaw</h1>',
+      );
+
+      const patchedNull = patchIndexHtml(htmlWithLogo, {
+        branding: { logoSlotHtml: null },
+      });
+      expect(patchedNull).not.toContain('<svg class="header-title-logo">');
+      expect(patchedNull).toContain('<h1 class="header-title">ShadowClaw</h1>');
+    });
+
+    it("updates header titleText while preserving bespoke logo SVG", () => {
+      const htmlWithLogo = baseHtml.replace(
+        "<shadow-claw></shadow-claw>",
+        `<shadow-claw>
+      <a class="header-title-link" href="/" slot="header-title-link">
+        <svg class="header-title-logo"><circle cx="10" cy="10" r="5" /></svg>
+        <span class="header-title">Old Title</span>
+      </a>
+    </shadow-claw>`,
+      );
+
+      const patched = patchIndexHtml(htmlWithLogo, {
+        branding: { titleText: "New Title" },
+      });
+
+      expect(patched).toContain('<span class="header-title">New Title</span>');
+      expect(patched).toContain('<circle cx="10" cy="10" r="5" />');
+    });
   });
 
   describe("patchManifest", () => {

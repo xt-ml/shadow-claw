@@ -3,7 +3,7 @@ import { ensureDefaultTrustedTypesPolicy } from "../security/default-trusted-typ
 import {
   installCustomElementDomGuard,
   installCustomElementsRegistryGuard,
-} from "../security/custom-element-security.js";
+} from "../security/custom-element-guard.js";
 import { getNamespacedItem } from "../utils/namespaced-storage.js";
 import { getPrerenderSkeletonDefault } from "../utils/prerender-skeleton-default.js";
 

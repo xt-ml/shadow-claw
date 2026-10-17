@@ -87,6 +87,7 @@ jest.unstable_mockModule("../../storage/static-main-site.js", () => ({
   getStaticMainManifest: jest.fn(async () => ({ pages: [] })),
   getStaticPageContent: jest.fn(async () => null),
   seedStaticMainSite: jest.fn(),
+  getSiteConfigSeoSettings: jest.fn(() => ({ siteTitle: "ShadowClaw" })),
 }));
 
 jest.unstable_mockModule("../../storage/read-group-file-bytes.js", () => ({
@@ -393,6 +394,72 @@ describe("shadow-claw-pages", () => {
     // setSanitizedHtml should NOT have been called, preserving DSD DOM!
     expect(setSanitizedHtml).toHaveBeenCalledTimes(0);
     expect(rendered.innerHTML).toBe("<p>DSD Pre-rendered Markup</p>");
+  });
+
+  it("creates an iframe and renders srcdoc when initial HTML page matches selectedPage", async () => {
+    const component = new ShadowClawPages();
+    const root = component.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const rendered = root.querySelector("[data-pages-rendered]") as HTMLElement;
+    rendered.innerHTML =
+      "<div id='siteApp'><main><h1>Pre-rendered HTML Page</h1></main></div>";
+    rendered.hidden = false;
+
+    (component as any).dsdInitialPath = "index.html";
+    component.db = {} as any;
+    component.selectedPage = { groupId: "br:main", path: "index.html" };
+
+    (
+      readGroupFile as jest.MockedFunction<typeof readGroupFile>
+    ).mockResolvedValue(
+      "<!doctype html><html><body><div id='siteApp'><main><h1>Pre-rendered HTML Page</h1></main></div></body></html>",
+    );
+
+    await component.renderSelectedPage();
+
+    const iframe = root.querySelector(
+      "[data-pages-iframe]",
+    ) as HTMLIFrameElement;
+    expect(iframe).not.toBeNull();
+    expect(iframe.hidden).toBe(false);
+    expect(rendered.hidden).toBe(true);
+
+    // Subsequent invocations (e.g. from reactive store/routing effects) must keep the iframe
+    await component.renderSelectedPage();
+    expect(root.querySelector("[data-pages-iframe]")).not.toBeNull();
+    expect(rendered.hidden).toBe(true);
+  });
+
+  it("adopts pre-rendered DSD DOM immediately without blocking on storage read or network fetch", async () => {
+    const component = new ShadowClawPages();
+    const root = component.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const rendered = root.querySelector("[data-pages-rendered]") as HTMLElement;
+    rendered.innerHTML = "<div id='siteApp'><h1>Fast SSR</h1></div>";
+    rendered.hidden = false;
+
+    (component as any).dsdInitialPath = "index.md";
+    component.db = {} as any;
+    component.selectedPage = { groupId: "br:main", path: "index.md" };
+
+    // readGroupFile rejects (file not seeded to OPFS yet)
+    (
+      readGroupFile as jest.MockedFunction<typeof readGroupFile>
+    ).mockRejectedValueOnce(new Error("File not found in OPFS"));
+
+    await component.renderSelectedPage();
+
+    expect(rendered.hidden).toBe(false);
+    expect(rendered.innerHTML).toBe(
+      '<div id="siteApp"><h1>Fast SSR</h1></div>',
+    );
+    expect(root.querySelector("[data-pages-iframe]")).toBeNull();
   });
 
   it("falls back to static main manifest/files when readGroupFile fails and seeds to storage", async () => {
@@ -997,6 +1064,42 @@ describe("shadow-claw-pages", () => {
 
       // textContent must not have been cleared by the isOverride branch
       expect(rendered.textContent).toBe(originalContent);
+    });
+
+    it("does NOT clear SSR content when sc-prerender-override class is absent even if host has data-prerender-no-seed='true'", async () => {
+      document.documentElement.classList.remove("sc-prerender-override");
+
+      const host = document.createElement("shadow-claw");
+      host.setAttribute("data-prerender-no-seed", "true");
+      document.body.appendChild(host);
+
+      const component = new ShadowClawPages();
+      host.appendChild(component);
+
+      jest
+        .spyOn(component, "renderSelectedPage")
+        .mockImplementation(async () => {});
+
+      const root = component.shadowRoot;
+      if (!root) {
+        host.remove();
+        return;
+      }
+
+      const rendered = root.querySelector(
+        "[data-pages-rendered]",
+      ) as HTMLElement;
+      expect(rendered).not.toBeNull();
+      const originalContent = "SSR seed content";
+      rendered.textContent = originalContent;
+      rendered.hidden = false;
+
+      await component.connectedCallback();
+
+      expect(rendered.textContent).toBe(originalContent);
+      expect(rendered.hidden).toBe(false);
+
+      host.remove();
     });
 
     it("disables Remove All button when pages list is empty and enables it when pages exist", async () => {
@@ -1836,6 +1939,7 @@ describe("shadow-claw-pages", () => {
 
       const header = root.querySelector("shadow-claw-page-header");
       expect(header?.getAttribute("title")).toBe("Amazing Guide");
+      expect(document.title).toBe("Amazing Guide - ShadowClaw");
     });
 
     it("handles drag and drop events on page rows", async () => {

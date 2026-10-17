@@ -314,6 +314,44 @@ export function getSiteConfigDefaultPinnedPage(): string | null {
   return null;
 }
 
+export function getSiteConfigSeoSettings(): {
+  siteTitle: string;
+  separator?: string;
+  titleTemplate?: string;
+} {
+  let siteTitle = "ShadowClaw";
+  let separator: string | undefined;
+  let titleTemplate: string | undefined;
+
+  if (typeof document !== "undefined") {
+    try {
+      const scriptEl = document.getElementById("shadow-claw-site-config");
+      if (scriptEl?.textContent) {
+        const config = JSON.parse(scriptEl.textContent);
+        if (config?.site?.title) {
+          siteTitle = String(config.site.title).trim();
+        }
+        if (config?.site?.titleSeparator ?? config?.site?.sep) {
+          separator = String(config.site.titleSeparator ?? config.site.sep);
+        }
+        if (config?.site?.titleTemplate) {
+          titleTemplate = String(config.site.titleTemplate);
+        }
+      }
+    } catch {}
+
+    if (siteTitle === "ShadowClaw" && document.title) {
+      const parts = document.title.split(/\s*[-|—•·]\s*/);
+      const possibleSite = parts[parts.length - 1]?.trim();
+      if (possibleSite) {
+        siteTitle = possibleSite;
+      }
+    }
+  }
+
+  return { siteTitle, separator, titleTemplate };
+}
+
 export function getSiteConfigPageFilter(): {
   allowList: string[];
   denyList: string[];
@@ -526,7 +564,12 @@ export async function seedStaticMainSite(
 
   const { allowList, denyList } = getSiteConfigPageFilter();
 
+  let pageIndex = 0;
   for (const page of manifest.pages) {
+    pageIndex++;
+    if (pageIndex % 5 === 0) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
     if (page.content?.includes('slug: "shadow-claw--purge-pages"')) {
       continue;
     }

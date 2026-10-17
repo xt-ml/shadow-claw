@@ -30,7 +30,7 @@ e2e/
 ├── fixtures.ts # Shared test fixtures (app, chat, files, tasks, settings, conversations)
 ├── *.test.ts # Test suites
 │ └── agent-tools.test.ts # Multi-turn agent tool execution loop (write_file) and error handling
-│ └── chat.test.ts # Chat interface verification
+│ └── chat.test.ts # Chat interface verification, local AI onboarding dialog on direct routes, and slash commands
 │ └── conversations.test.ts # Conversation CRUD + delete-dialog keyboard accessibility
 │ └── files.test.ts # File browser upload + file/folder creation operations
 │ └── navigation.test.ts # App-level navigation and page switching
@@ -332,8 +332,8 @@ Behavior notes:
 
 - Chat can show a transient model download progress panel when using Prompt API or Transformers.js Browser providers.
 - Assertions around that panel should be state-based (present/hidden) and not rely on fixed timing.
-- **Transformers.js Testing**: ShadowClaw defaults out-of-the-box in the browser to Transformers.js (`transformers_js_browser` with `onnx-community/Qwen3-0.6B-ONNX`). Verify onboarding dialog interactions, chunked model download progress estimation (via Hugging Face tree API), local inference (defaulting to `q4f16`), and dynamic Jinja chat-template parsing when using local models.
-- **Prompt API Testing**: When testing the optional native browser Prompt API (`prompt_api`), ensure the onboarding dialog bypass logic works and fallback model selection UI is properly hidden when the native hardware API is available, with graceful degradation to local Transformers.js when the native API is unavailable.
+- **Transformers.js Testing**: ShadowClaw defaults out-of-the-box in the browser to Transformers.js (`transformers_js_browser` with `onnx-community/Qwen3-0.6B-ONNX`). Verify onboarding dialog interactions (including when first browsing directly to static deployment routes such as `/chat`), chunked model download progress estimation (via Hugging Face tree API), local inference (defaulting to `q4f16`), and dynamic Jinja chat-template parsing when using local models.
+- **Prompt API Testing**: When testing the optional native browser Prompt API (`prompt_api`), verify that requests route through `invokeWithPromptApi()`, ensure native hardware API detection functions when available, and verify graceful degradation to local Transformers.js polyfills when native Prompt API is unavailable. Note that the onboarding dialog routes users to Transformers.js by default and does not assert Prompt API as default.
 - **Provider Help Dialogs**: When a provider request fails, the application may display a contextual help dialog. Use `app.navigateToWithOpenDialog()` to test flows that interrupt navigation with dialogs, or verify dialog content via standard locators on the `.app-dialog` component.
 - **Attachment Capabilities**: When testing file attachments, keep in mind that the application dynamically selects native vs. fallback delivery based on model capabilities (`src/content/attachment-capabilities.ts`).
 - **Confirmation Flows**: Destructive chat actions (for example message delete and compact) use app-level dialogs, so tests should assert dialog behavior rather than native `window.confirm()`.
@@ -472,7 +472,7 @@ The build, CLI, prerender, and headless agent test suites live under `src/cli/` 
 - **CLI Commands & Utilities**: `build`, `dev`, `run`, `serve`, `server`, `init`, `clients`, `send` (`src/cli/commands/send.test.ts` covering prompts, file attachments, and remote replies), `send-file` (`src/cli/commands/send-file.test.ts` covering direct P2P transfers and prompt execution), `backup`, `tasks`, `mcp`, `skills:index`, `webrtc` / `webrtc listen` (`src/cli/commands/webrtc-listen.test.ts` covering orchestration loop dispatch, transfer handling, and ping), `peer-id`, `--version`, `agent` (`src/cli/commands/agent.test.ts` covering init, models, tools, skills, tool execution, system prompt overrides and disabling (`--no-system-prompt`, `--system-prompt none`), uncached model download confirmation guards, remote RFC v0.2.0 imports, SIGINT signal handling, and `agent listen`), `agent model` (`src/cli/commands/agent-models.test.ts`), and native AI tasks (`src/cli/commands/native-ai-task-handler.test.ts`).
 - **Agent File Attachments (`agent run -f`)**: Repeatable `-f, --file` loading and MIME inference (`src/cli/utils/load-cli-attachments.test.ts`), missing-file errors (`src/cli/commands/agent.test.ts`), and attachment persistence on the saved user message (`src/cli/commands/agent-file-attachments.test.ts`).
 - **Model Download, Browsing & Progress Bar Utilities**: Hugging Face ONNX and Llamafile model querying, interactive paginated and searchable model browsing with in-memory session caching, downloading, write stream lifecycle cleanup, and recursive local caching inspection with partial download detection (`src/cli/utils/local-models.test.ts`), terminal progress bar (`src/cli/utils/progress-bar.test.ts`), and cache directory resolution (`src/cli/utils/resolve-cache-dir.test.ts`).
-- **Headless Agent Subsystems**: SQLite database implementation (`src/db/sqlite/*.test.ts`), Node.js filesystem directory handle polyfill (`src/storage/node-fs-handle.test.ts`), headless tool execution, guards, and capability matrix (`src/worker/utils/execute-tool.headless.test.ts`, `src/worker/utils/declarative-tool-executor.test.ts`, `src/worker/utils/guards.test.ts`, `src/worker/tools/builtin-ai/builtin-ai.headless.test.ts`), peer collaboration tools (`src/worker/tools/peer/prompt-peer.test.ts`, `src/worker/tools/workspace/send-file.test.ts`), shared cross-cutting utilities (`src/utils/*.test.ts`), and default provider/model configuration (`src/config/headless.test.ts`).
+- **Headless Agent Subsystems**: SQLite database implementation (`src/db/sqlite/*.test.ts`), Node.js filesystem directory handle polyfill (`src/storage/node-fs-handle.test.ts`), custom element security guards (`src/security/custom-element-guard.test.ts`), headless tool execution, guards, and capability matrix (`src/worker/utils/execute-tool.headless.test.ts`, `src/worker/utils/declarative-tool-executor.test.ts`, `src/worker/utils/guards.test.ts`, `src/worker/tools/builtin-ai/builtin-ai.headless.test.ts`), peer collaboration tools (`src/worker/tools/peer/prompt-peer.test.ts`, `src/worker/tools/workspace/send-file.test.ts`), shared cross-cutting utilities (`src/utils/*.test.ts` including `src/utils/seo.test.ts`), and default provider/model configuration (`src/config/headless.test.ts`).
 - **Host-Native Offline Model Executors & Local Binary Drivers**: In-process Node.js Transformers.js execution (`src/worker/tools/node-transformers-executor.test.ts`, `src/server/services/transformers-runtime.test.ts`), Llamafile and Agentfile manager & executor with LocalBinaryDriver architecture and built-in tool schema catalogs (`src/worker/tools/node-llamafile-executor.test.ts`, `src/server/services/llamafile-manager.test.ts`, `src/server/routes/llamafile.test.ts`), and agent invocation loop with system prompt forwarding in headless mode (`src/worker/utils/handle-invoke.test.ts`).
 
 ```bash
@@ -498,9 +498,11 @@ NODE_OPTIONS="--no-warnings --experimental-vm-modules" \
   src/cli/build/build.test.ts \
   src/cli/prerender/dsd-shell/prerender-dsd-shell.test.ts \
   src/cli/prerender/pretty-paths/prerender-pretty-paths.test.ts \
+  src/security/custom-element-guard.test.ts \
   src/db/sqlite/open-sqlite-database.test.ts \
   src/storage/node-fs-handle.test.ts \
   src/utils/index.test.ts \
+  src/utils/seo.test.ts \
   src/worker/utils/guards.test.ts \
   src/worker/utils/declarative-tool-executor.test.ts \
   src/worker/utils/execute-tool.headless.test.ts \

@@ -13,6 +13,7 @@ import {
 
 import { themeStore } from "../../stores/theme.js";
 
+import { yieldToMain } from "../../utils/delay.js";
 import { applyRoute } from "./utils/apply-route.js";
 import { applyRouteFromCurrentLocation } from "./utils/apply-route-from-current-location.js";
 import { bindEventListeners } from "./utils/bind-event-listeners.js";
@@ -100,39 +101,46 @@ export class ShadowClaw extends ShadowClawElement {
       throw new Error("shadowRoot not found");
     }
 
+    await yieldToMain();
+
     try {
       const { Orchestrator } =
         await import("../../core/orchestrator/orchestrator.js");
+      await yieldToMain();
 
-      // Lazily load non-critical UI components to reduce initial JS execution
-      Promise.all([
-        import("../shadow-claw-conversations/shadow-claw-conversations.js"),
-        import("../shadow-claw-dialog/shadow-claw-dialog.js"),
-        import("../shadow-claw-toast/shadow-claw-toast.js"),
-      ]).catch(console.error);
+      // Lazily load non-critical UI components when idle to reduce initial JS execution
+      const loadDeferredComponents = () => {
+        Promise.all([
+          import("../shadow-claw-conversations/shadow-claw-conversations.js"),
+          import("../shadow-claw-dialog/shadow-claw-dialog.js"),
+          import("../shadow-claw-toast/shadow-claw-toast.js"),
+        ]).catch(console.error);
+      };
+      if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+        (window as any).requestIdleCallback(loadDeferredComponents);
+      } else {
+        setTimeout(loadDeferredComponents, 200);
+      }
 
       // Explicitly yield to the event loop to ensure Time to First Paint (TTFP)
       // fires before the heavy IndexedDB and Orchestrator init blocks the thread.
-      await new Promise((resolve) => {
-        if ("requestIdleCallback" in window) {
-          (window as any).requestIdleCallback(() => resolve(null));
-        } else {
-          setTimeout(resolve, 0);
-        }
-      });
+      await yieldToMain();
 
       if (!this.orchestrator) {
         this.orchestrator = new Orchestrator();
       }
 
       this.db = await this.orchestrator.init();
+      await yieldToMain();
 
       // Initialize reactive app store wiring before child components rely on ready state.
       // We do this before setDB() so that components waiting on getDb() find a ready store.
       await orchestratorStore.init(this.db, this.orchestrator);
       setDB(this.db);
+      await yieldToMain();
 
       await this.render();
+      await yieldToMain();
 
       // Ensure initial route state matches persisted store state even when prerender
       // markup starts on a different page. On a fresh install (no persisted page),
@@ -218,6 +226,19 @@ export class ShadowClaw extends ShadowClawElement {
       // takes over and clears it, even on root URL loads.
       if (typeof customElements !== "undefined") {
         await customElements.whenDefined(`shadow-claw-${this.currentPage}`);
+      }
+
+      if (this.currentPage === "pages") {
+        const pagesComp = this.shadowRoot?.querySelector(
+          "shadow-claw-pages",
+        ) as any;
+        if (
+          pagesComp &&
+          typeof pagesComp.renderSelectedPage === "function" &&
+          !pagesComp.renderedKey
+        ) {
+          await pagesComp.renderSelectedPage();
+        }
       }
 
       const { isMemoryStorageFallbackActive } =

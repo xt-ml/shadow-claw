@@ -48,4 +48,30 @@ test.describe("Chat Interface", () => {
 
     expect(await markdownNodes.count()).toBeGreaterThanOrEqual(0);
   });
+
+  test("should show local AI onboarding dialog when first browsing to chat", async ({
+    page,
+  }) => {
+    await page.goto("/chat");
+    const dialog = page.locator(
+      'shadow-claw shadow-claw-chat shadow-claw-dialog[dialog-class="chat__prompt-api-dialog"] dialog',
+    );
+    await expect(dialog).toBeVisible();
+    await expect(
+      page.locator(
+        'shadow-claw shadow-claw-chat shadow-claw-dialog[dialog-class="chat__prompt-api-dialog"] .chat__prompt-api-title',
+      ),
+    ).toContainText("Welcome to Local AI (Transformers.js)");
+  });
+
+  test("should send a slash command and display it in the chat thread", async ({
+    chat,
+  }) => {
+    await chat.open();
+    await chat.sendMessage("/skill-creator");
+
+    const userMsg = chat.host.locator(".chat__message--user").last();
+    await expect(userMsg).toBeVisible({ timeout: 10000 });
+    await expect(userMsg).toContainText("/skill-creator");
+  });
 });

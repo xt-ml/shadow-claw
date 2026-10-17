@@ -1,5 +1,7 @@
 import { Signal } from "signal-polyfill";
 
+import { yieldToMain } from "../utils/delay.js";
+
 import { CONFIG_KEYS, DEFAULT_GROUP_ID } from "../config/config.js";
 import { compactContext } from "../core/orchestrator/utils/compact-context.js";
 
@@ -1476,6 +1478,7 @@ export class OrchestratorStore {
     await loadCustomElementSecurityFromDb(db);
     installCustomElementsRegistryGuard();
     installCustomElementDomGuard();
+    await yieldToMain();
 
     // Load pages allowList / denyList from DB
     const rawAllowList = await getConfig(db, CONFIG_KEYS.PAGES_ALLOW_LIST);
@@ -1486,6 +1489,11 @@ export class OrchestratorStore {
     if (rawDenyList) {
       this._pagesDenyList.set(parseStoredStringList(String(rawDenyList)));
     }
+    await yieldToMain();
+
+    const hasStaticRouting =
+      typeof document !== "undefined" &&
+      document.getElementById("shadow-claw-static-routing") !== null;
 
     // Seed static main site files (including declarative tools) first
     const rawPagesList = await getConfig(db, CONFIG_KEYS.PAGES_LIST);
@@ -1504,9 +1512,11 @@ export class OrchestratorStore {
     } else {
       await this.ensureDefaultPage(db);
     }
+    await yieldToMain();
 
     // Apply declarative site config defaults (from embedded site-config.json) on first boot
     await this.applySiteConfigDefaults(db);
+    await yieldToMain();
 
     // Restore last-active conversation, then load data
     await this.loadGroups(db);
@@ -1514,6 +1524,7 @@ export class OrchestratorStore {
     if (lastGroup && lastGroup !== this._activeGroupId.get()) {
       this._activeGroupId.set(lastGroup);
     }
+    await yieldToMain();
 
     const lastPage = (await getConfig(db, CONFIG_KEYS.LAST_ACTIVE_PAGE)) as
       string | null;
@@ -1552,6 +1563,7 @@ export class OrchestratorStore {
     ) {
       this._defaultPinnedPage.set(defaultPinnedRef);
     }
+    await yieldToMain();
 
     const isRootLocation =
       typeof window !== "undefined" &&
@@ -1594,8 +1606,21 @@ export class OrchestratorStore {
             this.isPageAllowed(parsed.path, parsed.groupId)
           ) {
             this._activePinnedPage.set(parsed);
+            activePinnedSet = true;
           }
         } catch {}
+      }
+    }
+
+    if (!activePinnedSet && isRootLocation && this.effectiveDefaultPage) {
+      if (
+        this.isPageAllowed(
+          this.effectiveDefaultPage.path,
+          this.effectiveDefaultPage.groupId,
+        )
+      ) {
+        this._activePinnedPage.set(this.effectiveDefaultPage);
+        activePinnedSet = true;
       }
     }
 
@@ -1609,12 +1634,33 @@ export class OrchestratorStore {
       );
     }
 
-    await Promise.all([
-      this.loadHistory(),
-      this.loadTasks(db),
-      this.loadFiles(db),
-    ]);
+    const runSecondaryLoads = () => {
+      void Promise.all([
+        this.loadHistory(),
+        this.loadTasks(db),
+        this.loadFiles(db),
+      ]).catch((err) => {
+        console.warn("Secondary background store loads failed:", err);
+      });
+    };
 
+    if (hasStaticRouting) {
+      if (typeof (window as any).requestIdleCallback === "function") {
+        (window as any).requestIdleCallback(runSecondaryLoads, {
+          timeout: 2000,
+        });
+      } else {
+        setTimeout(runSecondaryLoads, 100);
+      }
+    } else {
+      await Promise.all([
+        this.loadHistory(),
+        this.loadTasks(db),
+        this.loadFiles(db),
+      ]);
+    }
+
+    await yieldToMain();
     this._initResolve?.();
 
     this.scheduleBackgroundStaticMainSiteSeeding(db);

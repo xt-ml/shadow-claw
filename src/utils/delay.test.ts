@@ -1,4 +1,5 @@
-import { computeDelay, sleep } from "./delay.js";
+import { jest } from "@jest/globals";
+import { computeDelay, sleep, yieldToMain } from "./delay.js";
 
 describe("computeDelay", () => {
   it("computes exponential delay without jitter", () => {
@@ -43,5 +44,34 @@ describe("sleep", () => {
     await expect(promise).rejects.toMatchObject({
       name: "AbortError",
     });
+  });
+});
+
+describe("yieldToMain", () => {
+  it("uses scheduler.yield when available", async () => {
+    const origScheduler = (globalThis as any).scheduler;
+    const yieldMock = jest.fn().mockResolvedValue(undefined);
+    (globalThis as any).scheduler = { yield: yieldMock };
+
+    try {
+      await yieldToMain();
+      expect(yieldMock).toHaveBeenCalledTimes(1);
+    } finally {
+      (globalThis as any).scheduler = origScheduler;
+    }
+  });
+
+  it("falls back to setTimeout when scheduler.yield is unavailable", async () => {
+    const origScheduler = (globalThis as any).scheduler;
+    delete (globalThis as any).scheduler;
+    const setTimeoutSpy = jest.spyOn(globalThis, "setTimeout");
+
+    try {
+      await yieldToMain();
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 0);
+    } finally {
+      (globalThis as any).scheduler = origScheduler;
+      setTimeoutSpy.mockRestore();
+    }
   });
 });

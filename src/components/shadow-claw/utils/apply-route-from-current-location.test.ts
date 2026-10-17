@@ -132,6 +132,42 @@ describe("applyRouteFromCurrentLocation", () => {
     );
   });
 
+  it("routes to effectiveDefaultPage on root URL when defaultPinnedPage is null without rewriting URL history", async () => {
+    mockParseRouteFromUrlAsync.mockResolvedValue(null);
+    const replaceStateSpy = jest.spyOn(window.history, "replaceState");
+    (oStore as any).defaultPinnedPage = null;
+    (oStore as any).effectiveDefaultPage = {
+      groupId: "br:main",
+      path: "index.html",
+    };
+    const rootUrl = new URL("http://localhost:8888/");
+
+    await applyRouteFromCurrentLocation(
+      shadow,
+      shadowClaw,
+      db,
+      fStore,
+      oStore,
+      rootUrl,
+    );
+
+    expect(replaceStateSpy).not.toHaveBeenCalled();
+    expect(mockApplyRoute).toHaveBeenCalledWith(
+      shadow,
+      shadowClaw,
+      db,
+      fStore,
+      oStore,
+      {
+        page: "pages",
+        groupId: "br:main",
+        path: "index.html",
+      },
+    );
+
+    replaceStateSpy.mockRestore();
+  });
+
   it("replaces history state when defaultPinnedPage has a non-root pretty path", async () => {
     const appRoutes = await import("../../../core/app-routes.js");
     (

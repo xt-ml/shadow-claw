@@ -15,9 +15,7 @@
     "manifestPath": "manifest.json",
     "themeColor": "#000000"
   },
-  "assets": [
-    "assets"
-  ],
+  "assets": ["assets"],
   "sidebar": {
     "pagesHidden": false,
     "chatHidden": false,
@@ -30,7 +28,8 @@
     "denyList": []
   },
   "settings": {
-    "defaultToolsProfile": "__builtin_default"
+    "defaultToolsProfile": "__builtin_default",
+    "overridePrerenderSkeleton": false
   },
   "agent": {
     "defaultProvider": "transformers_js_local",
@@ -42,10 +41,7 @@
       "block-garden-option",
       "block-garden-select"
     ],
-    "allowedDomains": [
-      "kherrick.github.io",
-      "cdn.jsdelivr.net"
-    ]
+    "allowedDomains": ["kherrick.github.io", "cdn.jsdelivr.net"]
   },
   "security": {
     "connectSrc": [

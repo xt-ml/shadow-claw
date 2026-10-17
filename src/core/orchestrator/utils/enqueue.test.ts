@@ -497,6 +497,88 @@ describe("enqueue & processQueue", () => {
       });
     });
 
+    it("should ensure worker is ready when executing declarative skill chain if worker is not yet initialized", async () => {
+      const skill: SkillRecord = {
+        name: "toast-random-number",
+        description: "Show a random number",
+        userInvocable: true,
+        path: "/path/skill",
+        basePath: "/path",
+        execution: {
+          type: "tools",
+          tools: [
+            { name: "javascript", input: { code: "1" } },
+            { name: "show_toast", input: { message: { $pipe: "prev" } } },
+          ],
+        },
+      };
+      mockDiscoverSkills.mockResolvedValue({
+        skills: [skill],
+        diagnostics: [],
+      });
+      const msg = makeInboundMessage({
+        groupId: "g1",
+        content: "/toast-random-number",
+        channel: "browser",
+      });
+
+      const workerPostMessage = jest.fn();
+      const orchestrator = {
+        ...mockOrchestrator,
+        agentWorker: null as any,
+        ensureWorkerReady: jest
+          .fn<() => Promise<void>>()
+          .mockImplementation(async () => {
+            orchestrator.agentWorker = { postMessage: workerPostMessage };
+          }),
+      };
+
+      await enqueue(orchestrator as unknown as Orchestrator, mockDb, msg);
+
+      expect(orchestrator.ensureWorkerReady).toHaveBeenCalled();
+      expect(workerPostMessage).toHaveBeenCalledWith({
+        type: "execute-skill-tools",
+        payload: expect.objectContaining({
+          groupId: "g1",
+          skillName: "toast-random-number",
+        }),
+      });
+    });
+
+    it("should ensure worker is ready when executing direct tool command if worker is not yet initialized", async () => {
+      mockParseDirectToolCommand.mockReturnValue({
+        toolName: "javascript",
+        input: { code: "1 + 1" },
+      });
+      const msg = makeInboundMessage({
+        groupId: "g1",
+        content: "/javascript",
+        channel: "browser",
+      });
+
+      const workerPostMessage = jest.fn();
+      const orchestrator = {
+        ...mockOrchestrator,
+        agentWorker: null as any,
+        ensureWorkerReady: jest
+          .fn<() => Promise<void>>()
+          .mockImplementation(async () => {
+            orchestrator.agentWorker = { postMessage: workerPostMessage };
+          }),
+      };
+
+      await enqueue(orchestrator as unknown as Orchestrator, mockDb, msg);
+
+      expect(orchestrator.ensureWorkerReady).toHaveBeenCalled();
+      expect(workerPostMessage).toHaveBeenCalledWith({
+        type: "execute-direct-tool",
+        payload: expect.objectContaining({
+          groupId: "g1",
+          name: "javascript",
+        }),
+      });
+    });
+
     it("should populate rawInput on declarative tools with arguments when input is empty or non-object", async () => {
       const skill: SkillRecord = {
         name: "echo-skill",

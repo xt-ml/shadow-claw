@@ -10,25 +10,26 @@ export interface PageFilterOptions {
 }
 
 function normalizePattern(pattern: string): string {
-  return pattern
-    .trim()
-    .replace(/\\/g, "/")
-    .replace(/^\/+/, "")
-    .replace(/\/+$/, "");
+  const trimmed = pattern.trim().replace(/\\/g, "/");
+  if (trimmed === "/" || /^\/+$/.test(trimmed)) {
+    return "/";
+  }
+  return trimmed.replace(/^\/+/, "").replace(/\/+$/, "");
 }
 
 const PAGE_EXTENSION_REGEX = /\.(md|markdown|html|xhtml|txt)$/i;
 
 function stripPageExtension(filePath: string): string {
+  if (filePath === "/") return "/";
   return filePath.replace(PAGE_EXTENSION_REGEX, "");
 }
 
 function cleanPagePath(rawPath: string): string {
-  return rawPath
-    .trim()
-    .replace(/\\/g, "/")
-    .replace(/^\/+/, "")
-    .replace(/\/+$/, "");
+  const trimmed = rawPath.trim().replace(/\\/g, "/");
+  if (trimmed === "/" || /^\/+$/.test(trimmed)) {
+    return "/";
+  }
+  return trimmed.replace(/^\/+/, "").replace(/\/+$/, "");
 }
 
 function normalizeGroupId(groupId?: string | null): string {
@@ -39,11 +40,7 @@ function normalizeGroupId(groupId?: string | null): string {
 }
 
 function addCandidateVariants(candidates: Set<string>, rawPath: string): void {
-  const norm = rawPath
-    .trim()
-    .replace(/\\/g, "/")
-    .replace(/^\/+/, "")
-    .replace(/\/+$/, "");
+  const norm = cleanPagePath(rawPath);
   if (!norm) return;
 
   candidates.add(norm);
@@ -69,11 +66,26 @@ function buildPathCandidates(
 
   const normGroup = normalizeGroupId(groupId);
 
+  if (cleanPath === "/") {
+    candidates.add("/");
+    addCandidateVariants(candidates, "index.html");
+    if (basePathPrefix) {
+      const cleanPrefix = normalizePattern(basePathPrefix);
+      if (cleanPrefix && cleanPrefix !== "/") {
+        addCandidateVariants(candidates, `${cleanPrefix}/index.html`);
+      }
+    }
+    addCandidateVariants(candidates, "pages/index.html");
+    addCandidateVariants(candidates, `pages/${normGroup}/index.html`);
+    addCandidateVariants(candidates, `${normGroup}/index.html`);
+    return candidates;
+  }
+
   addCandidateVariants(candidates, cleanPath);
 
   if (basePathPrefix) {
     const cleanPrefix = normalizePattern(basePathPrefix);
-    if (cleanPrefix) {
+    if (cleanPrefix && cleanPrefix !== "/") {
       addCandidateVariants(candidates, `${cleanPrefix}/${cleanPath}`);
     }
   }
@@ -96,6 +108,15 @@ function buildPathCandidates(
     addCandidateVariants(candidates, `pages/${cleanPath}`);
     addCandidateVariants(candidates, `pages/${normGroup}/${cleanPath}`);
     addCandidateVariants(candidates, `${normGroup}/${cleanPath}`);
+  }
+
+  // If this candidate represents the root index page, also include "/"
+  for (const cand of Array.from(candidates)) {
+    const stripped = stripPageExtension(cand);
+    if (cand === "index.html" || stripped === "index") {
+      candidates.add("/");
+      break;
+    }
   }
 
   return candidates;
@@ -123,6 +144,9 @@ function candidateMatchesPattern(
 
       if (candLower === pat || candStripped === pat) {
         return true;
+      }
+      if (pat === "/") {
+        continue;
       }
       if (
         candLower.startsWith(`${pat}/`) ||

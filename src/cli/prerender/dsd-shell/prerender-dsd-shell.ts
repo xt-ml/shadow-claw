@@ -591,7 +591,7 @@ export function applyStaticPagesContent(
       `<div class="pages__status" data-pages-status>${escapeHtml(statusText)}</div>`,
   );
   next = next.replace(
-    /<span\s+class="pages__dropdown-selected"\s+data-pages-dropdown-selected>[\s\S]*?<\/span>/iu,
+    /<span\b[^>]*?\bdata-pages-dropdown-selected\b[^>]*>[\s\S]*?<\/span\s*>/iu,
     () =>
       `<span class="pages__dropdown-selected" data-pages-dropdown-selected>${escapeHtml(selectedPath)}</span>`,
   );
@@ -607,7 +607,7 @@ export function applyStaticPagesContent(
   next = next.replace(
     /<div\s+class="pages__rendered"\s+data-pages-rendered\s+hidden><\/div>/iu,
     () =>
-      `<div class="pages__rendered" data-pages-rendered>${renderedHtml}</div>`,
+      `<div class="pages__rendered" data-pages-rendered data-initial-path="${escapeHtml(selectedPath)}">${renderedHtml}</div>`,
   );
 
   return injectPageHeaderDsd(

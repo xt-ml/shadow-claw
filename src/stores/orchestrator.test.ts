@@ -3499,5 +3499,171 @@ describe("OrchestratorStore", () => {
         jest.restoreAllMocks();
       }
     });
+
+    it("schedules background static main site seeding cooperatively with requestIdleCallback", async () => {
+      const script = document.createElement("script");
+      script.id = "shadow-claw-static-routing";
+      script.type = "application/json";
+      script.textContent = JSON.stringify({ routes: {} });
+      document.head.appendChild(script);
+
+      const originalIdle = (window as any).requestIdleCallback;
+      const idleMock = jest.fn();
+      (window as any).requestIdleCallback = idleMock;
+
+      try {
+        const store = new OrchestratorStore();
+        const orch: any = {
+          provider: "openrouter",
+          model: "openai/gpt-4o",
+          events: { on: jest.fn() },
+        };
+        const mockDb: any = {};
+
+        jest.spyOn(store, "loadHistory").mockResolvedValue(undefined as any);
+        jest.spyOn(store, "loadTasks").mockResolvedValue(undefined as any);
+        jest.spyOn(store, "loadFiles").mockResolvedValue(undefined as any);
+
+        await store.init(mockDb, orch);
+
+        expect(idleMock).toHaveBeenCalledWith(expect.any(Function), {
+          timeout: 3000,
+        });
+      } finally {
+        script.remove();
+        (window as any).requestIdleCallback = originalIdle;
+      }
+    });
+
+    it("defers loadHistory, loadTasks, and loadFiles during init when static routing script is present", async () => {
+      const script = document.createElement("script");
+      script.id = "shadow-claw-static-routing";
+      script.type = "application/json";
+      script.textContent = JSON.stringify({ routes: {} });
+      document.head.appendChild(script);
+
+      try {
+        const store = new OrchestratorStore();
+        const orch: any = {
+          provider: "openrouter",
+          model: "openai/gpt-4o",
+          events: { on: jest.fn() },
+        };
+        const mockDb: any = {};
+
+        const historySpy = jest
+          .spyOn(store, "loadHistory")
+          .mockResolvedValue(undefined as any);
+        const tasksSpy = jest
+          .spyOn(store, "loadTasks")
+          .mockResolvedValue(undefined as any);
+        const filesSpy = jest
+          .spyOn(store, "loadFiles")
+          .mockResolvedValue(undefined as any);
+
+        await store.init(mockDb, orch);
+
+        expect(historySpy).not.toHaveBeenCalled();
+        expect(tasksSpy).not.toHaveBeenCalled();
+        expect(filesSpy).not.toHaveBeenCalled();
+      } finally {
+        script.remove();
+      }
+    });
+
+    it("defers loadHistory, loadTasks, and loadFiles with requestIdleCallback under static routing", async () => {
+      const script = document.createElement("script");
+      script.id = "shadow-claw-static-routing";
+      script.type = "application/json";
+      script.textContent = JSON.stringify({ routes: {} });
+      document.head.appendChild(script);
+
+      const originalIdle = (window as any).requestIdleCallback;
+      const idleMock = jest.fn();
+      (window as any).requestIdleCallback = idleMock;
+
+      try {
+        const store = new OrchestratorStore();
+        const orch: any = {
+          provider: "openrouter",
+          model: "openai/gpt-4o",
+          events: { on: jest.fn() },
+        };
+        const mockDb: any = {};
+
+        jest.spyOn(store, "loadHistory").mockResolvedValue(undefined as any);
+        jest.spyOn(store, "loadTasks").mockResolvedValue(undefined as any);
+        jest.spyOn(store, "loadFiles").mockResolvedValue(undefined as any);
+
+        await store.init(mockDb, orch);
+
+        expect(idleMock).toHaveBeenCalledWith(expect.any(Function), {
+          timeout: 2000,
+        });
+      } finally {
+        script.remove();
+        (window as any).requestIdleCallback = originalIdle;
+      }
+    });
+
+    it("yields to the main thread during store initialization steps", async () => {
+      const origScheduler = (globalThis as any).scheduler;
+      const yieldMock = jest.fn().mockResolvedValue(undefined);
+      (globalThis as any).scheduler = { yield: yieldMock };
+
+      try {
+        const store = new OrchestratorStore();
+        const orch: any = {
+          provider: "openrouter",
+          model: "openai/gpt-4o",
+          events: { on: jest.fn() },
+        };
+        const mockDb: any = {};
+
+        jest.spyOn(store, "loadHistory").mockResolvedValue(undefined as any);
+        jest.spyOn(store, "loadTasks").mockResolvedValue(undefined as any);
+        jest.spyOn(store, "loadFiles").mockResolvedValue(undefined as any);
+
+        await store.init(mockDb, orch);
+
+        expect(yieldMock.mock.calls.length).toBeGreaterThanOrEqual(7);
+      } finally {
+        (globalThis as any).scheduler = origScheduler;
+      }
+    });
+
+    it("runs synchronous seedStaticMainSite during init when static routing script is present", async () => {
+      const script = document.createElement("script");
+      script.id = "shadow-claw-static-routing";
+      script.type = "application/json";
+      script.textContent = JSON.stringify({ routes: {} });
+      document.head.appendChild(script);
+
+      try {
+        const store = new OrchestratorStore();
+        const orch: any = {
+          provider: "openrouter",
+          model: "openai/gpt-4o",
+          events: { on: jest.fn() },
+        };
+        const mockDb: any = {};
+
+        jest.spyOn(store, "loadHistory").mockResolvedValue(undefined as any);
+        jest.spyOn(store, "loadTasks").mockResolvedValue(undefined as any);
+        jest.spyOn(store, "loadFiles").mockResolvedValue(undefined as any);
+
+        mockSeedStaticMainSite.mockClear();
+
+        await store.init(mockDb, orch);
+
+        expect(mockSeedStaticMainSite).toHaveBeenCalledWith(
+          mockDb,
+          DEFAULT_GROUP_ID,
+          [],
+        );
+      } finally {
+        script.remove();
+      }
+    });
   });
 });

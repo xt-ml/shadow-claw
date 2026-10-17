@@ -133,10 +133,15 @@ Applications pre-rendered with Declarative Shadow DOM (DSD) shell via `src/cli/p
   - The build pipeline writes the full manifest to `static-main-manifest.json` and copies all source files to `static-main/` for runtime on-demand fetching.
 - **Dynamic Hydration & Fallback Loading**:
   - When navigating to pages not embedded in the initial HTML or stored in local storage, `shadow-claw-pages` and `getStaticPageContent()` dynamically fetch individual markdown files from `static-main/` or fallback to `static-main-manifest.json`.
-- **Pretty Paths & Sub-Routes**:
+- **Pretty Paths, Sub-Routes & SEO Metadata (Yoast SEO Pattern)**:
   - Configured via `routes.json` (normally `pages/routes.json`) to map markdown page sources to clean URL paths (e.g. `/2026/06/30/on-developing-loops/`). Candidate locations include `pages/resources/`, `pages/deps/`, `resources/`, `deps/`, `pages/`, and the project root.
   - Supports recursive nested `subRoutes` entries matching child URL hierarchies, as well as root pretty path mapping (`"prettyPath": "/"`).
-  - The pre-render pipeline generates dedicated physical `index.html` files with page-specific DSD templates.
+  - Routes can specify explicit SEO overrides: `"title"` and `"description"` directly on the route object.
+  - The pre-render pipeline generates dedicated physical `index.html` files with page-specific DSD templates and Yoast-style SEO head tags:
+    - **Page Titles**: Formatted via `formatSeoTitle` (`%%title%% %%sep%% %%sitename%%`, e.g. `Agent Skills & Skill Creator - ShadowClaw`), resolving in priority order: route `title` -> frontmatter `seo_title` / `title` -> first Markdown `# Heading` -> humanized path slug -> site title fallback.
+    - **Meta Descriptions**: Extracted via `extractMarkdownDescription` from route `description`, frontmatter `description` / `excerpt`, or the first body paragraph truncated to 160 characters.
+    - **Canonical URLs & Social Cards**: Resolves absolute canonical URLs (`resolveCanonicalUrl`) based on canonical origin/basePath and updates `<link rel="canonical">`, `og:title`, `og:description`, `og:url`, `og:site_name`, `twitter:title`, and `twitter:description`.
+  - **Dynamic SPA Title Updates**: When navigating inside the browser SPA, `shadow-claw-pages` updates `document.title` to the formatted page title, restoring the base site title when on the home view.
   - If no `routes.json` exists, pretty-path generation is skipped without failing the build.
 - **Static Routing Manifest**:
   - Embedded via `#shadow-claw-static-routing` JSON script tags or fetched via `static-routing.json` (`src/storage/static-routing.ts`), allowing client-side router (`app-routes.ts`) and pages component to resolve routes asynchronously (`resolvePrettyPathToRouteAsync`, `parseRouteFromUrlAsync`) across Node.js, Electron, and GitHub Pages.
@@ -149,7 +154,7 @@ Applications pre-rendered with Declarative Shadow DOM (DSD) shell via `src/cli/p
 - **Declarative Configuration (`shadow-claw.config.json`)**:
   - Template repositories and content publishers can declaratively brand and customize the site shell without editing ShadowClaw source files. The canonical location is `shadow-claw.config.json` in the project root (legacy `site-config.json` is also supported for backward compatibility):
     - **`site`**: `title`, `description`, `themeColor`, `lang`.
-    - **`branding`**: `titleText`, `siteUrl`, `repoUrl`, `repoLabel`, `faviconPath`, `appleTouchIconPath`, `logoSlotHtml`.
+    - **`branding`**: `titleText`, `siteUrl`, `repoUrl`, `repoLabel`, `faviconPath`, `appleTouchIconPath`, `logoSlotHtml` (custom logo markup, or `"none"` / `""` to remove the header logo).
     - **`sidebar`**: `pagesHidden`, `chatHidden`, `tasksHidden`, `filesHidden`, `defaultPage` (`"pages"` | `"chat"` | `"tasks"` | `"files"`), `slotHtml` (raw HTML string), `slotPath` (path to a custom sidebar HTML file), `sections` (array of declarative sidebar sections with `title`, `headerHref`, `items: [{ title, label, href, target, rel, active }]`, or `html`).
     - **`pages`**: `sortOrder` (`"asc"` | `"desc"`), `defaultPinnedPage`, `allowList` (array of allowed page or directory path patterns), `denyList` (array of denied page or directory path patterns excluded from the viewer, page navigation, and static manifest seeding).
     - **`theme`**: `stylesheet` (custom theme CSS stylesheet injected into head).

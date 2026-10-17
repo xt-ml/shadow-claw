@@ -54,6 +54,7 @@ describe("shadow-claw default root configuration", () => {
 
     expect(patched).toContain('slot="header-title-link"');
     expect(patched).toContain("xt-ml.github.io/shadow-claw");
+    expect(patched).toContain('class="header-title-logo"');
     expect(patched).toContain('slot="header-actions-logo"');
     expect(patched).toContain("M165.9 397.4c0 2-2.3 3.6-5.2 3.6");
   });

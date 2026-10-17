@@ -2091,6 +2091,157 @@ describe("Orchestrator", () => {
       }
     });
 
+    it("defers toolsStore.load to requestIdleCallback when available during init", async () => {
+      const origWorker = (globalThis as unknown as { Worker?: unknown }).Worker;
+      (globalThis as any).Worker = class {
+        postMessage() {}
+        terminate() {}
+        addEventListener() {}
+        removeEventListener() {}
+      } as unknown as typeof Worker;
+
+      const originalIdle = (window as any).requestIdleCallback;
+      const idleMock = jest.fn();
+      (window as any).requestIdleCallback = idleMock;
+
+      try {
+        const o = new Orchestrator();
+        jest.spyOn(o.roomManager, "loadRooms").mockImplementation(() => {});
+        const loadSpy = jest
+          .spyOn(toolsStore, "load")
+          .mockResolvedValue(undefined);
+        jest.spyOn(o, "loadApiKeyForProvider").mockResolvedValue();
+        jest.spyOn(o, "loadSecretConfig").mockResolvedValue("");
+
+        loadSpy.mockClear();
+        const db = await o.init();
+        expect(db).toBeDefined();
+        expect(loadSpy).not.toHaveBeenCalled();
+        expect(idleMock).toHaveBeenCalled();
+
+        const idleCallback = idleMock.mock.calls[0][0];
+        idleCallback();
+        expect(loadSpy).toHaveBeenCalled();
+      } finally {
+        if (!origWorker) {
+          delete (globalThis as unknown as { Worker?: unknown }).Worker;
+        } else {
+          (globalThis as any).Worker = origWorker;
+        }
+        (window as any).requestIdleCallback = originalIdle;
+      }
+    });
+
+    it("defers initWorkerAndScheduler when static routing script is present during init", async () => {
+      const script = document.createElement("script");
+      script.id = "shadow-claw-static-routing";
+      script.type = "application/json";
+      script.textContent = JSON.stringify({ routes: {} });
+      document.head.appendChild(script);
+
+      const origWorker = (globalThis as unknown as { Worker?: unknown }).Worker;
+      (globalThis as any).Worker = class {
+        postMessage() {}
+        terminate() {}
+        addEventListener() {}
+        removeEventListener() {}
+      } as unknown as typeof Worker;
+
+      const originalIdle = (window as any).requestIdleCallback;
+      const idleMock = jest.fn();
+      (window as any).requestIdleCallback = idleMock;
+
+      try {
+        const o = new Orchestrator();
+        jest.spyOn(o.roomManager, "loadRooms").mockImplementation(() => {});
+        jest.spyOn(toolsStore, "load").mockResolvedValue(undefined);
+        jest.spyOn(o, "loadApiKeyForProvider").mockResolvedValue();
+        jest.spyOn(o, "loadSecretConfig").mockResolvedValue("");
+
+        const db = await o.init();
+        expect(db).toBeDefined();
+        // In RED phase, o.agentWorker was initialized synchronously
+        expect(o.agentWorker).toBeNull();
+
+        // Idle callback starts worker
+        await o.ensureWorkerReady();
+        expect(o.agentWorker).not.toBeNull();
+      } finally {
+        script.remove();
+        if (!origWorker) {
+          delete (globalThis as unknown as { Worker?: unknown }).Worker;
+        } else {
+          (globalThis as any).Worker = origWorker;
+        }
+        (window as any).requestIdleCallback = originalIdle;
+      }
+    });
+
+    it("defers toolsStore.load and worker startup via timer when static routing is present", async () => {
+      const script = document.createElement("script");
+      script.id = "shadow-claw-static-routing";
+      script.type = "application/json";
+      script.textContent = JSON.stringify({ routes: {} });
+      document.head.appendChild(script);
+
+      const originalIdle = (window as any).requestIdleCallback;
+      const idleMock = jest.fn();
+      (window as any).requestIdleCallback = idleMock;
+
+      const setTimeoutSpy = jest.spyOn(globalThis, "setTimeout");
+
+      try {
+        const o = new Orchestrator();
+        jest.spyOn(o.roomManager, "loadRooms").mockImplementation(() => {});
+        const loadToolsSpy = jest
+          .spyOn(toolsStore, "load")
+          .mockResolvedValue(undefined);
+        loadToolsSpy.mockClear();
+        jest.spyOn(o, "loadApiKeyForProvider").mockResolvedValue();
+        jest.spyOn(o, "loadSecretConfig").mockResolvedValue("");
+
+        const db = await o.init();
+        expect(db).toBeDefined();
+        expect(loadToolsSpy).not.toHaveBeenCalled();
+        expect(o.agentWorker).toBeNull();
+        expect(setTimeoutSpy).toHaveBeenCalledWith(
+          expect.any(Function),
+          15_000,
+        );
+      } finally {
+        script.remove();
+        setTimeoutSpy.mockRestore();
+        (window as any).requestIdleCallback = originalIdle;
+      }
+    });
+
+    it("initializes channels and browserChat onMessage immediately without 15s delay under static routing", async () => {
+      const script = document.createElement("script");
+      script.id = "shadow-claw-static-routing";
+      script.type = "application/json";
+      script.textContent = JSON.stringify({ routes: {} });
+      document.head.appendChild(script);
+
+      const setTimeoutSpy = jest.spyOn(globalThis, "setTimeout");
+
+      try {
+        const o = new Orchestrator();
+        jest.spyOn(o.roomManager, "loadRooms").mockImplementation(() => {});
+        jest.spyOn(toolsStore, "load").mockResolvedValue(undefined);
+        jest.spyOn(o, "loadApiKeyForProvider").mockResolvedValue();
+        jest.spyOn(o, "loadSecretConfig").mockResolvedValue("");
+
+        await o.init();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        // Inbound message callback on browserChat must be registered immediately so commands work
+        expect(o.browserChat.messageCallback).not.toBeNull();
+      } finally {
+        script.remove();
+        setTimeoutSpy.mockRestore();
+      }
+    });
+
     it("shuts down channels, scheduler, pollers, worker, and webMcp cleanup", () => {
       const o = new Orchestrator();
       const mockWorker = {
@@ -2623,6 +2774,34 @@ describe("Orchestrator", () => {
       ).rejects.toThrow("Failed to encrypt secret config");
       mockSubtle.generateKey.mockResolvedValue({ type: "secret" });
       await resetKeystore();
+    });
+
+    it("defers syncWebMcpRegistration via requestIdleCallback in browser environment", async () => {
+      const origIdle = (window as any).requestIdleCallback;
+      const idleMock = jest.fn((cb: () => void) => cb());
+      (window as any).requestIdleCallback = idleMock;
+
+      try {
+        const o = new Orchestrator();
+        await o.init();
+        expect(idleMock).toHaveBeenCalled();
+      } finally {
+        (window as any).requestIdleCallback = origIdle;
+      }
+    });
+
+    it("yields to the main thread during orchestrator.init()", async () => {
+      const origScheduler = (globalThis as any).scheduler;
+      const yieldMock = jest.fn().mockResolvedValue(undefined);
+      (globalThis as any).scheduler = { yield: yieldMock };
+
+      try {
+        const o = new Orchestrator();
+        await o.init();
+        expect(yieldMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+      } finally {
+        (globalThis as any).scheduler = origScheduler;
+      }
     });
   });
 });

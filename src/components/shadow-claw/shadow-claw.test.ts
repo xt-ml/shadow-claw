@@ -868,4 +868,25 @@ describe("shadow-claw", () => {
     comp3.filesSidebarHidden = true;
     (orchestratorStore as any).activePage = "tasks";
   });
+
+  it("yields to the main thread during connectedCallback initialization", async () => {
+    const origScheduler = (globalThis as any).scheduler;
+    const yieldMock = jest.fn().mockResolvedValue(undefined);
+    (globalThis as any).scheduler = { yield: yieldMock };
+
+    const comp = new ShadowClaw();
+    comp.orchestrator = createOrchestratorStub();
+    document.body.appendChild(comp);
+
+    await new Promise((resolve) => setTimeout(resolve, 80));
+
+    try {
+      expect(yieldMock.mock.calls.length).toBeGreaterThanOrEqual(6);
+    } finally {
+      (globalThis as any).scheduler = origScheduler;
+      if (comp.parentNode) {
+        document.body.removeChild(comp);
+      }
+    }
+  });
 });

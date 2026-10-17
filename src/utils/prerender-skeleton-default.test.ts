@@ -16,8 +16,7 @@ describe("getPrerenderSkeletonDefault", () => {
       .forEach((m) => m.remove());
   });
 
-  it("falls back to the build-time constant when no meta tag exists", () => {
-    // __PRERENDER_MAIN_MEMORY__ is false in jest-setup
+  it("falls back to false when no meta tag exists", () => {
     expect(getPrerenderSkeletonDefault()).toBe(false);
   });
 

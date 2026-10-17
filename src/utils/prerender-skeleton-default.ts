@@ -1,5 +1,3 @@
-declare const __PRERENDER_MAIN_MEMORY__: boolean | undefined;
-
 export const PRERENDER_SKELETON_META_NAME =
   "shadow-claw-override-prerender-skeleton";
 
@@ -25,7 +23,5 @@ export function getPrerenderSkeletonDefault(): boolean {
     // No DOM available; use the build-time default.
   }
 
-  return typeof __PRERENDER_MAIN_MEMORY__ !== "undefined"
-    ? __PRERENDER_MAIN_MEMORY__
-    : true;
+  return false;
 }

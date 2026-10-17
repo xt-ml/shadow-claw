@@ -62,7 +62,7 @@ export function isPromptApiPotentiallySupported(): boolean {
 }
 
 /**
- * Renders status and instruction markup for the Prompt API onboarding dialog.
+ * Renders status and instruction markup for Prompt API hardware capabilities and setup.
  */
 export function renderPromptApiStatusHtml(isNativeSupported: boolean): string {
   if (isNativeSupported) {

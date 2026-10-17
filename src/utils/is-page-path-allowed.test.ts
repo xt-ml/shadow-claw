@@ -228,9 +228,50 @@ describe("isPagePathAllowed", () => {
     });
   });
 
+  describe("root path ('/') handling", () => {
+    it("returns true for root path '/' when allowList and denyList are empty", () => {
+      expect(isPagePathAllowed("/")).toBe(true);
+      expect(isPagePathAllowed("/", { allowList: [], denyList: [] })).toBe(
+        true,
+      );
+      expect(isPagePathAllowed("/", [], [])).toBe(true);
+    });
+
+    it("denies root path '/' when denyList contains '/' or 'index.html'", () => {
+      expect(isPagePathAllowed("/", { denyList: ["/"] })).toBe(false);
+      expect(isPagePathAllowed("/", { denyList: ["index.html"] })).toBe(false);
+      expect(isPagePathAllowed("/", { denyList: ["index"] })).toBe(false);
+      expect(
+        isPagePathAllowed("/", { denyList: ["pages/main/index.html"] }),
+      ).toBe(false);
+    });
+
+    it("allows root path '/' when allowList contains '/' or 'index.html'", () => {
+      expect(isPagePathAllowed("/", { allowList: ["/"] })).toBe(true);
+      expect(isPagePathAllowed("/", { allowList: ["index.html"] })).toBe(true);
+      expect(isPagePathAllowed("/", { allowList: ["index"] })).toBe(true);
+      expect(
+        isPagePathAllowed("/", { allowList: ["pages/main/index.html"] }),
+      ).toBe(true);
+    });
+
+    it("denies root path '/' when allowList does not include root or index", () => {
+      expect(isPagePathAllowed("/", { allowList: ["about.md"] })).toBe(false);
+      expect(isPagePathAllowed("/", { allowList: ["posts"] })).toBe(false);
+    });
+
+    it("denies index.html and pages/main/index.html when denyList contains '/'", () => {
+      expect(isPagePathAllowed("index.html", { denyList: ["/"] })).toBe(false);
+      expect(
+        isPagePathAllowed("pages/main/index.html", { denyList: ["/"] }),
+      ).toBe(false);
+    });
+  });
+
   describe("invalid inputs", () => {
     it("returns false for empty or non-string paths", () => {
       expect(isPagePathAllowed("")).toBe(false);
+      expect(isPagePathAllowed("   ")).toBe(false);
       expect(isPagePathAllowed(null as any)).toBe(false);
       expect(isPagePathAllowed(undefined as any)).toBe(false);
     });

@@ -490,6 +490,8 @@ export async function invokeAgent(
     startTransformersProgressPolling(o, o.events, executionGroupId);
   }
 
+  await o.ensureWorkerReady?.();
+
   const providerRequestId = o.createProviderRequestId(executionGroupId);
 
   // Send to agent worker

@@ -61,6 +61,15 @@ describe("workbox runtime caching rules", () => {
     expect(globIgnores).toContain("files/**");
   });
 
+  it("excludes heavy optional bundles, workers, model caches, and screenshots from precache", () => {
+    const globIgnores = (workboxConfig as any).globIgnores ?? [];
+    expect(globIgnores).toContain("assets/screenshots/**");
+    expect(globIgnores).toContain("assets/cache/**");
+    expect(globIgnores).toContain("webllm-*.js");
+    expect(globIgnores).toContain("transformers-*.js");
+    expect(globIgnores).toContain("pdf.worker.js");
+  });
+
   it("does not allow SPA navigation fallback for non-app routes", () => {
     const allowlist = workboxConfig.navigateFallbackAllowlist ?? [];
 
@@ -186,5 +195,12 @@ describe("workbox runtime caching rules", () => {
   it("does not include unmatched globPatterns that trigger Workbox warnings", () => {
     expect(workboxConfig.globPatterns).not.toContain("**/*.svg");
     expect(workboxConfig.globPatterns).not.toContain("**/*.webp");
+  });
+
+  it("precaches only core shell assets and does not wildcard all chunk files into precache", () => {
+    expect(workboxConfig.globPatterns).not.toContain("**/*.js");
+    expect(workboxConfig.globPatterns).not.toContain("**/*.css");
+    expect(workboxConfig.globPatterns).toContain("index.html");
+    expect(workboxConfig.globPatterns).toContain("index.js");
   });
 });

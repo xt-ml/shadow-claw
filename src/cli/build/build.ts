@@ -60,14 +60,6 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
     }
   };
 
-  async function run(command: string, runOptions: any = {}): Promise<void> {
-    if (!isQuiet && !runOptions.quiet) {
-      console.log(`> ${command}`);
-    }
-    const stdio = runOptions.stdio ?? defaultStdio;
-    execSync(command, { stdio, ...runOptions });
-  }
-
   const contentRoot = resolve(
     options.contentRoot || env.SHADOWCLAW_CONTENT_ROOT || process.cwd(),
   );
@@ -90,6 +82,23 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
         ? { PRERENDER_MAIN_MEMORY: String(options.prerenderMainMemory) }
         : {}),
     });
+
+  if (isProduction) {
+    process.env.NODE_ENV = "production";
+  }
+
+  async function run(command: string, runOptions: any = {}): Promise<void> {
+    if (!isQuiet && !runOptions.quiet) {
+      console.log(`> ${command}`);
+    }
+    const stdio = runOptions.stdio ?? defaultStdio;
+    const runEnv = {
+      ...process.env,
+      ...(isProduction ? { NODE_ENV: "production" } : {}),
+      ...(runOptions.env || {}),
+    };
+    execSync(command, { stdio, ...runOptions, env: runEnv });
+  }
 
   if (isInRepo) {
     chdir(projectRoot);
@@ -319,6 +328,7 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
   const outDir = options.outDir || "dist/public";
   const distPublicDir = resolve(contentRoot, outDir);
 
+  await rimraf(distPublicDir);
   await mkdir(distPublicDir, { recursive: true });
   await mkdir(join(distPublicDir, "assets"), { recursive: true });
 
@@ -531,16 +541,22 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
     siteConfigCandidate || join(contentRoot, "pages/site-config.json");
 
   // Allow shadow-claw.config.json to opt out of the skeleton overlay at build
-  // time via settings.overridePrerenderSkeleton: false. Only honour this when
-  // the caller has not already supplied an explicit prerenderMainMemory option.
+  // time via settings.overridePrerenderSkeleton: false. The skeleton overlay is
+  // controlled at runtime via the shadow-claw-override-prerender-skeleton meta tag
+  // injected by applySiteConfig. Pre-rendering of main memory remains enabled so
+  // pre-rendered DSD content is available on first paint.
   let effectivePrerenderMainMemory = prerenderMainMemory;
   if (options.prerenderMainMemory === undefined && siteConfigCandidate) {
     try {
       const rawCfg = JSON.parse(
         await readFile(siteConfigCandidate, "utf8"),
       ) as Record<string, any>;
-      if (rawCfg?.settings?.overridePrerenderSkeleton === false) {
+      if (rawCfg?.settings?.prerenderMainMemory === false) {
         effectivePrerenderMainMemory = false;
+        log(
+          "  site-config: prerenderMainMemory=false — pages DSD pre-rendering disabled.",
+        );
+      } else if (rawCfg?.settings?.overridePrerenderSkeleton === false) {
         log(
           "  site-config: overridePrerenderSkeleton=false — skeleton overlay disabled.",
         );

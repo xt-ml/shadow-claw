@@ -895,6 +895,49 @@ describe("initTasks", () => {
       expect(mockFetchModelInfo).toHaveBeenCalled();
     });
 
+    it("should not schedule model info fetch for transformers_js_browser", async () => {
+      mockFetchModelInfo.mockClear();
+      mockGetConfig.mockImplementation(async (_db, key) => {
+        if (key === CONFIG_KEYS.PROVIDER) return "transformers_js_browser";
+        return undefined;
+      });
+
+      await initProviderAndModel(
+        mockOrchestrator as unknown as Orchestrator,
+        mockDb,
+      );
+      await Promise.resolve();
+
+      expect(mockOrchestrator.provider).toBe("transformers_js_browser");
+      expect(mockFetchModelInfo).not.toHaveBeenCalled();
+    });
+
+    it("should not schedule model info fetch when embedded static routing script is present", async () => {
+      mockFetchModelInfo.mockClear();
+      const script = document.createElement("script");
+      script.id = "shadow-claw-static-routing";
+      script.type = "application/json";
+      script.textContent = JSON.stringify({ routes: {} });
+      document.head.appendChild(script);
+
+      try {
+        mockGetConfig.mockImplementation(async (_db, key) => {
+          if (key === CONFIG_KEYS.PROVIDER) return "openrouter";
+          return undefined;
+        });
+
+        await initProviderAndModel(
+          mockOrchestrator as unknown as Orchestrator,
+          mockDb,
+        );
+        await Promise.resolve();
+
+        expect(mockFetchModelInfo).not.toHaveBeenCalled();
+      } finally {
+        script.remove();
+      }
+    });
+
     it("should handle prompt_api fallback model and token limits", async () => {
       mockIsPromptApiSupported.mockReturnValue(false);
       mockOrchestrator.provider = "prompt_api";

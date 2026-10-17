@@ -75,7 +75,7 @@ Builds a static site bundle into `./dist/public`.
 | `--prerender-pages <mode>` | string  | Prerender mode: `all`, `auto`, `none`                                           | `"auto"`          |
 | `--copy-all-assets`        | boolean | Copy entire `assets/` directory into output                                     | `false`           |
 
-When the content project has no configured or existing sitemap, the build generates `sitemap.xml` from `routes.json` if a canonical origin is set with `--origin` / `PAGES_ORIGIN` or `branding.siteUrl`. The generated sitemap includes the site root and unique pretty paths. See [Pages System](pages.md#pre-rendered-content-routing--pretty-paths) for sitemap precedence and routing details.
+When pretty paths are prerendered (`--prerender-pages`), the build automatically extracts and patches Yoast-style SEO metadata into head tags across all generated `index.html` files (page titles formatted via `formatSeoTitle`, meta descriptions via `extractMarkdownDescription`, canonical URLs via `resolveCanonicalUrl`, and Open Graph/Twitter tags via `patchHtmlHeadMetadata`). When the content project has no configured or existing sitemap, the build generates `sitemap.xml` from `routes.json` if a canonical origin is set with `--origin` / `PAGES_ORIGIN` or `branding.siteUrl`. The generated sitemap includes the site root and unique pretty paths. See [Pages System](pages.md#pre-rendered-content-routing--pretty-paths) for sitemap precedence, routing details, and SEO metadata configuration.
 
 ### `shadow-claw dev [port]` / `shadow-claw run [port]`
 

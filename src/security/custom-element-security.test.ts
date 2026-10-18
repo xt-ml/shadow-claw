@@ -465,6 +465,58 @@ describe("custom-element-security", () => {
         siteConfigScript.remove();
       }
     });
+
+    it("preserves id, name, global, and autoload in script descriptors and approves by id", () => {
+      const siteConfigScript = document.createElement("script");
+      siteConfigScript.id = "shadow-claw-site-config";
+      siteConfigScript.type = "application/json";
+      siteConfigScript.textContent = JSON.stringify({
+        customElements: {
+          allowedDomains: ["kherrick.github.io"],
+          scripts: [
+            {
+              id: "feed-scroller",
+              src: "/pages/main/assets/feed-scroller.js",
+              global: true,
+              hasInit: true,
+            },
+            {
+              name: "x-hook-component",
+              src: "/pages/main/assets/x-hook-component.js",
+              hasInit: true,
+            },
+          ],
+        },
+      });
+      document.head.appendChild(siteConfigScript);
+
+      try {
+        installCustomElementsRegistryGuard();
+
+        const descriptors = getApprovedCustomElementScriptDescriptors();
+        expect(descriptors).toEqual([
+          {
+            id: "feed-scroller",
+            src: "/pages/main/assets/feed-scroller.js",
+            global: true,
+            autoload: true,
+            hasInit: true,
+          },
+          {
+            name: "x-hook-component",
+            src: "/pages/main/assets/x-hook-component.js",
+            hasInit: true,
+          },
+        ]);
+
+        expect(isApprovedScript("feed-scroller")).toBe(true);
+        expect(isApprovedScript("x-hook-component")).toBe(true);
+        expect(isApprovedScript("unknown-id")).toBe(false);
+      } finally {
+        uninstallCustomElementsRegistryGuard();
+        siteConfigScript.remove();
+      }
+    });
   });
 
   describe("hasApprovedCustomElement", () => {
@@ -562,6 +614,19 @@ describe("custom-element-security", () => {
       expect(
         isApprovedScript("https://unpkg.com/my-lib@1.0.0/dist/index.js"),
       ).toBe(true);
+    });
+
+    it("approves script by stem or filename when config has no id", () => {
+      setApprovedCustomElementScripts([
+        "/pages/main/assets/x-hook-component.js",
+        { src: "/pages/main/assets/x-postpress-code.js" },
+      ]);
+
+      expect(isApprovedScript("x-hook-component")).toBe(true);
+      expect(isApprovedScript("x-hook-component.js")).toBe(true);
+      expect(isApprovedScript("x-postpress-code")).toBe(true);
+      expect(isApprovedScript("x-postpress-code.js")).toBe(true);
+      expect(isApprovedScript("missing-widget")).toBe(false);
     });
 
     it("rejects unapproved script paths", () => {

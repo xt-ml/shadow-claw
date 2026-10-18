@@ -778,6 +778,24 @@ describe("bindEventListeners", () => {
         "popstate",
         expect.any(Function),
       );
+
+      // Verify win.history.replaceState was hooked
+      const origReplace = jest.fn();
+      (win as any).history = { replaceState: origReplace };
+      (win as any).history.__scReplaceStateTracked = false;
+      bindEventListeners(
+        win,
+        doc,
+        shadow,
+        shadowClaw,
+        db,
+        oStore,
+        fStore,
+        tStore,
+        url,
+      );
+      (win as any).history.replaceState({ inFeedScroll: true }, "", "/");
+      expect(origReplace).toHaveBeenCalledWith({ inFeedScroll: true }, "", "/");
     });
 
     it("should attach popstate and click listeners when navigation API not supported", () => {

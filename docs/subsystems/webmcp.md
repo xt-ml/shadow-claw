@@ -23,10 +23,10 @@ servers), see [Remote MCP](remote-mcp.md).
 
 WebMCP operates in one of two modes, controlled by `setWebMcpMode()`:
 
-| Mode                   | API surface                                                                      | Notes                                                                            |
-| ---------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `"polyfill"` (default) | `@mcp-b/webmcp-polyfill` — surfaces `document.modelContext`                      | Works in all browsers. Safe.                                                     |
-| `"native"`             | Chrome's native `document.modelContext` (with `navigator.modelContext` fallback) | Requires `chrome://flags/#enable-webmcp-testing`. May crash early Canary builds. |
+| Mode                   | API surface                                                                                                                | Notes                                                                            |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `"polyfill"` (default) | `@mcp-b/webmcp-polyfill` (v6+, entry point `installWebMCP()`, typed via `webmcp-types`) — surfaces `document.modelContext` | Works in all browsers. Safe.                                                     |
+| `"native"`             | Chrome's native `document.modelContext` (with `navigator.modelContext` fallback)                                           | Requires `chrome://flags/#enable-webmcp-testing`. May crash early Canary builds. |
 
 > **`navigator.modelContext` deprecation:** Chrome deprecated `navigator.modelContext` in Chrome 150 and removed it in Chrome 152.0.7943.0. Feature detection follows Chrome's recommended compat pattern: `document.modelContext || navigator.modelContext`. The fallback is retained in ShadowClaw for clients on older Canary builds.
 
@@ -106,12 +106,14 @@ Each tool is registered with annotations resolved by `resolveWebMcpToolAnnotatio
 - `consequentialHint`: `true` for high-stakes, irreversible, or real-world actions requiring user confirmation (Chrome 154.0.8017.0+ / Issue #176). E.g. `bash`, `delete_file`, `delete_task`, `git_delete_repo`, `git_delete_branch`, `git_reset`, `git_push`, `email_send_message`, `clear_chat`.
 - `readOnlyHint`: `true` for query/inspection tools that do not mutate state (e.g. `read_file`, `list_files`, `git_status`, `list_tasks`). `false` for mutating or consequential tools.
 - `untrustedContentHint`: `true` (tool outputs may contain untrusted user or external web data).
+- `debugging`: optional boolean hint indicating a diagnostic or debugging tool.
 
 ```ts
 annotations: {
   readOnlyHint: isReadOnly,          // true for read-only query tools
   consequentialHint: isConsequential, // true for destructive / irreversible actions
   untrustedContentHint: true,        // outputs may contain untrusted content
+  debugging: false,                  // optional diagnostic hint
 }
 ```
 
@@ -128,13 +130,14 @@ Safely parses and normalizes WebMCP tool input schemas with backwards compatibil
 - If passed an object, returns the object directly.
 - On invalid JSON or non-object input, gracefully falls back to `{ type: "object", properties: {} }`.
 
-### `getWebMcpTools(): Promise<NormalizedWebMcpRegisteredTool[]>`
+### `getWebMcpTools(options?: { fromOrigins?: string[] }): Promise<NormalizedWebMcpRegisteredTool[]>`
 
 Queries tools registered on `document.modelContext.getTools()` while practicing graceful degradation:
 
 1. Feature-detects `getTools()` on `modelContext`.
 2. If `getTools()` is absent (older browser builds or basic polyfills), returns an empty array `[]` without throwing.
-3. Normalizes `inputSchema` on every returned tool so callers receive a JavaScript object regardless of Chrome version or polyfill implementation.
+3. Supports optional `fromOrigins` filtering to discover cross-frame/cross-origin tools (Chrome 155+).
+4. Normalizes `inputSchema` and returns tool metadata including `name`, `title`, `description`, and `annotations`.
 
 ### `executeWebMcpTool(modelContext, tool, input?, options?): Promise<unknown>`
 
@@ -170,6 +173,10 @@ Convenience helper to subscribe to tool execution start events (`toolactivated`)
 
 Convenience helper to subscribe to tool execution cancel events (`toolcancel`). Returns an unsubscribe cleanup function.
 
+### `onWebMcpToolChange(listener, options?): () => void`
+
+Convenience helper to subscribe to tool registration and lifecycle change events (`toolchange`). Dispatched on `document.modelContext` when tools are added, removed, or refreshed. Returns an unsubscribe cleanup function.
+
 ### `unregisterWebMcpTools(): void`
 
 Unregisters all previously registered tools.
@@ -197,6 +204,34 @@ includes the full built-in set:
 | Notifications | `show_toast`, `send_notification`                                                         |
 | Remote MCP    | `remote_mcp_list_tools`, `remote_mcp_call_tool`                                           |
 | Email         | `manage_email`, `email_read_messages`, `email_send_message`                               |
+
+---
+
+## Declarative Form Tools
+
+In addition to programmatic API tools, WebMCP supports declarative form tools rendered in HTML. Forms annotated with `toolname` and `tooldescription` are automatically discovered across the DOM and open Shadow DOM trees and registered with `document.modelContext`:
+
+```html
+<form
+  method="dialog"
+  toolname="conversations_create"
+  tooldescription="Create a new conversation session"
+>
+  <label for="name">Conversation name</label>
+  <input
+    id="name"
+    name="conversations-create-name"
+    type="text"
+    required
+    toolparamdescription="Display name of the new conversation"
+  />
+  <button type="submit">Create</button>
+</form>
+```
+
+- **Attribute Annotations**: Forms declare `toolname` and `tooldescription`. Input fields declare parameter schemas and documentation via `name`, `type`, `required`, and `toolparamdescription`.
+- **Agent Invocation & `respondWith`**: When an external model or agent invokes a declarative form tool, the polyfill dispatches a `submit` event with `event.agentInvoked = true` and `event.respondWith(promise)`. Form submit listeners pass their asynchronous execution promise to `event.respondWith()` to return execution results to the caller.
+- **Active Visual Styling Pseudo-Classes**: Polyfilled and native form tools apply `:tool-form-active` to the active form and `:tool-submit-active` to the active submission button, presenting clear dashed visual indicators during agent interaction.
 
 ---
 

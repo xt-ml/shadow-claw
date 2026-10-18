@@ -32,6 +32,8 @@ import { injectStaticRoutingScript } from "../utils/inject-static-routing-script
 import { insertBeforeClosingHead } from "../utils/insert-before-closing-head.js";
 import { trimSlashes } from "../../../utils/normalize-workspace-path.js";
 import { isPagePathAllowed } from "../../../utils/is-page-path-allowed.js";
+import { resolvePageScriptDependencies } from "../../../utils/resolve-page-script-dependencies.js";
+import { buildCustomElementScriptTags } from "../../site-config/custom-elements/build-custom-element-script-tags.js";
 import {
   extractMarkdownDescription,
   formatSeoTitle,
@@ -544,8 +546,33 @@ export async function prerenderPrettyPaths(
       type: isHome ? "website" : "article",
     });
 
+    const rawScripts = siteConfig?.customElements?.scripts || [];
+    const resolvedScripts = resolvePageScriptDependencies(
+      rawScripts,
+      parsed.data,
+      matchedPage.content,
+    );
+
+    let htmlWithScripts = htmlWithSeo;
+    if (resolvedScripts.length > 0) {
+      const headMatch = htmlWithScripts.match(/<head[^>]*>([\s\S]*?)<\/head>/i);
+      const headContent = headMatch ? headMatch[1] : "";
+      const scriptsToInject = resolvedScripts.filter(
+        (s) =>
+          !headContent.includes(`src="${s.src}"`) &&
+          !headContent.includes(`src='${s.src}'`),
+      );
+      if (scriptsToInject.length > 0) {
+        const scriptTags = buildCustomElementScriptTags(scriptsToInject);
+        htmlWithScripts = insertBeforeClosingHead(
+          htmlWithScripts,
+          `  ${scriptTags.trim()}`,
+        );
+      }
+    }
+
     const minifiedHtml = minifyDsdTemplateHtml(
-      injectStaticRoutingScript(htmlWithSeo, embeddedRoutingJson),
+      injectStaticRoutingScript(htmlWithScripts, embeddedRoutingJson),
     );
     const finalHtml = await inlineCriticalAssets(minifiedHtml, publicDir);
 

@@ -1,4 +1,5 @@
-import { initializeWebMCPPolyfill } from "@mcp-b/webmcp-polyfill";
+import { installWebMCP } from "@mcp-b/webmcp-polyfill";
+export type { WebMCP } from "webmcp-types";
 
 import { DEFAULT_GROUP_ID } from "../../config/config.js";
 import { TOOL_DEFINITIONS, type ToolDefinition } from "../tools/tools.js";
@@ -35,14 +36,37 @@ export function getWebMcpMode(): WebMcpMode {
 /**
  * Install the `@mcp-b/webmcp-polyfill` onto `document.modelContext`.
  *
+ * In `@mcp-b/webmcp-polyfill` 6.0.0+, the entry point is `installWebMCP()`
+ * (previously `initializeWebMCPPolyfill()` in v5).
  * The polyfill itself bails out when Chrome's native `document.modelContext`
  * is already present — it does NOT override the native API. We call it
- * unconditionally; if the polyfill is already installed it will detect the
- * existing install via its own `installState` guard and return quickly.
+ * unconditionally; if the polyfill is already installed it returns quickly.
  */
 function ensurePolyfill(): void {
   try {
-    initializeWebMCPPolyfill();
+    // Some test / mock environments or non-HTTPS dev setups may not define isSecureContext.
+    // If running in a browser-like environment without isSecureContext set, ensure safe default.
+    if (
+      typeof globalThis !== "undefined" &&
+      typeof globalThis.isSecureContext === "undefined" &&
+      typeof location !== "undefined" &&
+      (location.protocol === "https:" ||
+        location.hostname === "localhost" ||
+        location.hostname === "127.0.0.1")
+    ) {
+      try {
+        Object.defineProperty(globalThis, "isSecureContext", {
+          value: true,
+          configurable: true,
+        });
+      } catch {
+        // Ignore if read-only
+      }
+    }
+
+    if (typeof installWebMCP === "function") {
+      installWebMCP();
+    }
   } catch (err) {
     console.warn("WebMCP polyfill initialization failed:", err);
   }
@@ -177,6 +201,7 @@ export interface WebMcpExecuteContext {
 
 export interface WebMcpRegisteredTool {
   name: string;
+  title?: string;
   description?: string;
   inputSchema?: unknown;
   annotations?: Record<string, unknown>;
@@ -188,6 +213,7 @@ export interface WebMcpRegisteredTool {
 
 export interface NormalizedWebMcpRegisteredTool {
   name: string;
+  title?: string;
   description?: string;
   inputSchema: Record<string, unknown>;
   annotations?: Record<string, unknown>;
@@ -232,14 +258,17 @@ export function extractAbortSignal(
  * - Feature-detects `getTools()` on `document.modelContext` / `navigator.modelContext`.
  * - If `getTools()` is absent (older browser builds or polyfills without getTools),
  *   returns an empty array `[]` without throwing.
+ * - Supports options dictionary with `fromOrigins` to discover cross-frame/cross-origin tools (Chrome 155+).
  * - Normalizes `RegisteredTool#inputSchema` so caller receives a JavaScript object
  *   whether running on Chrome 154+ (native object) or Chrome < 154 (DOMString JSON).
  */
-export async function getWebMcpTools(): Promise<
-  NormalizedWebMcpRegisteredTool[]
-> {
+export async function getWebMcpTools(options?: {
+  fromOrigins?: string[];
+}): Promise<NormalizedWebMcpRegisteredTool[]> {
   const modelContext = getModelContextApi() as {
-    getTools?: () => Promise<WebMcpRegisteredTool[]>;
+    getTools?: (options?: {
+      fromOrigins?: string[];
+    }) => Promise<WebMcpRegisteredTool[]>;
   } | null;
 
   if (!modelContext || typeof modelContext.getTools !== "function") {
@@ -247,13 +276,14 @@ export async function getWebMcpTools(): Promise<
   }
 
   try {
-    const rawTools = await modelContext.getTools();
+    const rawTools = await modelContext.getTools(options);
     if (!Array.isArray(rawTools)) {
       return [];
     }
 
     return rawTools.map((tool) => ({
       name: tool.name,
+      ...(tool.title ? { title: tool.title } : {}),
       ...(tool.description ? { description: tool.description } : {}),
       inputSchema: parseWebMcpInputSchema(tool.inputSchema),
       ...(tool.annotations ? { annotations: tool.annotations } : {}),
@@ -596,6 +626,34 @@ export function onWebMcpToolCancel(
 }
 
 /**
+ * Convenience helper to subscribe to tool registration change events (`toolchange`).
+ * Dispatched on `document.modelContext` when tools are registered or unregistered.
+ * Returns an unsubscribe cleanup function.
+ */
+export function onWebMcpToolChange(
+  listener: (event: Event) => void,
+  options?: boolean | AddEventListenerOptions,
+): () => void {
+  const doc = typeof document !== "undefined" ? document : undefined;
+  const nav = typeof navigator !== "undefined" ? navigator : undefined;
+  const modelContext: any =
+    (doc as any)?.modelContext ?? (nav as any)?.modelContext;
+
+  if (!modelContext || typeof modelContext.addEventListener !== "function") {
+    return () => {};
+  }
+
+  modelContext.addEventListener("toolchange", listener, options);
+  return () => {
+    try {
+      modelContext.removeEventListener("toolchange", listener, options);
+    } catch {
+      // Ignore cleanup error
+    }
+  };
+}
+
+/**
  * Consequential tools that perform high-stakes, irreversible, or external real-world actions
  * (such as deleting data, executing arbitrary system commands, or transmitting live communications).
  * Signals consuming agents to require explicit user confirmation prior to execution (Chrome 154.0.8017.0+).
@@ -649,6 +707,7 @@ export interface WebMcpToolAnnotations {
   readOnlyHint?: boolean;
   consequentialHint?: boolean;
   untrustedContentHint?: boolean;
+  debugging?: boolean;
   [key: string]: unknown;
 }
 
@@ -668,6 +727,9 @@ export function resolveWebMcpToolAnnotations(
     readOnlyHint: isReadOnly,
     consequentialHint: isConsequential,
     untrustedContentHint: true,
+    ...(typeof customAnnotations?.debugging === "boolean"
+      ? { debugging: customAnnotations.debugging }
+      : {}),
     ...(customAnnotations || {}),
   };
 }
@@ -680,7 +742,7 @@ export function resolveWebMcpToolAnnotations(
  * that unregistration works identically regardless of which implementation is
  * actually active.
  *
- * Key correctness detail: `initializeWebMCPPolyfill()` is a no-op when
+ * Key correctness detail: `ensurePolyfill()` is a no-op when
  * Chrome's native `document.modelContext` already exists — it does NOT
  * override the native API. In that situation we are talking to the native
  * Chrome API even in "polyfill" mode. The native Chrome API only supports
@@ -735,6 +797,7 @@ export async function registerWebMcpTools(
     try {
       const toolDef: any = {
         name: def.name,
+        title: (def as any).title || def.name,
         description: def.description,
         inputSchema: parseWebMcpInputSchema(def.input_schema),
         annotations: resolveWebMcpToolAnnotations(

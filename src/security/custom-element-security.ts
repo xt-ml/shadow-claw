@@ -206,6 +206,13 @@ setEmbeddedConfigHook(configureCustomElementSecurity);
 
 export interface CustomElementScriptDescriptor {
   src: string;
+  id?: string;
+  name?: string;
+  global?: boolean;
+  autoload?: boolean;
+  type?: string;
+  async?: boolean;
+  defer?: boolean;
   hasInit: boolean;
 }
 
@@ -215,15 +222,50 @@ let activeApprovedScripts: CustomElementScriptDescriptor[] = [];
  * Set approved custom element scripts in memory.
  */
 export function setApprovedCustomElementScripts(
-  scripts: Array<string | { src: string; hasInit?: boolean }>,
+  scripts: Array<string | Partial<CustomElementScriptDescriptor> | any>,
 ): void {
   if (Array.isArray(scripts)) {
     activeApprovedScripts = scripts
       .map((s: any) => {
         const src = typeof s === "string" ? s : s?.src;
+        const id =
+          typeof s === "object" && s !== null && typeof s.id === "string"
+            ? s.id.trim()
+            : undefined;
+        const name =
+          typeof s === "object" && s !== null && typeof s.name === "string"
+            ? s.name.trim()
+            : undefined;
+        const global =
+          typeof s === "object" && s !== null
+            ? Boolean(s.global || s.autoload)
+            : false;
+        const type =
+          typeof s === "object" && s !== null && typeof s.type === "string"
+            ? s.type
+            : undefined;
+        const async =
+          typeof s === "object" && s !== null && typeof s.async === "boolean"
+            ? s.async
+            : undefined;
+        const defer =
+          typeof s === "object" && s !== null && typeof s.defer === "boolean"
+            ? s.defer
+            : undefined;
         const hasInit =
           typeof s === "object" && s !== null ? Boolean(s.hasInit) : false;
-        return { src, hasInit };
+
+        const descriptor: CustomElementScriptDescriptor = {
+          src,
+          ...(id ? { id } : {}),
+          ...(name ? { name } : {}),
+          ...(global ? { global: true, autoload: true } : {}),
+          ...(type ? { type } : {}),
+          ...(async ? { async } : {}),
+          ...(defer ? { defer } : {}),
+          hasInit,
+        };
+        return descriptor;
       })
       .filter(
         (entry): entry is CustomElementScriptDescriptor =>
@@ -292,10 +334,31 @@ export function isApprovedScript(src: string): boolean {
     return false;
   }
 
-  const approved = getApprovedCustomElementScripts();
-  if (approved.length === 0) {
+  const descriptors = getApprovedCustomElementScriptDescriptors();
+  if (descriptors.length === 0) {
     return false;
   }
+
+  const trimmedLower = trimmed.toLowerCase();
+  const matchByIdOrName = descriptors.some(
+    (d) =>
+      (d.id && d.id.toLowerCase() === trimmedLower) ||
+      (d.name && d.name.toLowerCase() === trimmedLower),
+  );
+  if (matchByIdOrName) {
+    return true;
+  }
+
+  const matchByStemOrFilename = descriptors.some((d) => {
+    const base = (d.src.split("/").pop() || "").toLowerCase();
+    const stem = base.replace(/\.(js|mjs|cjs|ts)$/i, "");
+    return base === trimmedLower || stem === trimmedLower;
+  });
+  if (matchByStemOrFilename) {
+    return true;
+  }
+
+  const approved = getApprovedCustomElementScripts();
 
   const clean = trimmed.split("?")[0].split("#")[0].trim();
   const stripPrefix = (s: string) =>

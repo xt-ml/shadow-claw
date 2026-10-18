@@ -126,6 +126,41 @@ describe("getRoute", () => {
     }
   });
 
+  it("returns undefined if navigateEvent.info indicates an in-feed scroll", () => {
+    const navigateEvent = new Event("navigate") as any;
+    navigateEvent.navigationType = "replace";
+    navigateEvent.info = { inFeedScroll: true };
+    navigateEvent.destination = {
+      url: `${window.location.origin}/test`,
+      getState: () => undefined,
+    };
+
+    const result = getRoute(db, navigateEvent);
+    expect(result).toBeUndefined();
+    expect(isPossibleAppRouteMock).not.toHaveBeenCalled();
+  });
+
+  it("returns undefined if recorded history replaceState indicates inFeedScroll even when getState() is undefined and history.state is null", async () => {
+    const { recordHistoryReplaceState, clearLastHistoryReplaceState } =
+      await import("./get-route.js");
+    recordHistoryReplaceState({ inFeedScroll: true });
+
+    try {
+      const navigateEvent = new Event("navigate") as any;
+      navigateEvent.navigationType = "replace";
+      navigateEvent.destination = {
+        url: `${window.location.origin}/test`,
+        getState: () => undefined,
+      };
+
+      const result = getRoute(db, navigateEvent);
+      expect(result).toBeUndefined();
+      expect(isPossibleAppRouteMock).not.toHaveBeenCalled();
+    } finally {
+      clearLastHistoryReplaceState();
+    }
+  });
+
   it("does not ignore push navigation even if window.history.state has inFeedScroll: true", () => {
     const origState = window.history.state;
     try {

@@ -29,20 +29,24 @@ describe("webmcp integration", () => {
     mockRegisterTool = jest.fn(() => undefined);
     mockUnregisterTool = jest.fn(() => undefined);
 
-    // Mock the polyfill module so initializeWebMCPPolyfill installs our
+    // Mock the polyfill module so installWebMCP installs our
     // test mock onto document.modelContext instead of the real polyfill.
+    const installMock = jest.fn(() => {
+      if (!(globalThis as any).document?.modelContext) {
+        Object.defineProperty((globalThis as any).document, "modelContext", {
+          configurable: true,
+          value: {
+            registerTool: mockRegisterTool,
+            unregisterTool: mockUnregisterTool,
+            addEventListener: jest.fn(),
+            removeEventListener: jest.fn(),
+          },
+        });
+      }
+    });
+
     jest.unstable_mockModule("@mcp-b/webmcp-polyfill", () => ({
-      initializeWebMCPPolyfill: jest.fn(() => {
-        if (!(globalThis as any).document?.modelContext) {
-          Object.defineProperty((globalThis as any).document, "modelContext", {
-            configurable: true,
-            value: {
-              registerTool: mockRegisterTool,
-              unregisterTool: mockUnregisterTool,
-            },
-          });
-        }
-      }),
+      installWebMCP: installMock,
     }));
 
     jest.unstable_mockModule("../../db/open-database.js", () => ({
@@ -227,7 +231,7 @@ describe("webmcp integration", () => {
     // Re-mock the polyfill to be a no-op (simulates polyfill failure)
     jest.resetModules();
     jest.unstable_mockModule("@mcp-b/webmcp-polyfill", () => ({
-      initializeWebMCPPolyfill: jest.fn(),
+      installWebMCP: jest.fn(),
     }));
 
     jest.unstable_mockModule("../../db/open-database.js", () => ({
@@ -1069,6 +1073,73 @@ describe("webmcp integration", () => {
         expect(listener).toHaveBeenCalledTimes(1);
 
         unsubscribe();
+      });
+
+      it("subscribes to toolchange event via onWebMcpToolChange", async () => {
+        const { onWebMcpToolChange } = await import("./webmcp.js");
+
+        const mockTarget = new EventTarget();
+        Object.defineProperty((globalThis as any).document, "modelContext", {
+          configurable: true,
+          value: mockTarget,
+        });
+
+        const listener = jest.fn();
+        const unsubscribe = onWebMcpToolChange(listener);
+
+        const changeEvt = new Event("toolchange");
+        mockTarget.dispatchEvent(changeEvt);
+
+        expect(listener).toHaveBeenCalledWith(changeEvt);
+
+        unsubscribe();
+        mockTarget.dispatchEvent(new Event("toolchange"));
+        expect(listener).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    describe("annotations and discovery spec features", () => {
+      it("supports debugging annotation in resolveWebMcpToolAnnotations", async () => {
+        const { resolveWebMcpToolAnnotations } = await import("./webmcp.js");
+
+        const normal = resolveWebMcpToolAnnotations("read_file");
+        expect(normal.debugging).toBeUndefined();
+
+        const debugTool = resolveWebMcpToolAnnotations("dump_state", {
+          debugging: true,
+        });
+        expect(debugTool.debugging).toBe(true);
+      });
+
+      it("passes fromOrigins to modelContext.getTools and preserves title", async () => {
+        const { getWebMcpTools } = await import("./webmcp.js");
+
+        const mockGetTools = jest.fn(async (_opts?: any) => [
+          {
+            name: "cross_frame_tool",
+            title: "Cross Frame Tool",
+            description: "A tool from another origin",
+            inputSchema: { type: "object", properties: {} },
+          },
+        ]);
+
+        Object.defineProperty((globalThis as any).document, "modelContext", {
+          configurable: true,
+          value: {
+            registerTool: jest.fn(),
+            getTools: mockGetTools,
+          },
+        });
+
+        const tools = await getWebMcpTools({
+          fromOrigins: ["https://cart.example.com"],
+        });
+
+        expect(mockGetTools).toHaveBeenCalledWith({
+          fromOrigins: ["https://cart.example.com"],
+        });
+        expect(tools[0].name).toBe("cross_frame_tool");
+        expect(tools[0].title).toBe("Cross Frame Tool");
       });
     });
   });

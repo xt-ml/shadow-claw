@@ -615,3 +615,14 @@
   flex: 1;
   margin-bottom: 0;
 }
+
+form:tool-form-active,
+.conversations__form:tool-form-active {
+  outline: 2px dashed var(--accent, #3b82f6);
+  outline-offset: 4px;
+}
+
+button:tool-submit-active {
+  outline: 2px dashed var(--warning, #f59e0b);
+  outline-offset: 2px;
+}

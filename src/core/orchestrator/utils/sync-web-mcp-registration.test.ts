@@ -25,8 +25,10 @@ const mockApplyWebMcpMode = jest.fn<(mode: WebMcpMode) => void>();
 
 let lastActivatedListener: ((event: any) => void) | null = null;
 let lastCancelListener: ((event: any) => void) | null = null;
+let lastChangeListener: ((event: any) => void) | null = null;
 const mockUnsubscribeActivated = jest.fn<() => void>();
 const mockUnsubscribeCancel = jest.fn<() => void>();
+const mockUnsubscribeChange = jest.fn<() => void>();
 const mockOnWebMcpToolActivated = jest.fn((cb: any) => {
   lastActivatedListener = cb;
   return mockUnsubscribeActivated;
@@ -35,6 +37,10 @@ const mockOnWebMcpToolCancel = jest.fn((cb: any) => {
   lastCancelListener = cb;
   return mockUnsubscribeCancel;
 });
+const mockOnWebMcpToolChange = jest.fn((cb: any) => {
+  lastChangeListener = cb;
+  return mockUnsubscribeChange;
+});
 
 jest.unstable_mockModule("../../../subsystems/mcp/webmcp.js", () => ({
   registerWebMcpTools: mockRegisterWebMcpTools,
@@ -42,6 +48,7 @@ jest.unstable_mockModule("../../../subsystems/mcp/webmcp.js", () => ({
   setWebMcpMode: mockApplyWebMcpMode,
   onWebMcpToolActivated: mockOnWebMcpToolActivated,
   onWebMcpToolCancel: mockOnWebMcpToolCancel,
+  onWebMcpToolChange: mockOnWebMcpToolChange,
 }));
 
 const mockHandleWorkerMessage = jest
@@ -234,6 +241,7 @@ describe("syncWebMcpRegistration", () => {
 
     expect(mockOnWebMcpToolActivated).toHaveBeenCalled();
     expect(mockOnWebMcpToolCancel).toHaveBeenCalled();
+    expect(mockOnWebMcpToolChange).toHaveBeenCalled();
 
     // Trigger activated listener
     lastActivatedListener?.({ toolName: "read_file" });
@@ -248,9 +256,17 @@ describe("syncWebMcpRegistration", () => {
       "webmcp-tool-cancel",
       { toolName: "read_file" },
     );
+
+    // Trigger change listener
+    const dummyEvt = new Event("toolchange");
+    lastChangeListener?.(dummyEvt);
+    expect(mockOrchestrator.events?.emit).toHaveBeenCalledWith(
+      "webmcp-tool-change",
+      { event: dummyEvt },
+    );
   });
 
-  it("should unsubscribe from toolactivated and toolcancel when webMcpEffectCleanup is executed", async () => {
+  it("should unsubscribe from toolactivated, toolcancel, and toolchange when webMcpEffectCleanup is executed", async () => {
     syncWebMcpRegistration(mockOrchestrator as unknown as Orchestrator, mockDb);
     await mockOrchestrator.webMcpRegistrationLock;
 
@@ -261,6 +277,7 @@ describe("syncWebMcpRegistration", () => {
 
     expect(mockUnsubscribeActivated).toHaveBeenCalled();
     expect(mockUnsubscribeCancel).toHaveBeenCalled();
+    expect(mockUnsubscribeChange).toHaveBeenCalled();
   });
 
   it("should setup effect and register tools filtered by group toolTags", async () => {

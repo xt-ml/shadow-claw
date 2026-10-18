@@ -80,10 +80,15 @@ Registers `uponSanitizeElement` and `afterSanitizeElements` hooks with DOMPurify
 Validates and executes custom element scripts safely:
 
 - **Protocol & Host Validation:** Validates URL protocols (restricting to `http:`/`https:` or relative same-origin paths) and validates hostnames against `activeHostMatchers`. Converts URLs to Trusted Types via `toTrustedScriptUrl()`.
-- **Script Descriptor Format:** Script entries in `customElements.scripts` support both traditional string URLs and object descriptors `{ src: string, hasInit?: boolean }` (standardized on `src`).
-- **Explicit `hasInit` Execution Gating:** Scripts defined with `{ src: "...", hasInit: true }` trigger an automated `import("${src}").then((m) => { if (typeof m?.init === "function") m.init(); })` within the preview iframe. Standard custom elements or descriptors where `hasInit` is false/omitted are loaded without running an `init()` method, preventing unintended function executions.
+- **Script Descriptor Format:** Script entries in `customElements.scripts` support both traditional string URLs and object descriptors `{ id?: string, name?: string, src: string, global?: boolean, autoload?: boolean, hasInit?: boolean, type?: string, async?: boolean, defer?: boolean }` (standardized on `src`).
+- **Global & Autoload Scripts:** Descriptors with `global: true` or `autoload: true` are unconditionally resolved and injected into the `<head>` of all pre-rendered and client-side pages.
+- **Page-Level Frontmatter Dependencies:** Markdown documents declare specific script dependencies in YAML frontmatter using `dependencies:` or `scripts:` (as arrays or comma-delimited strings), referencing scripts by `id`, `name`, filename (e.g. `x-postpress-code.js`), or filename stem (e.g. `x-postpress-code`).
+- **Automatic Content Tag Scanning:** `resolvePageScriptDependencies` inspects page content for custom element tags (e.g. `<x-postpress-code`) and inline `<script src="...">` tags, auto-resolving them against approved descriptors so pages render with interactive web components without requiring manual frontmatter declarations.
+- **SSR Pre-rendering & DSD Head Injection:** During SSR pre-rendering (`prerender-pretty-paths.ts`, `prerender-dsd-shell.ts`), resolved script dependencies are injected into the document `<head>`. Duplicate head checking (`headContent.includes(src)`) ensures scripts are placed in `<head>` even when inert script tags exist in Declarative Shadow DOM template bodies.
+- **Graceful Failure & Backward Compatibility:** Legacy configurations lacking an explicit `id` resolve seamlessly via URL, filename, or stem matching. Declaring unrecognized script dependencies logs a warning and degrades gracefully without throwing errors or breaking page rendering.
+- **Explicit `hasInit` Execution Gating:** Scripts defined with `{ src: "...", hasInit: true }` trigger an automated `import("${src}").then((m) => { if (typeof m?.init === "function") m.init(); })` within the preview iframe or after DOM injection. Standard custom elements or descriptors where `hasInit` is false/omitted are loaded without running an `init()` method, preventing unintended function executions.
 - **Descriptors API:** The security subsystem exposes `getApprovedCustomElementScriptDescriptors(): CustomElementScriptDescriptor[]` for full descriptor access and `getApprovedCustomElementScripts(): string[]` for URL-only strings.
-- **Single-Load Execution:** Custom element scripts execute exclusively inside sandboxed preview `<iframe>` environments (`iframe.srcdoc`) with `allow="fullscreen"` permissions, eliminating duplicate initialization and protecting the main application shell context.
+- **Single-Load Execution:** Custom element scripts execute exclusively inside sandboxed preview `<iframe>` environments (`iframe.srcdoc`) or page document heads with strict sandbox isolation, eliminating duplicate initialization and protecting the main application shell context.
 
 ### 7. Imported Artifacts & Runtime Isolation Boundary
 
@@ -115,8 +120,17 @@ Configuration can be provided declaratively or loaded dynamically:
     ],
     "scripts": [
       "https://cdn.jsdelivr.net/npm/my-chart/dist/index.js",
-      { "src": ".agents/scripts/main/pwgen-adapter.js", "hasInit": true },
-      { "src": "https://kherrick.github.io/x-pwgen.js", "hasInit": false }
+      {
+        "id": "pwgen-adapter",
+        "src": ".agents/scripts/main/pwgen-adapter.js",
+        "hasInit": true
+      },
+      {
+        "name": "x-pwgen",
+        "src": "https://kherrick.github.io/x-pwgen.js",
+        "hasInit": false,
+        "global": true
+      }
     ]
   },
   "security": {

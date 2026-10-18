@@ -233,7 +233,6 @@ To adapt to Chrome Built-in AI's evolution and deprecation of experimental Write
    - `RewriterPromptBuilder`: Formats tone/length/format transformations while preserving original meaning.
    - `SummarizerPromptBuilder`: Formats summary types (TLDR, key points, teaser, headline), length constraints, format, or applies a custom `overridePrompt` system prompt.
 
-
 ### Agentic tools
 
 - **`get_current_time`** — Returns the current time as an ISO 8601 string (UTC) or formatted for an IANA `timezone` (e.g. `America/New_York`) via `Intl.DateTimeFormat`; use this instead of relying on `bash`
@@ -361,7 +360,7 @@ Declarative tools are loaded from the conversation's OPFS workspace (`loadDeclar
 
 Declarative tools are integrated into the application's reactive state and settings management:
 
-- **State Management (`ToolsStore`)**: Reactively managed via `_declarativeTools` and `_declarativeToolNamesEnabled` signals. Enabled states are persisted in IndexedDB under `CONFIG_KEYS.DECLARATIVE_TOOLS_ENABLED`. When site configuration defaults (`enabledTools`) are applied during orchestrator initialization, both standard built-in tools (`setAllEnabled`) and declarative tools (`setAllDeclarativeEnabled`) are updated synchronously.
+- **State Management (`ToolsStore`)**: Reactively managed via `_declarativeTools` and `_declarativeToolNamesEnabled` signals. Enabled states are persisted in IndexedDB under `CONFIG_KEYS.DECLARATIVE_TOOLS_ENABLED`. Declarative tools default to disabled unless explicitly enabled in configuration (`enabledTools`) or settings. When site configuration defaults (`enabledTools`) are applied during orchestrator initialization, both standard built-in tools (`setAllEnabled`) and declarative tools (`setAllDeclarativeEnabled`) are updated synchronously.
 - **Settings UI (`<shadow-claw-tools>`)**: Displayed with dedicated `"declarative"` badges and independent enable/disable checkboxes. The tool count indicator calculates the total enabled capabilities as the sum of enabled built-in tools and enabled declarative tools. List updating uses in-place DOM diffing (`isSameStructure`) to avoid DOM reconstruction thrashed states or hover flickering.
 - **WebMCP Integration**: Synchronized automatically via `syncWebMcpRegistration` so browser-side WebMCP callers receive both standard and active declarative tools.
 - **Orchestrator Filtering**: Filtered dynamically in `invokeAgent` based on user settings before passing tool definitions to LLM providers.

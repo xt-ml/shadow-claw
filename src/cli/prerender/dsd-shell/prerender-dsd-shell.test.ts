@@ -139,6 +139,22 @@ describe("renderPageHtml frontmatter", () => {
     expect(rendered).toContain("<h1>Heading</h1>");
     expect(rendered).not.toContain('slug: "on-developing-loops"');
   });
+
+  it("preserves custom element blocks containing blank lines without wrapping in <p> or splitting <pre>", async () => {
+    const markdown = [
+      '<x-postpress-code type="javascript"><pre>(async () => {',
+      "  const a = 1;",
+      "",
+      "  const b = 2;",
+      "})();</pre></x-postpress-code>",
+    ].join("\n");
+
+    const rendered = await renderPageHtml(markdown, "page.md");
+    expect(rendered).not.toContain("<p><x-postpress-code");
+    expect(rendered).toContain(
+      '<x-postpress-code type="javascript"><pre>(async () => {\n  const a = 1;\n\n  const b = 2;\n})();</pre></x-postpress-code>',
+    );
+  });
 });
 
 describe("pages DSD prerender parity", () => {

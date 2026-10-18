@@ -1,5 +1,6 @@
 import { Themes } from "../../../stores/theme.js";
 import { applyRouteFromCurrentLocation } from "./apply-route-from-current-location.js";
+import { recordHistoryReplaceState } from "./get-route.js";
 import { getDefaultSidebarPage } from "./get-default-sidebar-page.js";
 import { initSidebarResize } from "./init-sidebar-resize.js";
 import { requestDialog } from "./request-dialog.js";
@@ -269,6 +270,19 @@ export function bindEventListeners(
   doc.addEventListener("shadow-claw-navigate", shadowClaw.shadowClawNav);
 
   if (supportsNavigationApi()) {
+    if (win.history && !(win.history as any).__scReplaceStateTracked) {
+      const origReplaceState = win.history.replaceState;
+      win.history.replaceState = function (
+        data: any,
+        unused: string,
+        url?: string | URL | null,
+      ) {
+        recordHistoryReplaceState(data);
+        return origReplaceState.call(this, data, unused, url);
+      };
+      (win.history as any).__scReplaceStateTracked = true;
+    }
+
     const nav = (win as any).navigation;
     nav.addEventListener("navigate", shadowClaw.handleNavigationApiNavigate);
 

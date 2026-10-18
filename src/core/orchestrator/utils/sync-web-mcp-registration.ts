@@ -7,6 +7,7 @@ import {
   unregisterWebMcpTools,
   onWebMcpToolActivated,
   onWebMcpToolCancel,
+  onWebMcpToolChange,
 } from "../../../subsystems/mcp/webmcp.js";
 
 import { effect } from "../../effect.js";
@@ -51,6 +52,10 @@ export function syncWebMcpRegistration(
     orchestrator.events?.emit("webmcp-tool-cancel", {
       toolName: event.toolName,
     });
+  });
+
+  const unsubscribeChange = onWebMcpToolChange((event) => {
+    orchestrator.events?.emit("webmcp-tool-change", { event });
   });
 
   // Register WebMCP tools and re-register when tool config changes.
@@ -131,6 +136,9 @@ export function syncWebMcpRegistration(
     } catch {}
     try {
       unsubscribeCancel();
+    } catch {}
+    try {
+      unsubscribeChange();
     } catch {}
     if (typeof disposeEffect === "function") {
       disposeEffect();

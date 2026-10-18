@@ -861,14 +861,19 @@ describe("initControlPlane", () => {
       });
 
       try {
-        // 1. Client has WebMCP tools registered, but ask_user is not among them
+        // 1. Client has WebMCP tools registered, but read_file is not among them
         await expect(
-          executeClientControlCommand("invoke-tool", { toolName: "ask_user" }),
+          executeClientControlCommand("invoke-tool", { toolName: "read_file" }),
         ).rejects.toThrow(
-          "Tool 'ask_user' is not enabled or registered on this client.",
+          "Tool 'read_file' is not enabled or registered on this client.",
         );
 
-        // 2. Conversation group has restricted toolTags
+        // 2. Tool is not enabled on this client
+        await expect(
+          executeClientControlCommand("invoke-tool", { toolName: "ask_user" }),
+        ).rejects.toThrow("Tool 'ask_user' is not enabled on this client.");
+
+        // 3. Conversation group has restricted toolTags
         const { orchestratorStore } =
           await import("../../stores/orchestrator.js");
         const groupsSpy = jest

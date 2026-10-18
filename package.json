@@ -1,6 +1,6 @@
 {
   "name": "shadow-claw",
-  "version": "1.54.0",
+  "version": "1.55.0",
   "type": "module",
   "license": "AGPL-3.0",
   "description": "ShadowClaw - multi-runtime AI assistant.",
@@ -144,8 +144,7 @@
     "writer-rewriter-polyfills": "^1.0.1"
   },
   "devDependencies": {
-    "@mcp-b/webmcp-polyfill": "^5.1.0",
-    "@mcp-b/webmcp-types": "^5.1.0",
+    "@mcp-b/webmcp-polyfill": "^6.0.3",
     "@playwright/test": "^1.64.0",
     "@storybook/addon-docs": "^10.6.1",
     "@storybook/web-components-vite": "^10.6.1",
@@ -192,6 +191,7 @@
     "util": "^0.12.5",
     "v86": "^0.5.470",
     "vite": "^6.4.4",
+    "webmcp-types": "^0.1.10",
     "workbox-cli": "^7.4.1",
     "workbox-window": "^7.4.0"
   },

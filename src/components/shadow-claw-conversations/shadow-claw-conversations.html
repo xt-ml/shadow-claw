@@ -25,7 +25,12 @@
     dialog-aria-label="Create new conversation"
     dialog-class="conversations__dialog conversations__create-dialog"
   >
-    <form class="conversations__form" method="dialog">
+    <form
+      class="conversations__form"
+      method="dialog"
+      toolname="conversations_create"
+      tooldescription="Create a new conversation session"
+    >
       <label class="conversations__label" for="conversations-create-name">
         Conversation name
       </label>
@@ -36,6 +41,7 @@
         name="conversations-create-name"
         required
         type="text"
+        toolparamdescription="Display name of the new conversation"
       />
       <div class="conversations__actions">
         <button class="conversations__cancel" type="button">Cancel</button>
@@ -48,7 +54,12 @@
     dialog-aria-label="Conversation Details"
     dialog-class="conversations__dialog conversations__details-dialog"
   >
-    <form class="conversations__form" method="dialog">
+    <form
+      class="conversations__form"
+      method="dialog"
+      toolname="conversations_edit_details"
+      tooldescription="Edit conversation details, model configuration, and pinned tools"
+    >
       <label class="conversations__label" for="conversations-details-name">
         Conversation name
       </label>
@@ -59,6 +70,7 @@
         name="conversations-details-name"
         required
         type="text"
+        toolparamdescription="Display name of the conversation"
       />
       <label
         class="conversations__label conversations__label--group-id"
@@ -73,6 +85,7 @@
           name="conversations-details-group-id"
           readonly
           type="text"
+          toolparamdescription="Unique group identifier for the conversation"
         />
         <button
           type="button"
@@ -202,7 +215,12 @@
     dialog-aria-label="Delete conversation"
     dialog-class="conversations__dialog conversations__delete-dialog"
   >
-    <form class="conversations__form" method="dialog">
+    <form
+      class="conversations__form"
+      method="dialog"
+      toolname="conversations_delete"
+      tooldescription="Confirm deletion of the selected conversation"
+    >
       <p class="conversations__delete-message">
         Delete conversation "<span class="conversations__delete-name"></span>"?
         This cannot be undone.
@@ -220,7 +238,12 @@
     dialog-aria-label="Clone conversation"
     dialog-class="conversations__dialog conversations__clone-dialog"
   >
-    <form class="conversations__form" method="dialog">
+    <form
+      class="conversations__form"
+      method="dialog"
+      toolname="conversations_clone"
+      tooldescription="Confirm cloning of the selected conversation into a new session"
+    >
       <p class="conversations__delete-message">
         Clone conversation "<span class="conversations__clone-name"></span>"?
       </p>

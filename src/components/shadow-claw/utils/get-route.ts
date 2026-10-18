@@ -1,6 +1,20 @@
 import { isPossibleAppRoute } from "../../../core/app-routes.js";
 import type { ShadowClawDatabase } from "../../../db/types.js";
 
+let lastHistoryReplaceState: any = null;
+
+export function recordHistoryReplaceState(state: any): void {
+  lastHistoryReplaceState = state;
+}
+
+export function getLastHistoryReplaceState(): any {
+  return lastHistoryReplaceState;
+}
+
+export function clearLastHistoryReplaceState(): void {
+  lastHistoryReplaceState = null;
+}
+
 export function getRoute(db: ShadowClawDatabase, ev: Event) {
   if (!db) {
     return;
@@ -15,8 +29,12 @@ export function getRoute(db: ShadowClawDatabase, ev: Event) {
     typeof navigateEvent?.destination?.getState === "function"
       ? navigateEvent.destination.getState()
       : null;
+  const recordedState =
+    navigateEvent.navigationType === "replace" ? lastHistoryReplaceState : null;
   const navState =
     destinationState ||
+    navigateEvent?.info ||
+    recordedState ||
     (navigateEvent.navigationType === "replace" &&
     typeof history !== "undefined"
       ? history.state

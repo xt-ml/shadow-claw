@@ -237,9 +237,11 @@ describe("ToolsStore — declarative tools management", () => {
     store = new ToolsStore();
   });
 
-  it("defaults to enabling all declarative tools when not explicitly configured", () => {
+  it("defaults to having declarative tools not enabled when not explicitly configured", () => {
     expect(store.declarativeToolNamesEnabled).toBeNull();
-    expect(store.isDeclarativeToolEnabled("generate_random_number")).toBe(true);
+    expect(store.isDeclarativeToolEnabled("generate_random_number")).toBe(
+      false,
+    );
   });
 
   it("toggles declarative tools and persists enabled state", async () => {
@@ -298,7 +300,7 @@ describe("ToolsStore — declarative tools management", () => {
     const refreshed = await store.refreshDeclarativeTools(db, "br:main");
     expect(refreshed).toHaveLength(1);
     expect(store.declarativeTools).toHaveLength(1);
-    expect(store.enabledDeclarativeTools).toHaveLength(1);
+    expect(store.enabledDeclarativeTools).toHaveLength(0);
   });
 
   describe("Remote Site Integration", () => {

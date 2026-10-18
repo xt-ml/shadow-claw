@@ -1547,7 +1547,14 @@ export class ShadowClawConversations extends ShadowClawElement {
 
     createForm?.addEventListener("submit", async (e) => {
       e.preventDefault();
-      await this._submitCreateDialog();
+      const promise = this._submitCreateDialog();
+      if (
+        (e as any).agentInvoked &&
+        typeof (e as any).respondWith === "function"
+      ) {
+        (e as any).respondWith(promise);
+      }
+      await promise;
     });
 
     // Details dialog
@@ -1577,7 +1584,14 @@ export class ShadowClawConversations extends ShadowClawElement {
 
     detailsForm?.addEventListener("submit", async (e) => {
       e.preventDefault();
-      await this._submitDetailsDialog();
+      const promise = this._submitDetailsDialog();
+      if (
+        (e as any).agentInvoked &&
+        typeof (e as any).respondWith === "function"
+      ) {
+        (e as any).respondWith(promise);
+      }
+      await promise;
     });
 
     // Delete dialog
@@ -1598,7 +1612,14 @@ export class ShadowClawConversations extends ShadowClawElement {
 
     deleteForm?.addEventListener("submit", async (e) => {
       e.preventDefault();
-      await this._submitDeleteDialog();
+      const promise = this._submitDeleteDialog();
+      if (
+        (e as any).agentInvoked &&
+        typeof (e as any).respondWith === "function"
+      ) {
+        (e as any).respondWith(promise);
+      }
+      await promise;
     });
 
     // Clone dialog
@@ -1619,7 +1640,14 @@ export class ShadowClawConversations extends ShadowClawElement {
 
     cloneForm?.addEventListener("submit", async (e) => {
       e.preventDefault();
-      await this._submitCloneDialog();
+      const promise = this._submitCloneDialog();
+      if (
+        (e as any).agentInvoked &&
+        typeof (e as any).respondWith === "function"
+      ) {
+        (e as any).respondWith(promise);
+      }
+      await promise;
     });
   }
 

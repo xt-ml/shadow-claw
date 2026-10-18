@@ -3,6 +3,7 @@ import { Signal } from "signal-polyfill";
 import { effect } from "../../core/effect.js";
 
 import { splitFrontmatter } from "../../utils/frontmatter.js";
+import { resolvePageScriptDependencies } from "../../utils/resolve-page-script-dependencies.js";
 import { formatSeoTitle } from "../../utils/seo.js";
 import { getSiteConfigSeoSettings } from "../../storage/static-main-site.js";
 import { CONFIG_KEYS } from "../../config/config.js";
@@ -1524,16 +1525,16 @@ export class ShadowClawPages extends ShadowClawElement {
           return;
         }
 
-        // Extract approved script srcs from the raw HTML *before* DOMPurify
+        // Extract approved script srcs from the raw content *before* DOMPurify
         // strips <script> tags. DOMPurify removes scripts during sanitization,
         // so we must collect them here from the raw string, not from the DOM.
-        const approvedScriptSrcs: string[] = [];
+        const rawScriptSrcs: string[] = [];
         const scriptSrcRegex = /<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi;
         let scriptMatch: RegExpExecArray | null;
-        while ((scriptMatch = scriptSrcRegex.exec(html)) !== null) {
+        while ((scriptMatch = scriptSrcRegex.exec(content)) !== null) {
           const src = scriptMatch[1];
           if (src && isApprovedScript(src)) {
-            approvedScriptSrcs.push(src);
+            rawScriptSrcs.push(src);
           }
         }
 
@@ -1543,22 +1544,45 @@ export class ShadowClawPages extends ShadowClawElement {
         // connectedCallback fires correctly and slotchange is captured on
         // first connection rather than after a late upgrade.
         const scriptDescriptors = getApprovedCustomElementScriptDescriptors();
+        const combinedFrontmatter = {
+          ...(parsedFrontmatter?.data || {}),
+          scripts: [
+            ...(Array.isArray(parsedFrontmatter?.data?.scripts)
+              ? parsedFrontmatter.data.scripts
+              : parsedFrontmatter?.data?.scripts
+                ? [parsedFrontmatter.data.scripts]
+                : []),
+            ...rawScriptSrcs,
+          ],
+        };
+        const resolvedScripts = resolvePageScriptDependencies(
+          scriptDescriptors,
+          combinedFrontmatter,
+          content,
+        );
+
         await Promise.all(
-          approvedScriptSrcs.map(async (src) => {
-            await loadApprovedCustomElementScript(src);
-            const desc = scriptDescriptors.find((d) => d.src === src);
-            if (desc?.hasInit) {
-              try {
-                const mod = await import(/* @vite-ignore */ src);
-                if (typeof mod?.init === "function") {
-                  await mod.init();
+          resolvedScripts.map(async (desc) => {
+            try {
+              await loadApprovedCustomElementScript(desc.src);
+              if (desc.hasInit) {
+                try {
+                  const mod = await import(/* @vite-ignore */ desc.src);
+                  if (typeof mod?.init === "function") {
+                    await mod.init();
+                  }
+                } catch (e) {
+                  console.error(
+                    "[ShadowClaw] Error executing init for " + desc.src,
+                    e,
+                  );
                 }
-              } catch (e) {
-                console.error(
-                  "[ShadowClaw] Error executing init for " + src,
-                  e,
-                );
               }
+            } catch (err) {
+              console.warn(
+                `[ShadowClaw] Error loading custom element script ${desc.src}:`,
+                err,
+              );
             }
           }),
         );

@@ -632,6 +632,18 @@ shadow-claw-conversations {
   margin-top: 0.5rem;
 }
 
+form:tool-form-active,
+.app-confirm-dialog__form:tool-form-active,
+.app-prompt-dialog__form:tool-form-active {
+  outline: 2px dashed var(--shadow-claw-accent-primary, #3b82f6);
+  outline-offset: 4px;
+}
+
+button:tool-submit-active {
+  outline: 2px dashed var(--shadow-claw-warning, #f59e0b);
+  outline-offset: 2px;
+}
+
 .chat-page {
   flex-direction: column;
 }

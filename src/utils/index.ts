@@ -18,6 +18,7 @@ export * from "./normalize-string-list.js";
 export * from "./normalize-workspace-path.js";
 export * from "./parse-boolean-config.js";
 export * from "./parse-stored-string-list.js";
+export * from "./resolve-page-script-dependencies.js";
 export * from "./retry.js";
 export * from "./seo.js";
 export * from "./ulid.js";

@@ -28,7 +28,7 @@
     },
     "skipLibCheck": true,
     "noEmit": false,
-    "types": ["node", "jest", "dom-chromium-ai"],
+    "types": ["node", "jest", "dom-chromium-ai", "webmcp-types"],
     "noUnusedLocals": true,
     "noUnusedParameters": true
   }

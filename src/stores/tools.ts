@@ -79,8 +79,8 @@ export class ToolsStore {
     this._enabledDeclarativeTools = new Signal.Computed(() => {
       const tools = this._declarativeTools.get();
       const enabledSet = this._declarativeToolNamesEnabled.get();
-      if (enabledSet === null) {
-        return tools;
+      if (!enabledSet || enabledSet.size === 0) {
+        return [];
       }
       return tools.filter((t) => enabledSet.has(t.name));
     });
@@ -137,8 +137,8 @@ export class ToolsStore {
 
   isDeclarativeToolEnabled(name: string): boolean {
     const enabledSet = this._declarativeToolNamesEnabled.get();
-    if (enabledSet === null) {
-      return true;
+    if (!enabledSet) {
+      return false;
     }
     return enabledSet.has(name);
   }
@@ -183,12 +183,7 @@ export class ToolsStore {
     enabled: boolean,
   ): Promise<void> {
     const currentEnabled = this._declarativeToolNamesEnabled.get();
-    const allDeclTools = this._declarativeTools.get();
-    const nextSet = new Set(
-      currentEnabled === null
-        ? allDeclTools.map((t) => t.name)
-        : currentEnabled,
-    );
+    const nextSet = new Set(currentEnabled === null ? [] : currentEnabled);
     if (enabled) {
       nextSet.add(toolName);
     } else {

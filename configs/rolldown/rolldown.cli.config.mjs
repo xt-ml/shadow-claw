@@ -53,7 +53,7 @@ export default defineConfig({
     "@google/genai",
     "@huggingface/transformers",
     "@mcp-b/webmcp-polyfill",
-    "@mcp-b/webmcp-types",
+    "webmcp-types",
     "node-datachannel",
     "peer",
     "smart-buffer",

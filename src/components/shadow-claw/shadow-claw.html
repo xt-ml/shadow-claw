@@ -254,7 +254,12 @@
       dialog-class="app-dialog"
       dialog-aria-labelledby="appDialogTitle"
     >
-      <form method="dialog" class="app-confirm-dialog__form">
+      <form
+        method="dialog"
+        class="app-confirm-dialog__form"
+        toolname="app_dialog_confirm"
+        tooldescription="Confirm or cancel an application modal dialog prompt"
+      >
         <h2 id="appDialogTitle" class="app-dialog__title">Confirm</h2>
         <p class="app-dialog__message"></p>
         <ul class="app-dialog__details" hidden></ul>
@@ -289,7 +294,12 @@
       dialog-class="app-dialog app-prompt-dialog"
       dialog-aria-labelledby="appPromptTitle"
     >
-      <form method="dialog" class="app-prompt-dialog__form">
+      <form
+        method="dialog"
+        class="app-prompt-dialog__form"
+        toolname="app_dialog_prompt"
+        tooldescription="Submit user response or selection to an interactive dialog prompt"
+      >
         <h2 id="appPromptTitle" class="app-prompt-dialog__title">
           Agent Question
         </h2>

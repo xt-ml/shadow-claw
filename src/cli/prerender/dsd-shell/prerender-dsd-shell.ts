@@ -15,6 +15,37 @@ import { DOMImplementation, XMLSerializer } from "@xmldom/xmldom";
 import matter from "gray-matter";
 import { marked } from "marked";
 
+// Configure marked with a custom tokenizer for custom elements
+marked.use({
+  tokenizer: {
+    html(src: string) {
+      // Treat custom elements (tags with a hyphen like <x-postpress-code>, <x-hook-component>)
+      // as block-level HTML so marked does not wrap them in <p> tags or split them on blank lines.
+      // Wrapping in <p> causes the browser's HTML parser to eject <pre> or other block children
+      // out of the custom element into sibling position, breaking web component light DOM slots.
+      const match =
+        src.match(
+          /^ {0,3}<([a-zA-Z][a-zA-Z0-9]*-[a-zA-Z0-9_-]*)(?:\s+[^>]*)?>[\s\S]*?<\/\1>(?:[ \t]*(?:\n+|$))?/i,
+        ) ||
+        src.match(
+          /^ {0,3}<([a-zA-Z][a-zA-Z0-9]*-[a-zA-Z0-9_-]*)(?:\s+[^>]*)?\s*\/>(?:[ \t]*(?:\n+|$))?/i,
+        );
+
+      if (match) {
+        return {
+          type: "html",
+          block: true,
+          raw: match[0],
+          text: match[0],
+          pre: false,
+        };
+      }
+
+      return false;
+    },
+  },
+});
+
 import {
   createFrontmatterDetailsElement,
   renderFrontmatterMarkup,
@@ -29,6 +60,8 @@ import { normalizePrerenderPagesOption } from "../utils/normalize-prerender-page
 import { insertBeforeClosingHead } from "../utils/insert-before-closing-head.js";
 import { injectStaticManifestScript } from "../utils/inject-static-manifest-script.js";
 import { isPagePathAllowed } from "../../../utils/is-page-path-allowed.js";
+import { resolvePageScriptDependencies } from "../../../utils/resolve-page-script-dependencies.js";
+import { buildCustomElementScriptTags } from "../../site-config/custom-elements/build-custom-element-script-tags.js";
 
 export { escapeHtml };
 export { sanitizeRenderedHtml };
@@ -1316,7 +1349,35 @@ export async function prerenderDsdShell(
   const embeddedManifestJson = JSON.stringify(embeddedManifest);
 
   const nextHtml = injectStaticManifestScript(markedHtml, embeddedManifestJson);
-  const minifiedHtml = minifyDsdTemplateHtml(nextHtml);
+
+  const rawScripts = siteConfig?.customElements?.scripts || [];
+  const defaultPageParsed = filteredPageSources[0]?.content
+    ? splitFrontmatterWithGrayMatter(filteredPageSources[0].content)
+    : { data: {} };
+  const resolvedScripts = resolvePageScriptDependencies(
+    rawScripts,
+    defaultPageParsed.data,
+    filteredPageSources[0]?.content,
+  );
+  let htmlWithScripts = nextHtml;
+  if (resolvedScripts.length > 0) {
+    const headMatch = htmlWithScripts.match(/<head[^>]*>([\s\S]*?)<\/head>/i);
+    const headContent = headMatch ? headMatch[1] : "";
+    const scriptsToInject = resolvedScripts.filter(
+      (s) =>
+        !headContent.includes(`src="${s.src}"`) &&
+        !headContent.includes(`src='${s.src}'`),
+    );
+    if (scriptsToInject.length > 0) {
+      const scriptTags = buildCustomElementScriptTags(scriptsToInject);
+      htmlWithScripts = insertBeforeClosingHead(
+        htmlWithScripts,
+        `  ${scriptTags.trim()}`,
+      );
+    }
+  }
+
+  const minifiedHtml = minifyDsdTemplateHtml(htmlWithScripts);
   const finalHtml = await inlineCriticalAssets(minifiedHtml, publicDir);
   await writeFile(indexPath, finalHtml, "utf8");
   const isSilent = options.silent ?? process.env.NODE_ENV === "test";

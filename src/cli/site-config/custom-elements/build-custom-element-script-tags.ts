@@ -2,6 +2,10 @@ import { normalizeCustomElementScriptSrc } from "./normalize-custom-element-scri
 
 export interface CustomElementScriptDescriptor {
   src: string;
+  id?: string;
+  name?: string;
+  global?: boolean;
+  autoload?: boolean;
   type?: string;
   async?: boolean;
   defer?: boolean;
@@ -10,9 +14,17 @@ export interface CustomElementScriptDescriptor {
 
 export type CustomElementScriptEntry = string | CustomElementScriptDescriptor;
 
+function defaultEscapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 export function buildCustomElementScriptTags(
   approvedEntries: CustomElementScriptEntry[] | any,
-  escapeHtml: (str: string) => string,
+  escapeHtml: (str: string) => string = defaultEscapeHtml,
 ): string {
   if (!Array.isArray(approvedEntries) || approvedEntries.length === 0) {
     return "";

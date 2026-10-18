@@ -1,3 +1,4 @@
+import { jest } from "@jest/globals";
 import {
   injectStaticRoutingScript,
   prerenderPrettyPaths,
@@ -957,5 +958,281 @@ Body content paragraph for auto description.`;
     expect(page2Html).toContain(
       '<link rel="canonical" href="https://xt-ml.github.io/shadow-claw/custom-url/" />',
     );
+  });
+
+  it("injects global scripts and page frontmatter script dependencies into head of pretty path pages", async () => {
+    const publicDir = path.join(tmpDir, "dist/public-deps");
+    const indexPath = path.join(publicDir, "index.html");
+    const sourcePath = path.join(tmpDir, "pages/main-deps");
+    const routesPath = path.join(tmpDir, "pages/routes-deps.json");
+    const siteConfigPath = path.join(tmpDir, "shadow-claw.config.json");
+
+    await mkdir(path.join(publicDir, "components/shadow-claw"), {
+      recursive: true,
+    });
+    await mkdir(path.join(publicDir, "components/shadow-claw-pages"), {
+      recursive: true,
+    });
+    await mkdir(path.join(publicDir, "components/shadow-claw-page-header"), {
+      recursive: true,
+    });
+    await mkdir(sourcePath, { recursive: true });
+    await mkdir(path.dirname(routesPath), { recursive: true });
+
+    await writeFile(
+      indexPath,
+      '<!doctype html><html><head><base href="/"><title>ShadowClaw</title></head><body><shadow-claw></shadow-claw></body></html>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(publicDir, "components/shadow-claw/shadow-claw.html"),
+      '<template><div class="app"><shadow-claw-pages></shadow-claw-pages></div></template>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(
+        publicDir,
+        "components/shadow-claw-pages/shadow-claw-pages.html",
+      ),
+      '<template><div class="pages__list" data-pages-list role="list"></div><div class="pages__rendered" data-pages-rendered hidden></div><div class="pages__empty" data-pages-empty></div><shadow-claw-page-header title="Pages"></shadow-claw-page-header></template>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(
+        publicDir,
+        "components/shadow-claw-page-header/shadow-claw-page-header.html",
+      ),
+      '<template><header class="header"><h2 class="header__title"></h2><details class="header__actions-disclosure"></details><div class="header__actions" id="header-actions-panel"></div></header></template>',
+      "utf8",
+    );
+
+    const siteConfigJson = {
+      site: { title: "ShadowClaw" },
+      customElements: {
+        scripts: [
+          {
+            id: "feed-scroller",
+            src: "/pages/main/assets/feed-scroller.js",
+            global: true,
+            hasInit: true,
+          },
+          {
+            id: "x-hook-component",
+            src: "/pages/main/assets/x-hook-component.js",
+            hasInit: true,
+          },
+          {
+            name: "x-postpress-code",
+            src: "/pages/main/assets/x-postpress-code.js",
+            hasInit: true,
+          },
+        ],
+      },
+    };
+    await writeFile(
+      siteConfigPath,
+      JSON.stringify(siteConfigJson, null, 2),
+      "utf8",
+    );
+
+    const page1Content = [
+      "---",
+      'title: "The Web Is Dynamic"',
+      'slug: "the-web-is-dynamic"',
+      "dependencies:",
+      '  - "x-hook-component"',
+      "---",
+      "# The Web Is Dynamic",
+      "",
+      "Content using hook component.",
+      '<script type="module" src="/pages/main/assets/x-hook-component.js"></script>',
+    ].join("\n");
+
+    const page2Content = [
+      "---",
+      'title: "Unknown Script Page"',
+      'slug: "unknown-script-page"',
+      "dependencies:",
+      '  - "missing-non-existent-script"',
+      "---",
+      "# Unknown Script Page",
+      "",
+      "Content with unresolvable script.",
+    ].join("\n");
+
+    await writeFile(
+      path.join(sourcePath, "2021-02-27-the-web-is-dynamic.md"),
+      page1Content,
+      "utf8",
+    );
+    await writeFile(path.join(sourcePath, "unknown.md"), page2Content, "utf8");
+
+    const routesJson = {
+      routes: {
+        "/pages/main-deps/2021-02-27-the-web-is-dynamic.md": {
+          prettyPath: "/2021/02/27/the-web-is-dynamic/",
+        },
+        "/pages/main-deps/unknown.md": {
+          prettyPath: "/unknown-page/",
+        },
+      },
+    };
+    await writeFile(routesPath, JSON.stringify(routesJson, null, 2), "utf8");
+
+    const result = await prerenderPrettyPaths({
+      publicDir,
+      routesPath,
+      sourcePath,
+      siteConfigPath,
+      indexPath,
+      prerenderPages: 1,
+    });
+
+    expect(result.count).toBe(2);
+
+    const page1Html = await readFile(
+      path.join(publicDir, "2021/02/27/the-web-is-dynamic/index.html"),
+      "utf8",
+    );
+
+    // Should contain both the global script and the frontmatter-requested dependency in <head>
+    expect(page1Html).toMatch(
+      /<head>[\s\S]*<script type="module" src="\/pages\/main\/assets\/feed-scroller\.js"><\/script>[\s\S]*<\/head>/,
+    );
+    expect(page1Html).toMatch(
+      /<head>[\s\S]*<script type="module" src="\/pages\/main\/assets\/x-hook-component\.js"><\/script>[\s\S]*<\/head>/,
+    );
+    // Should NOT contain the unrequested x-postpress-code
+    expect(page1Html).not.toContain("/pages/main/assets/x-postpress-code.js");
+
+    const page2Html = await readFile(
+      path.join(publicDir, "unknown-page/index.html"),
+      "utf8",
+    );
+    // Should still have the global script and render cleanly despite missing dependency
+    expect(page2Html).toMatch(
+      /<head>[\s\S]*<script type="module" src="\/pages\/main\/assets\/feed-scroller\.js"><\/script>[\s\S]*<\/head>/,
+    );
+    expect(page2Html).not.toMatch(/<script\b[^>]*missing-non-existent-script/);
+  });
+
+  it("injects dependencies when existing config does not specify an id and fails gracefully", async () => {
+    const publicDir = path.join(tmpDir, "dist/public");
+    const indexPath = path.join(publicDir, "index.html");
+    const sourcePath = path.join(tmpDir, "pages/main-legacy");
+    const routesPath = path.join(tmpDir, "pages/routes-legacy.json");
+    const siteConfigPath = path.join(tmpDir, "shadow-claw.config.json");
+
+    await mkdir(path.join(publicDir, "components/shadow-claw"), {
+      recursive: true,
+    });
+    await mkdir(path.join(publicDir, "components/shadow-claw-pages"), {
+      recursive: true,
+    });
+    await mkdir(path.join(publicDir, "components/shadow-claw-page-header"), {
+      recursive: true,
+    });
+    await mkdir(sourcePath, { recursive: true });
+
+    await mkdir(path.dirname(routesPath), { recursive: true });
+
+    await writeFile(
+      indexPath,
+      '<!doctype html><html><head><base href="/"><title>Legacy Config Site</title></head><body><shadow-claw></shadow-claw></body></html>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(publicDir, "components/shadow-claw/shadow-claw.html"),
+      '<template><div class="app"><shadow-claw-pages></shadow-claw-pages></div></template>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(
+        publicDir,
+        "components/shadow-claw-pages/shadow-claw-pages.html",
+      ),
+      '<template><div class="pages__list" data-pages-list role="list"></div><div class="pages__rendered" data-pages-rendered hidden></div><div class="pages__empty" data-pages-empty></div><shadow-claw-page-header title="Pages"></shadow-claw-page-header></template>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(
+        publicDir,
+        "components/shadow-claw-page-header/shadow-claw-page-header.html",
+      ),
+      '<template><header class="header"><h2 class="header__title"></h2><details class="header__actions-disclosure"></details><div class="header__actions" id="header-actions-panel"></div></header></template>',
+      "utf8",
+    );
+
+    // Existing legacy config without 'id' fields
+    const legacySiteConfig = {
+      site: { title: "Legacy Config Site" },
+      customElements: {
+        scripts: [
+          { src: "/pages/main/assets/feed-scroller.js", global: true },
+          { src: "/pages/main/assets/x-hook-component.js" },
+        ],
+      },
+    };
+    await writeFile(
+      siteConfigPath,
+      JSON.stringify(legacySiteConfig, null, 2),
+      "utf8",
+    );
+
+    const postContent = [
+      "---",
+      'title: "Legacy Config Page"',
+      "dependencies:",
+      '  - "x-hook-component"',
+      '  - "unrecognized-missing-id"',
+      "---",
+      "# Legacy Config Page",
+      "",
+      "Content rendered best effort.",
+    ].join("\n");
+
+    await writeFile(
+      path.join(sourcePath, "legacy-page.md"),
+      postContent,
+      "utf8",
+    );
+
+    const routesJson = {
+      routes: {
+        "/pages/main-legacy/legacy-page.md": {
+          prettyPath: "/legacy-page/",
+        },
+      },
+    };
+    await writeFile(routesPath, JSON.stringify(routesJson, null, 2), "utf8");
+
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const result = await prerenderPrettyPaths({
+      publicDir,
+      routesPath,
+      sourcePath,
+      siteConfigPath,
+      indexPath,
+      prerenderPages: 1,
+    });
+    warnSpy.mockRestore();
+
+    expect(result.count).toBe(1);
+
+    const pageHtml = await readFile(
+      path.join(publicDir, "legacy-page/index.html"),
+      "utf8",
+    );
+
+    // Global script injected
+    expect(pageHtml).toMatch(
+      /<head>[\s\S]*<script type="module" src="\/pages\/main\/assets\/feed-scroller\.js"><\/script>[\s\S]*<\/head>/,
+    );
+    // Matched by stem even without id in config
+    expect(pageHtml).toMatch(
+      /<head>[\s\S]*<script type="module" src="\/pages\/main\/assets\/x-hook-component\.js"><\/script>[\s\S]*<\/head>/,
+    );
+    // Unrecognized id has no script tag injected and does not cause a failure
+    expect(pageHtml).not.toMatch(/<script\b[^>]*unrecognized-missing-id/);
   });
 });

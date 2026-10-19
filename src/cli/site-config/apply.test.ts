@@ -17,7 +17,7 @@ import {
   patchSitemap,
 } from "./apply.js";
 
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -251,6 +251,42 @@ describe("apply-site-config", () => {
       expect(patched).toContain('<a href="/about">About</a>');
       expect(patched).toContain("<shadow-claw>");
       expect(patched).toContain("</shadow-claw>");
+    });
+
+    it("injects RSS, Atom, and RDF autodiscovery link tags when feed is enabled", () => {
+      const config = {
+        site: { title: "My Blog" },
+        branding: { siteUrl: "https://example.com" },
+        feed: { enabled: true },
+      };
+      const patched = patchIndexHtml(baseHtml, config);
+
+      expect(patched).toContain(
+        '<link rel="alternate" type="application/rss+xml" title="My Blog &raquo; Feed" href="https://example.com/feed/" />',
+      );
+      expect(patched).toContain(
+        '<link rel="alternate" type="application/atom+xml" title="My Blog &raquo; Atom Feed" href="https://example.com/feed/atom/" />',
+      );
+      expect(patched).toContain(
+        '<link rel="alternate" type="application/rdf+xml" title="My Blog &raquo; RDF Feed" href="https://example.com/feed/rdf/" />',
+      );
+    });
+
+    it("does not inject feed autodiscovery tags when feed is disabled or omitted", () => {
+      const configDefault = {
+        site: { title: "My Blog" },
+        branding: { siteUrl: "https://example.com" },
+      };
+      const patchedDefault = patchIndexHtml(baseHtml, configDefault);
+      expect(patchedDefault).not.toContain('type="application/rss+xml"');
+
+      const configDisabled = {
+        site: { title: "My Blog" },
+        branding: { siteUrl: "https://example.com" },
+        feed: { enabled: false },
+      };
+      const patchedDisabled = patchIndexHtml(baseHtml, configDisabled);
+      expect(patchedDisabled).not.toContain('type="application/rss+xml"');
     });
 
     it("renders and injects declarative sidebar sections into shadow-claw light DOM", () => {
@@ -1107,6 +1143,122 @@ https://example.com/about`;
       const patchedIndex = await readFile(indexPath, "utf8");
       expect(patchedIndex).toContain('slot="sidebar"');
       expect(patchedIndex).toContain("About Us");
+    });
+
+    it("generates RSS 2.0, Atom, and RDF feeds when feed.enabled is true", async () => {
+      const distPublicDir = path.join(tmpDir, "dist/public");
+      const pagesDir = path.join(tmpDir, "pages");
+      await mkdir(distPublicDir, { recursive: true });
+      await mkdir(pagesDir, { recursive: true });
+
+      const indexPath = path.join(distPublicDir, "index.html");
+      const siteConfigPath = path.join(pagesDir, "site-config.json");
+      const routesPath = path.join(pagesDir, "routes.json");
+
+      await writeFile(
+        indexPath,
+        '<!doctype html><html><head><script src="theme-init.js"></script></head><body><script type="module" src="index.js"></script></body></html>',
+        "utf8",
+      );
+
+      const routes = {
+        routes: {
+          "/pages/main/index.html": { prettyPath: "/" },
+          "/pages/main/first-post.md": {
+            prettyPath: "/posts/first/",
+            title: "First Post",
+            date: "2026-01-01T00:00:00Z",
+            description: "First post description",
+          },
+        },
+      };
+      await writeFile(routesPath, JSON.stringify(routes), "utf8");
+
+      const config = {
+        site: { title: "Feed Site", description: "Feed Description" },
+        branding: { siteUrl: "https://example.com" },
+        feed: { enabled: true },
+      };
+      await writeFile(siteConfigPath, JSON.stringify(config), "utf8");
+
+      const result = await applySiteConfig(distPublicDir, siteConfigPath);
+      expect(result.applied).toBe(true);
+
+      const rssXml = await readFile(
+        path.join(distPublicDir, "feed/rss.xml"),
+        "utf8",
+      );
+      expect(rssXml).toContain("<title>Feed Site</title>");
+      expect(rssXml).toContain("<title>First Post</title>");
+      expect(rssXml).toContain("<link>https://example.com/posts/first/</link>");
+
+      const atomXml = await readFile(
+        path.join(distPublicDir, "feed/atom/atom.xml"),
+        "utf8",
+      );
+      expect(atomXml).toContain('<title type="text">Feed Site</title>');
+      expect(atomXml).toContain(
+        '<title type="html"><![CDATA[First Post]]></title>',
+      );
+
+      const rdfXml = await readFile(
+        path.join(distPublicDir, "feed/rdf/index.xml"),
+        "utf8",
+      );
+      expect(rdfXml).toContain("<title>Feed Site</title>");
+      expect(rdfXml).toContain("<title>First Post</title>");
+
+      const rssHtml = await readFile(
+        path.join(distPublicDir, "feed/index.html"),
+        "utf8",
+      );
+      expect(rssHtml).toContain('content="0; url=rss.xml"');
+
+      const atomHtml = await readFile(
+        path.join(distPublicDir, "feed/atom/index.html"),
+        "utf8",
+      );
+      expect(atomHtml).toContain('content="0; url=atom.xml"');
+
+      const rdfHtml = await readFile(
+        path.join(distPublicDir, "feed/rdf/index.html"),
+        "utf8",
+      );
+      expect(rdfHtml).toContain('content="0; url=index.xml"');
+
+      const patchedIndex = await readFile(indexPath, "utf8");
+      expect(patchedIndex).toContain('type="application/rss+xml"');
+    });
+
+    it("does not generate feeds when feed is not enabled", async () => {
+      const distPublicDir = path.join(tmpDir, "dist/public");
+      const pagesDir = path.join(tmpDir, "pages");
+      await mkdir(distPublicDir, { recursive: true });
+      await mkdir(pagesDir, { recursive: true });
+
+      const indexPath = path.join(distPublicDir, "index.html");
+      const siteConfigPath = path.join(pagesDir, "site-config.json");
+
+      await writeFile(
+        indexPath,
+        '<!doctype html><html><head><script src="theme-init.js"></script></head><body><script type="module" src="index.js"></script></body></html>',
+        "utf8",
+      );
+
+      const config = {
+        site: { title: "No Feed Site" },
+        branding: { siteUrl: "https://example.com" },
+      };
+      await writeFile(siteConfigPath, JSON.stringify(config), "utf8");
+
+      await applySiteConfig(distPublicDir, siteConfigPath);
+
+      let exists = false;
+      try {
+        await stat(path.join(distPublicDir, "feed"));
+        exists = true;
+      } catch {}
+      expect(exists).toBe(false);
     });
   });
 });

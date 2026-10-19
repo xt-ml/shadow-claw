@@ -147,7 +147,7 @@ export async function buildHtmlPageSrcdoc({
     getIframeThemeStyleHtml(),
     themeStylesheetLink,
     customElementScriptsHtml,
-    "</head><body>",
+    `</head><body class="${getIframeHtmlClass()}">`,
     safeContent,
     "</body></html>",
   ].join("");

@@ -98,11 +98,25 @@
         }
       }
 
-      if (event.data.theme === "dark") {
+      var isDark = event.data.theme === "dark";
+      if (isDark) {
         document.documentElement.classList.add("dark-mode");
+        document.documentElement.classList.remove("light-mode");
+        if (document.body) {
+          document.body.classList.add("dark-mode");
+          document.body.classList.remove("light-mode");
+        }
       } else {
+        document.documentElement.classList.add("light-mode");
         document.documentElement.classList.remove("dark-mode");
+        if (document.body) {
+          document.body.classList.add("light-mode");
+          document.body.classList.remove("dark-mode");
+        }
       }
+      try {
+        document.documentElement.style.colorScheme = isDark ? "dark" : "light";
+      } catch (e) {}
     }
 
     if (event.data.type === "shadow-claw-update-url-params") {

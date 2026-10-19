@@ -1,5 +1,9 @@
 /// <reference lib="dom" />
-import { applyBasePath, type ShadowClawAppRoute } from "../core/app-routes.js";
+import {
+  applyBasePath,
+  isFeedRoute,
+  type ShadowClawAppRoute,
+} from "../core/app-routes.js";
 import type { SavedPageRef } from "../db/types.js";
 
 const DEFAULT_GROUP_ID = "br:main";
@@ -221,6 +225,10 @@ export function resolvePrettyPathToRoute(
   pathname: string,
   manifest?: StaticRoutesManifest | null,
 ): ShadowClawAppRoute | null {
+  if (isFeedRoute(pathname)) {
+    return null;
+  }
+
   const routesManifest =
     manifest || cachedManifest || getEmbeddedStaticRoutesManifest();
   if (!routesManifest || !routesManifest.routes) {
@@ -248,6 +256,10 @@ export function resolvePrettyPathToRoute(
 export async function resolvePrettyPathToRouteAsync(
   pathname: string,
 ): Promise<ShadowClawAppRoute | null> {
+  if (isFeedRoute(pathname)) {
+    return null;
+  }
+
   const syncMatch = resolvePrettyPathToRoute(pathname);
   if (syncMatch) return syncMatch;
 

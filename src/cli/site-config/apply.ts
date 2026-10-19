@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 
 import { getRoutesCandidates } from "../build/utils/get-routes-candidates.js";
 import { generateSitemapXml } from "./sitemap/generate-sitemap.js";
+import { generateAllFeeds, patchFeed } from "./feed/generate-feed.js";
 import { resolveCustomElementScripts } from "./custom-elements/resolve-custom-element-scripts.js";
 import { sanitizeEmbeddedCustomElementScripts } from "./custom-elements/sanitize-embedded-custom-element-scripts.js";
 import {
@@ -105,6 +106,15 @@ export interface SiteConfigSettings {
   assistantName?: string;
 }
 
+export interface SiteConfigFeed {
+  enabled?: boolean;
+  path?: string;
+  allowList?: string[];
+  denyList?: string[];
+  allowlist?: string[];
+  denylist?: string[];
+}
+
 export interface SiteConfig {
   site?: SiteConfigSite;
   branding?: SiteConfigBranding;
@@ -112,6 +122,8 @@ export interface SiteConfig {
   pwa?: SiteConfigPwa;
   sidebar?: SiteConfigSidebar;
   settings?: SiteConfigSettings;
+  feed?: boolean | SiteConfigFeed;
+  feedPath?: string;
   pages?: {
     notFoundPath?: string;
     sortOrder?: string;
@@ -524,6 +536,33 @@ export function patchIndexHtml(
     next = applySidebarVisibilityToTemplate(next, config.sidebar);
   }
 
+  const isFeedEnabled = Boolean(
+    config.feed === true ||
+    (typeof config.feed === "object" && (config.feed as any)?.enabled === true),
+  );
+
+  if (isFeedEnabled) {
+    const siteTitle = branding.titleText || site.title || "ShadowClaw";
+    const origin = branding.siteUrl
+      ? branding.siteUrl.endsWith("/")
+        ? branding.siteUrl
+        : `${branding.siteUrl}/`
+      : "";
+    const rssTag = `<link rel="alternate" type="application/rss+xml" title="${escapeHtml(siteTitle)} &raquo; Feed" href="${escapeHtml(origin)}feed/" />`;
+    const atomTag = `<link rel="alternate" type="application/atom+xml" title="${escapeHtml(siteTitle)} &raquo; Atom Feed" href="${escapeHtml(origin)}feed/atom/" />`;
+    const rdfTag = `<link rel="alternate" type="application/rdf+xml" title="${escapeHtml(siteTitle)} &raquo; RDF Feed" href="${escapeHtml(origin)}feed/rdf/" />`;
+
+    if (!next.includes('type="application/rss+xml"')) {
+      next = insertBeforeClosingHead(next, `  ${rssTag}`);
+    }
+    if (!next.includes('type="application/atom+xml"')) {
+      next = insertBeforeClosingHead(next, `  ${atomTag}`);
+    }
+    if (!next.includes('type="application/rdf+xml"')) {
+      next = insertBeforeClosingHead(next, `  ${rdfTag}`);
+    }
+  }
+
   return next;
 }
 
@@ -694,6 +733,8 @@ export function patchSitemap(content: string, pagesOrigin?: string): string {
     })
     .join("\n");
 }
+
+export { patchFeed };
 
 export function patch404Html(
   html: string,
@@ -919,6 +960,24 @@ export async function copyCustomSiteFiles(
       console.warn(
         `  Warning: Could not copy custom manifest.json: ${err.message}`,
       );
+    }
+  }
+
+  if (config.feedPath) {
+    const feedCandidates = getCandidateFilePaths(
+      config.feedPath,
+      configDir,
+      templateRootDir,
+    );
+    const foundFeed = await findFirstExisting(feedCandidates);
+    if (foundFeed) {
+      try {
+        const destName = path.basename(foundFeed);
+        await copyFile(foundFeed, path.join(distPublicDir, destName));
+        console.log(`  Copied custom feed: ${foundFeed} → ${destName}`);
+      } catch (err: any) {
+        console.warn(`  Warning: Could not copy custom feed: ${err.message}`);
+      }
     }
   }
 
@@ -1315,6 +1374,53 @@ export async function applySiteConfig(
     const patched = patchSitemap(sitemapTxtText, pagesOrigin);
     await writeText(sitemapTxtPath, patched);
     console.log("  Patched sitemap.txt");
+  }
+
+  const isFeedEnabled = Boolean(
+    config.feed === true ||
+    (typeof config.feed === "object" && (config.feed as any)?.enabled === true),
+  );
+
+  if (isFeedEnabled) {
+    const routesPath = await findFirstExisting([
+      ...getRoutesCandidates(configDir),
+      ...getRoutesCandidates(templateRootDir),
+      ...getRoutesCandidates(getRepoRootDir(configDir)),
+    ]);
+
+    if (routesPath) {
+      const routes = await readJson(routesPath);
+      if (routes) {
+        const pagesDirCandidates = [
+          path.join(distPublicDir, "pages/main"),
+          path.join(distPublicDir, "files/main"),
+          path.join(distPublicDir, "static-main"),
+          path.join(configDir, "pages/main"),
+          path.join(configDir, "main"),
+          path.join(templateRootDir, "pages/main"),
+          path.resolve("pages/main"),
+        ];
+        const pagesDir = await findFirstExisting(pagesDirCandidates);
+
+        const feedOrigin = pagesOrigin || config.branding?.siteUrl || "";
+        const feedResult = await generateAllFeeds({
+          routesJson: routes,
+          siteConfig: config,
+          origin: feedOrigin,
+          pagesDir: pagesDir || undefined,
+        });
+
+        for (const [relPath, content] of Object.entries(feedResult.files)) {
+          const targetPath = path.join(distPublicDir, relPath);
+          await mkdir(path.dirname(targetPath), { recursive: true });
+          const finalContent = relPath.endsWith(".xml")
+            ? patchFeed(content, pagesOrigin)
+            : content;
+          await writeText(targetPath, finalContent);
+        }
+        console.log("  Generated RSS 2.0, Atom, and RDF feeds");
+      }
+    }
   }
 
   const notFoundPath = path.join(distPublicDir, "404.html");

@@ -222,6 +222,51 @@ export function registerStaticFilesMiddleware(app: Express, rootPath: string) {
       }
 
       if (stats.isDirectory()) {
+        const checkFeedDir = (relDir: string) => {
+          const norm = relDir.replace(/^\/+|\/+$/g, "");
+          if (norm === "feed") {
+            const feedFile = path.join(filePath, "rss.xml");
+            if (fs.existsSync(feedFile)) {
+              return {
+                file: feedFile,
+                type: "application/rss+xml; charset=UTF-8",
+              };
+            }
+          } else if (norm === "feed/atom") {
+            const feedFile = path.join(filePath, "atom.xml");
+            if (fs.existsSync(feedFile)) {
+              return {
+                file: feedFile,
+                type: "application/atom+xml; charset=UTF-8",
+              };
+            }
+          } else if (norm === "feed/rdf") {
+            const feedFile = path.join(filePath, "index.xml");
+            if (fs.existsSync(feedFile)) {
+              return {
+                file: feedFile,
+                type: "application/rdf+xml; charset=UTF-8",
+              };
+            }
+          }
+          return null;
+        };
+
+        const feedDirMatch =
+          checkFeedDir(urlPathname) ||
+          checkFeedDir(requestPath) ||
+          checkFeedDir(requestPath.replace(/^\/[^/]+/, ""));
+
+        if (feedDirMatch) {
+          res.setHeader("Content-Type", feedDirMatch.type);
+          if (sendFileOptions) {
+            res.sendFile(feedDirMatch.file, sendFileOptions);
+          } else {
+            res.sendFile(feedDirMatch.file);
+          }
+          return;
+        }
+
         const indexPath = path.join(filePath, "index.html");
         fs.access(indexPath, fs.constants.F_OK, (err2) => {
           if (!err2) {
@@ -240,6 +285,17 @@ export function registerStaticFilesMiddleware(app: Express, rootPath: string) {
           }
         });
       } else {
+        if (filePath.endsWith("rss.xml") || filePath.endsWith("feed.xml")) {
+          res.setHeader("Content-Type", "application/rss+xml; charset=UTF-8");
+        } else if (filePath.endsWith("atom.xml")) {
+          res.setHeader("Content-Type", "application/atom+xml; charset=UTF-8");
+        } else if (
+          filePath.endsWith("rdf/index.xml") ||
+          filePath.endsWith("rdf.xml")
+        ) {
+          res.setHeader("Content-Type", "application/rdf+xml; charset=UTF-8");
+        }
+
         if (sendFileOptions) {
           res.sendFile(filePath, sendFileOptions);
         } else {

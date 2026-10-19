@@ -316,6 +316,28 @@ describe("fallbackClickListener", () => {
     expect(applyRouteFromCurrentLocationMock).not.toHaveBeenCalled();
   });
 
+  it("should do nothing if same-origin anchor points to a feed route (e.g. /feed/)", () => {
+    const listener = fallbackClickListener(
+      shadowRootMock,
+      shadowClawMock,
+      dbMock,
+      fStoreMock,
+      oStoreMock,
+      urlMock,
+    );
+    const anchor = document.createElement("a");
+    anchor.href = window.location.origin + "/feed/";
+    anchor.setAttribute("href", "/feed/");
+    const event = new MouseEvent("click", { button: 0, cancelable: true });
+    Object.defineProperty(event, "composedPath", {
+      value: () => [anchor],
+    });
+    listener(event);
+    expect(event.defaultPrevented).toBe(false);
+    expect(historyStateMock).not.toHaveBeenCalled();
+    expect(applyRouteFromCurrentLocationMock).not.toHaveBeenCalled();
+  });
+
   it("should prevent default and call historyState and applyRouteFromCurrentLocation on valid click", () => {
     const listener = fallbackClickListener(
       shadowRootMock,

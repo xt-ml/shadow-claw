@@ -136,6 +136,38 @@ describe("staticRouting", () => {
 
     // Unmatched path returns null
     expect(resolvePrettyPathToRoute("/unknown/path", manifest)).toBeNull();
+
+    // Feed paths should never resolve to SPA page routes
+    const manifestWithFeed: StaticRoutesManifest = {
+      routes: {
+        "/feed/rss.xml": {
+          prettyPath: "/feed/",
+        },
+        "/feed/atom/atom.xml": {
+          prettyPath: "/feed/atom/",
+        },
+        "/feed/rdf/index.xml": {
+          prettyPath: "/feed/rdf/",
+        },
+        "/pages/main/about.md": {
+          prettyPath: "/about/",
+        },
+      },
+    };
+    expect(resolvePrettyPathToRoute("/feed/", manifestWithFeed)).toBeNull();
+    expect(resolvePrettyPathToRoute("/feed", manifestWithFeed)).toBeNull();
+    expect(
+      resolvePrettyPathToRoute("/feed/rss.xml", manifestWithFeed),
+    ).toBeNull();
+    expect(
+      resolvePrettyPathToRoute("/feed/atom/", manifestWithFeed),
+    ).toBeNull();
+    expect(resolvePrettyPathToRoute("/feed/rdf/", manifestWithFeed)).toBeNull();
+    expect(resolvePrettyPathToRoute("/about/", manifestWithFeed)).toEqual({
+      page: "pages",
+      groupId: "br:main",
+      path: "about.md",
+    });
   });
 
   it("resolves route to pretty path", () => {

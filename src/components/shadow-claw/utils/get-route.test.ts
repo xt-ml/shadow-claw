@@ -4,16 +4,19 @@ describe("getRoute", () => {
   let db: any;
 
   let isPossibleAppRouteMock: jest.Mock;
+  let isFeedRouteMock: jest.Mock;
   let getRoute: any;
 
   beforeEach(async () => {
     db = {};
 
     isPossibleAppRouteMock = jest.fn().mockReturnValue(true);
+    isFeedRouteMock = jest.fn().mockReturnValue(false);
 
     jest.resetModules();
     jest.unstable_mockModule("../../../core/app-routes.js", () => ({
       isPossibleAppRoute: isPossibleAppRouteMock,
+      isFeedRoute: isFeedRouteMock,
     }));
 
     // Re-import after mocking
@@ -92,6 +95,19 @@ describe("getRoute", () => {
     const result = getRoute(db, navigateEvent);
 
     expect(result).toBeUndefined();
+  });
+
+  it("returns undefined if isFeedRoute returns true", () => {
+    isFeedRouteMock.mockReturnValue(true);
+
+    const navigateEvent = new Event("navigate") as any;
+    navigateEvent.navigationType = "push";
+    navigateEvent.destination = { url: `${window.location.origin}/feed/` };
+
+    const result = getRoute(db, navigateEvent);
+
+    expect(result).toBeUndefined();
+    expect(isFeedRouteMock).toHaveBeenCalledWith("/feed/");
   });
 
   it("returns undefined if destination state indicates an in-feed scroll", () => {

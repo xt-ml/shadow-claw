@@ -179,7 +179,8 @@ When viewing markdown documents or HTML files in the Pages preview or File Viewe
 2. **Computed CSS Property Reflection**:
    - `getIframeThemeStyleHtml()` reads all computed `--*` CSS custom properties from `document.documentElement` and mirrors them into the iframe's `:root` style block.
 3. **Color Scheme & Class Mirroring**:
-   - The iframe root receives the matching `.dark-mode` or `.light-mode` class and `color-scheme: dark | light` to prevent Flash of Unstyled Content (FOUC).
+   - Both `document.documentElement` (`<html>`) and `document.body` (`<body>`) receive the matching `.dark-mode` or `.light-mode` class across the host application (`src/core/theme-init.ts`, `src/stores/theme.ts`) and within sandboxed preview iframes (`file-viewer-preview-bridge.js`, `build-html-page-srcdoc.ts`).
+   - The preview bridge updates `document.documentElement.style.colorScheme` and class lists across both `<html>` and `<body>` upon receiving `shadow-claw-theme-update` messages, ensuring that stylesheets targeting body-scoped selectors (such as `body.dark-mode` or `body.light-mode`) apply cleanly and prevent Flash of Unstyled Content (FOUC).
 
 ---
 

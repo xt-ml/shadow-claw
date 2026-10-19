@@ -61,6 +61,17 @@ function applyTheme(resolved: ResolvedTheme): void {
     }
   }
 
+  // Apply to body element directly if present
+  if (typeof document !== "undefined" && document.body) {
+    if (resolved === "dark") {
+      document.body.classList.add("dark-mode");
+      document.body.classList.remove("light-mode");
+    } else {
+      document.body.classList.add("light-mode");
+      document.body.classList.remove("dark-mode");
+    }
+  }
+
   // Dispatch event for other components to respond if needed
   window.dispatchEvent(
     new CustomEvent("shadow-claw-theme-change", {

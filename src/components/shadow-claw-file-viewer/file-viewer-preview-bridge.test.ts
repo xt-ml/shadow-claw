@@ -53,6 +53,9 @@ describe("file-viewer-preview-bridge.js (Preview IFrame Navigation & Broadcast B
 
   describe("Theme Update Handling", () => {
     test("applies dark mode class and custom properties on shadow-claw-theme-update message", () => {
+      document.documentElement.classList.add("light-mode");
+      document.body.classList.add("light-mode");
+
       const event = new MessageEvent("message", {
         data: {
           type: "shadow-claw-theme-update",
@@ -68,13 +71,20 @@ describe("file-viewer-preview-bridge.js (Preview IFrame Navigation & Broadcast B
       expect(document.documentElement.classList.contains("dark-mode")).toBe(
         true,
       );
+      expect(document.documentElement.classList.contains("light-mode")).toBe(
+        false,
+      );
+      expect(document.body.classList.contains("dark-mode")).toBe(true);
+      expect(document.body.classList.contains("light-mode")).toBe(false);
+      expect(document.documentElement.style.colorScheme).toBe("dark");
       expect(
         document.documentElement.style.getPropertyValue("--test-color"),
       ).toBe("#ff0000");
     });
 
-    test("removes dark mode class when theme is light", () => {
+    test("removes dark mode class and applies light mode when theme is light", () => {
       document.documentElement.classList.add("dark-mode");
+      document.body.classList.add("dark-mode");
 
       const event = new MessageEvent("message", {
         data: {
@@ -88,6 +98,12 @@ describe("file-viewer-preview-bridge.js (Preview IFrame Navigation & Broadcast B
       expect(document.documentElement.classList.contains("dark-mode")).toBe(
         false,
       );
+      expect(document.documentElement.classList.contains("light-mode")).toBe(
+        true,
+      );
+      expect(document.body.classList.contains("dark-mode")).toBe(false);
+      expect(document.body.classList.contains("light-mode")).toBe(true);
+      expect(document.documentElement.style.colorScheme).toBe("light");
     });
   });
 

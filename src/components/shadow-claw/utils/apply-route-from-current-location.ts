@@ -23,6 +23,25 @@ export async function applyRouteFromCurrentLocation(
   oStore: OrchestratorStore,
   url: URL,
 ): Promise<void> {
+  const historyState =
+    typeof history !== "undefined" ? (history as any).state : null;
+  const isFeedPresent =
+    typeof document !== "undefined" &&
+    (!!document.getElementById("postsFeed") ||
+      !!shadow?.querySelector("#postsFeed") ||
+      !!document
+        .querySelector("shadow-claw")
+        ?.shadowRoot?.querySelector("#postsFeed"));
+
+  if (
+    (historyState?.inFeedScroll ||
+      historyState?.scrollSpy ||
+      historyState?.suppressRouter) &&
+    isFeedPresent
+  ) {
+    return;
+  }
+
   let pathname = url.pathname;
   const basePath = getAppBasePath();
   if (basePath !== "/" && pathname.startsWith(basePath)) {

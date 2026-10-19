@@ -1,4 +1,4 @@
-import { isPossibleAppRoute } from "../../../core/app-routes.js";
+import { isFeedRoute, isPossibleAppRoute } from "../../../core/app-routes.js";
 import type { ShadowClawDatabase } from "../../../db/types.js";
 
 let lastHistoryReplaceState: any = null;
@@ -57,7 +57,10 @@ export function getRoute(db: ShadowClawDatabase, ev: Event) {
     return;
   }
 
-  if (!isPossibleAppRoute(parsedUrl.pathname)) {
+  if (
+    isFeedRoute(parsedUrl.pathname) ||
+    !isPossibleAppRoute(parsedUrl.pathname)
+  ) {
     return;
   }
 

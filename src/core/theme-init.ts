@@ -116,6 +116,9 @@ export function initializeThemeAndBootState() {
     storedTheme === "system" ? (prefersDark ? "dark" : "light") : storedTheme;
 
   document.documentElement.classList.add(`${resolvedTheme}-mode`);
+  if (typeof document !== "undefined" && document.body) {
+    document.body.classList.add(`${resolvedTheme}-mode`);
+  }
 }
 
 handleGithubPages404Redirects();

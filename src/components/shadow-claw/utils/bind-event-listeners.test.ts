@@ -168,6 +168,7 @@ describe("bindEventListeners", () => {
         remove: jest.fn(),
         contains: jest.fn(),
       },
+      addEventListener: jest.fn(),
     };
 
     db = {} as any;
@@ -1020,6 +1021,92 @@ describe("bindEventListeners", () => {
         doc,
         shadowClaw.orchestrator,
       );
+    });
+  });
+
+  describe("feed link click handling", () => {
+    it("intercepts click on feed link and calls win.location.assign", () => {
+      win.location = {
+        origin: "http://localhost:8888",
+        assign: jest.fn(),
+      } as any;
+
+      bindEventListeners(
+        win,
+        doc,
+        shadow,
+        shadowClaw,
+        db,
+        oStore,
+        fStore,
+        tStore,
+        url,
+      );
+
+      const clickCalls = (
+        shadowClaw.addEventListener as jest.Mock
+      ).mock.calls.filter((call: any[]) => call[0] === "click");
+      const feedClickListener = clickCalls[0][1];
+
+      const link = Object.assign(document.createElement("a"), {
+        href: "http://localhost:8888/feed/",
+      });
+      link.setAttribute("href", "/feed/");
+
+      const event = {
+        defaultPrevented: false,
+        button: 0,
+        composedPath: () => [link],
+        preventDefault: jest.fn(),
+      } as any;
+
+      feedClickListener(event);
+
+      expect(event.preventDefault).toHaveBeenCalled();
+      expect(win.location.assign).toHaveBeenCalledWith(
+        "http://localhost:8888/feed/",
+      );
+    });
+
+    it("does not intercept clicks on regular page links", () => {
+      win.location = {
+        origin: "http://localhost:8888",
+        assign: jest.fn(),
+      } as any;
+
+      bindEventListeners(
+        win,
+        doc,
+        shadow,
+        shadowClaw,
+        db,
+        oStore,
+        fStore,
+        tStore,
+        url,
+      );
+
+      const clickCalls = (
+        shadowClaw.addEventListener as jest.Mock
+      ).mock.calls.filter((call: any[]) => call[0] === "click");
+      const feedClickListener = clickCalls[0][1];
+
+      const link = Object.assign(document.createElement("a"), {
+        href: "http://localhost:8888/about",
+      });
+      link.setAttribute("href", "/about");
+
+      const event = {
+        defaultPrevented: false,
+        button: 0,
+        composedPath: () => [link],
+        preventDefault: jest.fn(),
+      } as any;
+
+      feedClickListener(event);
+
+      expect(event.preventDefault).not.toHaveBeenCalled();
+      expect(win.location.assign).not.toHaveBeenCalled();
     });
   });
 });

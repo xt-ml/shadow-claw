@@ -25,6 +25,8 @@ describe("themeStore", () => {
     expect(themeStore.resolved).toBe("dark");
 
     expect(localStorage.getItem("shadow-claw-theme")).toBe("dark");
+    expect(document.documentElement.classList.contains("dark-mode")).toBe(true);
+    expect(document.body.classList.contains("dark-mode")).toBe(true);
   });
 
   it("sets light theme", async () => {
@@ -43,6 +45,9 @@ describe("themeStore", () => {
     expect(document.documentElement.classList.contains("dark-mode")).toBe(
       false,
     );
+
+    expect(document.body.classList.contains("light-mode")).toBe(true);
+    expect(document.body.classList.contains("dark-mode")).toBe(false);
   });
 
   it("resolves system theme to light when system prefers light", async () => {

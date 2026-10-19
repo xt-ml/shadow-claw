@@ -315,4 +315,56 @@ describe("applyRouteFromCurrentLocation", () => {
     expect(mockApplyRoute).toHaveBeenCalled();
     await promise;
   });
+
+  it("should bypass routing when history.state has inFeedScroll and #postsFeed is present in the DOM", async () => {
+    const feedEl = document.createElement("div");
+    feedEl.id = "postsFeed";
+    document.body.appendChild(feedEl);
+
+    window.history.replaceState(
+      { inFeedScroll: true },
+      "",
+      "/2024/12/24/declarative-shadow-dom/",
+    );
+
+    await applyRouteFromCurrentLocation(
+      shadow,
+      shadowClaw,
+      db,
+      fStore,
+      oStore,
+      new URL("http://localhost:8888/2024/12/24/declarative-shadow-dom/"),
+    );
+
+    expect(mockApplyRoute).not.toHaveBeenCalled();
+    expect(mockParseRouteFromUrlAsync).not.toHaveBeenCalled();
+
+    feedEl.remove();
+    window.history.replaceState(null, "", "/");
+  });
+
+  it("should proceed with routing when history.state has inFeedScroll but #postsFeed is NOT in the DOM (e.g. reload of individual post)", async () => {
+    window.history.replaceState(
+      { inFeedScroll: true },
+      "",
+      "/2024/12/24/declarative-shadow-dom/",
+    );
+
+    await applyRouteFromCurrentLocation(
+      shadow,
+      shadowClaw,
+      db,
+      fStore,
+      oStore,
+      url,
+    );
+
+    expect(mockParseRouteFromUrlAsync).toHaveBeenCalledWith(
+      url,
+      oStore.activeGroupId,
+    );
+    expect(mockApplyRoute).toHaveBeenCalled();
+
+    window.history.replaceState(null, "", "/");
+  });
 });

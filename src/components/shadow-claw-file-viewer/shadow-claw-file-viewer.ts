@@ -1475,7 +1475,7 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       getIframeThemeStyleHtml(),
       themeStylesheetLink,
       customElementScriptsHtml,
-      "</head><body>",
+      `</head><body class="${getIframeHtmlClass()}">`,
       safeContent,
       "</body></html>",
     ].join("");

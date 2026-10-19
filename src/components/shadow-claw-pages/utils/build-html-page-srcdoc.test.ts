@@ -26,6 +26,7 @@ describe("buildHtmlPageSrcdoc", () => {
     expect(html).toContain("file-viewer-preview-bridge.js");
     expect(html).toContain("foo=bar");
     expect(html).not.toContain('<link rel="stylesheet" href="/theme.css">');
+    expect(html).toMatch(/<body class="(light|dark)-mode">/);
   });
 
   it("preserves approved custom elements in srcdoc", async () => {

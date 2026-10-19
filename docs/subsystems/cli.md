@@ -77,6 +77,8 @@ Builds a static site bundle into `./dist/public`.
 
 When pretty paths are prerendered (`--prerender-pages`), the build automatically extracts and patches Yoast-style SEO metadata into head tags across all generated `index.html` files (page titles formatted via `formatSeoTitle`, meta descriptions via `extractMarkdownDescription`, canonical URLs via `resolveCanonicalUrl`, and Open Graph/Twitter tags via `patchHtmlHeadMetadata`). When the content project has no configured or existing sitemap, the build generates `sitemap.xml` from `routes.json` if a canonical origin is set with `--origin` / `PAGES_ORIGIN` or `branding.siteUrl`. The generated sitemap includes the site root and unique pretty paths. See [Pages System](pages.md#pre-rendered-content-routing--pretty-paths) for sitemap precedence, routing details, and SEO metadata configuration.
 
+When syndication feeds are enabled (`feed: { enabled: true }` or `feed: true` in `shadow-claw.config.json` or via custom `feedPath`), the build automatically generates RSS 2.0 (`feed/rss.xml`), Atom 1.0 (`feed/atom/atom.xml`), and RDF 1.0 (`feed/rdf/index.xml`) feeds, companion HTML redirect helpers (`feed/index.html`, `feed/atom/index.html`, `feed/rdf/index.html`), and injects `<link rel="alternate">` autodiscovery tags into `index.html` `<head>`. Custom external feeds can also be copied directly to distribution via `feedPath`.
+
 ### `shadow-claw dev [port]` / `shadow-claw run [port]`
 
 Builds the site in development mode and starts the local server with live proxy, task scheduler, and static serving.
@@ -748,3 +750,12 @@ In `package.json`:
 - **`prepack` Hook**: Guarantees that `npm run build:prod` is executed immediately prior to `npm pack` or `npm publish`, ensuring `dist/public` contains the latest compiled production bundles.
 - **`files` Whitelist**: Packages only runtime essentials (`bin/`, `dist/`, `assets/`, `share/`, `src/`) and excludes test files, `.cache/`, and electron binaries.
 - **Dual Binaries**: Registers both `shadow-claw` (canonical) and `shadowclaw` (alias) so commands resolve regardless of hyphenation.
+
+---
+
+## Code Formatting & Incremental Tooling
+
+ShadowClaw provides two Prettier workflows for codebase maintenance:
+
+- **Full Project Format (`npm run format`)**: Formats all supported files (`.html`, `.css`, `.ts`, `.js`, `.mjs`, `.json`, `.md`) with disk caching enabled via `.cache/.prettiercache`.
+- **Fast Changed Files Format (`npm run format:changed`)**: Executed via `bin/format-changed.mjs`, this command queries `git diff` for unstaged and staged modified/added files matching prettier extensions, formatting only those files for near-instant iterations during local development.

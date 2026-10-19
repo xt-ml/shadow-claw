@@ -12,6 +12,7 @@ import {
   applyBasePath,
   buildRoutePath,
   getFileRouteDirPath,
+  isFeedRoute,
   isPossibleAppRoute,
   resolveHrefAgainstRoute,
 } from "../../core/app-routes.js";
@@ -532,10 +533,15 @@ export class ShadowClawPages extends ShadowClawElement {
 
     const isInternal =
       resolved.origin === window.location.origin &&
+      !isFeedRoute(resolved.pathname) &&
       (isPossibleAppRoute(resolved.pathname) ||
         Boolean(resolveWorkspaceLinkPath(msg.href, basePath, groupId)));
 
     if (!isInternal) {
+      if (isFeedRoute(resolved.pathname)) {
+        window.location.assign(resolved.href);
+        return;
+      }
       window.open(resolved.href, "_blank", "noopener,noreferrer");
 
       return;

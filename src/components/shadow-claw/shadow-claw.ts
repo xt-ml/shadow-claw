@@ -101,6 +101,11 @@ export class ShadowClaw extends ShadowClawElement {
       throw new Error("shadowRoot not found");
     }
 
+    const initialLocationUrl =
+      typeof window !== "undefined" && window.location?.href
+        ? new URL(window.location.href)
+        : null;
+
     await yieldToMain();
 
     try {
@@ -187,7 +192,7 @@ export class ShadowClaw extends ShadowClawElement {
         this.db,
         fileViewerStore,
         orchestratorStore,
-        new URL(window.location.href),
+        initialLocationUrl || new URL(window.location.href),
       );
 
       await processPeerQueryParam(

@@ -384,10 +384,45 @@ export function isNonPageFilePath(path: string | undefined): boolean {
   return !PAGE_EXTENSIONS.has(ext);
 }
 
+export function isFeedRoute(pathname: string | undefined): boolean {
+  if (!pathname) {
+    return false;
+  }
+
+  const clean = pathname.replace(/^\/+|\/+$/g, "").toLowerCase();
+  if (
+    clean === "feed" ||
+    clean.startsWith("feed/") ||
+    clean.endsWith("/feed") ||
+    clean.includes("/feed/")
+  ) {
+    const filename = clean.split("/").pop() || "";
+    if (
+      filename.includes(".") &&
+      !filename.endsWith(".xml") &&
+      !filename.endsWith(".html")
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
+  const filename = clean.split("/").pop() || "";
+  if (filename.endsWith(".xml")) {
+    return true;
+  }
+
+  return false;
+}
+
 export function parseRouteFromUrl(
   url: URL,
   fallbackGroupId?: string,
 ): ShadowClawAppRoute | null {
+  if (isFeedRoute(url.pathname)) {
+    return null;
+  }
   let pathname = url.pathname;
   const basePath = getAppBasePath();
 
@@ -502,6 +537,10 @@ export function parseRouteFromUrl(
 }
 
 export function isPossibleAppRoute(pathname: string): boolean {
+  if (isFeedRoute(pathname)) {
+    return false;
+  }
+
   let relativePath = pathname;
   const basePath = getAppBasePath();
 
@@ -538,6 +577,10 @@ export async function parseRouteFromUrlAsync(
   url: URL,
   fallbackGroupId?: string,
 ): Promise<ShadowClawAppRoute | null> {
+  if (isFeedRoute(url.pathname)) {
+    return null;
+  }
+
   const syncRoute = parseRouteFromUrl(url, fallbackGroupId);
   if (syncRoute) return syncRoute;
 

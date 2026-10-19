@@ -6,8 +6,10 @@ import {
   getDeploymentNamespace,
   getFileRouteDirPath,
   getWorkspaceRouteRequestPath,
+  isFeedRoute,
   isPossibleAppRoute,
   parseRouteFromUrl,
+  parseRouteFromUrlAsync,
   resolveHrefAgainstRoute,
 } from "./app-routes.js";
 
@@ -704,6 +706,80 @@ describe("app-routes", () => {
         path: "posts/2021-04-18-using-open.md",
         anchor: undefined,
       });
+    });
+  });
+
+  describe("feed routes and syndication endpoints", () => {
+    it("identifies feed routes and syndication endpoints in isFeedRoute", () => {
+      expect(isFeedRoute("/feed")).toBe(true);
+      expect(isFeedRoute("/feed/")).toBe(true);
+      expect(isFeedRoute("/feed/rss.xml")).toBe(true);
+      expect(isFeedRoute("/feed/index.xml")).toBe(true);
+      expect(isFeedRoute("/feed/index.html")).toBe(true);
+      expect(isFeedRoute("/feed/atom")).toBe(true);
+      expect(isFeedRoute("/feed/atom/")).toBe(true);
+      expect(isFeedRoute("/feed/atom/atom.xml")).toBe(true);
+      expect(isFeedRoute("/feed/atom/index.xml")).toBe(true);
+      expect(isFeedRoute("/feed/rdf")).toBe(true);
+      expect(isFeedRoute("/feed/rdf/")).toBe(true);
+      expect(isFeedRoute("/feed/rdf/index.xml")).toBe(true);
+      expect(isFeedRoute("/sitemap.xml")).toBe(true);
+      expect(isFeedRoute("/feed.xml")).toBe(true);
+      expect(isFeedRoute("/atom.xml")).toBe(true);
+      expect(isFeedRoute("/rss.xml")).toBe(true);
+
+      // Non-feed routes
+      expect(isFeedRoute("/")).toBe(false);
+      expect(isFeedRoute("/about")).toBe(false);
+      expect(isFeedRoute("/portfolio")).toBe(false);
+      expect(isFeedRoute("/2026/06/30/on-developing-loops/")).toBe(false);
+      expect(isFeedRoute("/pages/main/about.md")).toBe(false);
+      expect(isFeedRoute(undefined)).toBe(false);
+    });
+
+    it("excludes feed routes from isPossibleAppRoute", () => {
+      expect(isPossibleAppRoute("/feed")).toBe(false);
+      expect(isPossibleAppRoute("/feed/")).toBe(false);
+      expect(isPossibleAppRoute("/feed/rss.xml")).toBe(false);
+      expect(isPossibleAppRoute("/feed/atom/")).toBe(false);
+      expect(isPossibleAppRoute("/feed/atom/atom.xml")).toBe(false);
+      expect(isPossibleAppRoute("/feed/rdf/")).toBe(false);
+      expect(isPossibleAppRoute("/feed/rdf/index.xml")).toBe(false);
+      expect(isPossibleAppRoute("/sitemap.xml")).toBe(false);
+    });
+
+    it("returns null in parseRouteFromUrl and parseRouteFromUrlAsync for feed URLs", async () => {
+      expect(
+        parseRouteFromUrl(new URL("http://localhost:8888/feed/")),
+      ).toBeNull();
+      expect(
+        parseRouteFromUrl(new URL("http://localhost:8888/feed/rss.xml")),
+      ).toBeNull();
+      expect(
+        parseRouteFromUrl(new URL("http://localhost:8888/feed/atom/")),
+      ).toBeNull();
+      expect(
+        parseRouteFromUrl(new URL("http://localhost:8888/feed/rdf/")),
+      ).toBeNull();
+
+      expect(
+        await parseRouteFromUrlAsync(new URL("http://localhost:8888/feed/")),
+      ).toBeNull();
+      expect(
+        await parseRouteFromUrlAsync(
+          new URL("http://localhost:8888/feed/rss.xml"),
+        ),
+      ).toBeNull();
+      expect(
+        await parseRouteFromUrlAsync(
+          new URL("http://localhost:8888/feed/atom/atom.xml"),
+        ),
+      ).toBeNull();
+      expect(
+        await parseRouteFromUrlAsync(
+          new URL("http://localhost:8888/feed/rdf/index.xml"),
+        ),
+      ).toBeNull();
     });
   });
 });

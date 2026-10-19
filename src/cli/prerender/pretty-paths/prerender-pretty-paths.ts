@@ -377,6 +377,15 @@ export async function prerenderPrettyPaths(
       continue;
     }
 
+    const cleanPretty = trimSlashes(routeDef.prettyPath);
+    if (
+      cleanPretty === "feed" ||
+      cleanPretty.startsWith("feed/") ||
+      routeKey.endsWith(".xml")
+    ) {
+      continue;
+    }
+
     const expectedDisplayPath = extractDisplayPathFromRouteKey(routeKey);
     let matchedPage = pageSourcesWithContent.find(
       (p) => p.displayPath === expectedDisplayPath,

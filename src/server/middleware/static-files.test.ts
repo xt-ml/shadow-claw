@@ -593,4 +593,123 @@ describe("static-files-middleware", () => {
       expect(next).toHaveBeenCalled();
     }
   });
+
+  describe("feed serving", () => {
+    it("serves /feed/ with application/rss+xml Content-Type when rss.xml exists", async () => {
+      await register();
+      const middleware = app.use.mock.calls[1][0];
+
+      const req = { originalUrl: "/feed/", url: "/feed/" };
+      const res = { setHeader: jest.fn(), sendFile: jest.fn() };
+      const next = jest.fn();
+
+      fsMock.stat.mockImplementation((p: string, cb: any) => {
+        if (p === "/root/feed" || p === "/root/feed/") {
+          cb(null, { isDirectory: () => true });
+        } else {
+          cb(new Error("ENOENT"));
+        }
+      });
+      fsMock.existsSync.mockImplementation((p: string) =>
+        p.endsWith("/feed/rss.xml"),
+      );
+
+      middleware(req, res, next);
+
+      expect(res.setHeader).toHaveBeenCalledWith(
+        "Content-Type",
+        "application/rss+xml; charset=UTF-8",
+      );
+      expect(res.sendFile).toHaveBeenCalledWith(
+        expect.stringContaining("/root/feed/rss.xml"),
+      );
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it("serves /feed/atom/ with application/atom+xml Content-Type when atom.xml exists", async () => {
+      await register();
+      const middleware = app.use.mock.calls[1][0];
+
+      const req = { originalUrl: "/feed/atom/", url: "/feed/atom/" };
+      const res = { setHeader: jest.fn(), sendFile: jest.fn() };
+      const next = jest.fn();
+
+      fsMock.stat.mockImplementation((p: string, cb: any) => {
+        if (p === "/root/feed/atom" || p === "/root/feed/atom/") {
+          cb(null, { isDirectory: () => true });
+        } else {
+          cb(new Error("ENOENT"));
+        }
+      });
+      fsMock.existsSync.mockImplementation((p: string) =>
+        p.endsWith("/feed/atom/atom.xml"),
+      );
+
+      middleware(req, res, next);
+
+      expect(res.setHeader).toHaveBeenCalledWith(
+        "Content-Type",
+        "application/atom+xml; charset=UTF-8",
+      );
+      expect(res.sendFile).toHaveBeenCalledWith(
+        expect.stringContaining("/root/feed/atom/atom.xml"),
+      );
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it("serves /feed/rdf/ with application/rdf+xml Content-Type when index.xml exists", async () => {
+      await register();
+      const middleware = app.use.mock.calls[1][0];
+
+      const req = { originalUrl: "/feed/rdf/", url: "/feed/rdf/" };
+      const res = { setHeader: jest.fn(), sendFile: jest.fn() };
+      const next = jest.fn();
+
+      fsMock.stat.mockImplementation((p: string, cb: any) => {
+        if (p === "/root/feed/rdf" || p === "/root/feed/rdf/") {
+          cb(null, { isDirectory: () => true });
+        } else {
+          cb(new Error("ENOENT"));
+        }
+      });
+      fsMock.existsSync.mockImplementation((p: string) =>
+        p.endsWith("/feed/rdf/index.xml"),
+      );
+
+      middleware(req, res, next);
+
+      expect(res.setHeader).toHaveBeenCalledWith(
+        "Content-Type",
+        "application/rdf+xml; charset=UTF-8",
+      );
+      expect(res.sendFile).toHaveBeenCalledWith(
+        expect.stringContaining("/root/feed/rdf/index.xml"),
+      );
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it("serves explicit /feed/rss.xml request with application/rss+xml Content-Type", async () => {
+      await register();
+      const middleware = app.use.mock.calls[1][0];
+
+      const req = { originalUrl: "/feed/rss.xml", url: "/feed/rss.xml" };
+      const res = { setHeader: jest.fn(), sendFile: jest.fn() };
+      const next = jest.fn();
+
+      fsMock.stat.mockImplementation((_p: string, cb: any) => {
+        cb(null, { isDirectory: () => false });
+      });
+
+      middleware(req, res, next);
+
+      expect(res.setHeader).toHaveBeenCalledWith(
+        "Content-Type",
+        "application/rss+xml; charset=UTF-8",
+      );
+      expect(res.sendFile).toHaveBeenCalledWith(
+        expect.stringContaining("/root/feed/rss.xml"),
+      );
+      expect(next).not.toHaveBeenCalled();
+    });
+  });
 });

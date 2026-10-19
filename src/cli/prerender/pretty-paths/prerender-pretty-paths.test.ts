@@ -1235,4 +1235,80 @@ Body content paragraph for auto description.`;
     // Unrecognized id has no script tag injected and does not cause a failure
     expect(pageHtml).not.toMatch(/<script\b[^>]*unrecognized-missing-id/);
   });
+
+  it("skips feed and .xml routes from DSD prerendering", async () => {
+    const publicDir = path.join(tmpDir, "dist/public");
+    const routesPath = path.join(tmpDir, "routes.json");
+    const sourcePath = path.join(tmpDir, "pages/main");
+    const indexPath = path.join(publicDir, "index.html");
+
+    await mkdir(publicDir, { recursive: true });
+    await mkdir(sourcePath, { recursive: true });
+    await mkdir(path.join(publicDir, "components/shadow-claw"), {
+      recursive: true,
+    });
+    await mkdir(path.join(publicDir, "components/shadow-claw-pages"), {
+      recursive: true,
+    });
+    await mkdir(path.join(publicDir, "components/shadow-claw-page-header"), {
+      recursive: true,
+    });
+
+    await writeFile(
+      indexPath,
+      "<!doctype html><html><head><title>Base</title></head><body><shadow-claw></shadow-claw></body></html>",
+      "utf8",
+    );
+    await writeFile(
+      path.join(publicDir, "components/shadow-claw/shadow-claw.html"),
+      '<template><div class="app"></div></template>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(
+        publicDir,
+        "components/shadow-claw-pages/shadow-claw-pages.html",
+      ),
+      '<template><div class="pages"></div></template>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(
+        publicDir,
+        "components/shadow-claw-page-header/shadow-claw-page-header.html",
+      ),
+      "<template><header></header></template>",
+      "utf8",
+    );
+
+    const routes = {
+      routes: {
+        "/pages/main/article.md": { prettyPath: "/article/" },
+        "/feed/rss.xml": { prettyPath: "/feed/" },
+        "/feed/atom/atom.xml": { prettyPath: "/feed/atom/" },
+        "/feed/rdf/index.xml": { prettyPath: "/feed/rdf/" },
+      },
+    };
+    await writeFile(routesPath, JSON.stringify(routes), "utf8");
+
+    await writeFile(
+      path.join(sourcePath, "article.md"),
+      "# Article\n\nContent",
+      "utf8",
+    );
+
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const result = await prerenderPrettyPaths({
+      publicDir,
+      routesPath,
+      sourcePath,
+      indexPath,
+      prerenderPages: 1,
+    });
+    warnSpy.mockRestore();
+
+    expect(result.count).toBe(1);
+    expect(result.generatedPaths).toContain("article/index.html");
+    expect(result.generatedPaths).not.toContain("feed/index.html");
+  });
 });

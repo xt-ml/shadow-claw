@@ -27,6 +27,9 @@
     "allowList": [],
     "denyList": []
   },
+  "feed": {
+    "enabled": false
+  },
   "settings": {
     "defaultToolsProfile": "__builtin_default",
     "overridePrerenderSkeleton": false

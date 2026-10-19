@@ -1,3 +1,4 @@
+import { isFeedRoute } from "../../../core/app-routes.js";
 import { Themes } from "../../../stores/theme.js";
 import { applyRouteFromCurrentLocation } from "./apply-route-from-current-location.js";
 import { recordHistoryReplaceState } from "./get-route.js";
@@ -150,6 +151,53 @@ export function bindEventListeners(
     matchMedia.addEventListener("change", handleMediaQuery);
 
     initSidebarResize(shadow, shadowClaw, sidebar as HTMLElement, db);
+  }
+
+  // Intercept clicks on feed links (e.g. RSS Feed in the sidebar) to ensure
+  // they navigate directly like browsing to the URL (full-page XML view).
+  if (typeof (shadowClaw as any)?.addEventListener === "function") {
+    shadowClaw.addEventListener("click", (e: Event) => {
+      const path = typeof e.composedPath === "function" ? e.composedPath() : [];
+      let link: HTMLAnchorElement | null = null;
+      for (const el of path) {
+        if (
+          el instanceof HTMLAnchorElement ||
+          (el && (el as any).tagName === "A" && (el as any).href)
+        ) {
+          link = el as HTMLAnchorElement;
+          break;
+        }
+      }
+      if (!link && (e.target as HTMLElement)?.closest) {
+        link = (e.target as HTMLElement).closest(
+          "a[href]",
+        ) as HTMLAnchorElement | null;
+      }
+      const origin = win.location?.origin || window.location?.origin;
+      if (link && origin) {
+        let resolved: URL | null = null;
+        try {
+          const rawHref =
+            typeof link.getAttribute === "function"
+              ? link.getAttribute("href") || link.href
+              : link.href;
+          resolved = new URL(rawHref, origin);
+        } catch {}
+
+        if (
+          resolved &&
+          resolved.origin === origin &&
+          isFeedRoute(resolved.pathname)
+        ) {
+          e.preventDefault();
+          if (typeof win.location?.assign === "function") {
+            win.location.assign(resolved.href);
+          } else if (typeof window.location?.assign === "function") {
+            window.location.assign(resolved.href);
+          }
+        }
+      }
+    });
   }
 
   // Settings button

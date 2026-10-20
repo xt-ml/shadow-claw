@@ -1,6 +1,3 @@
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
-
 export interface ImageDimensions {
   width: number;
   height: number;
@@ -142,13 +139,32 @@ export function getImageDimensionsFromBuffer(
 
 /**
  * Asynchronously reads the image file header and returns its dimensions.
+ * Uses process.getBuiltinModule in Node environments to avoid static bundler
+ * import resolution errors in browser client builds.
  */
 export async function getImageFileDimensions(
   filePath: string,
 ): Promise<ImageDimensions | null> {
   try {
-    // Reading 4096 bytes is sufficient for all image headers (JPEG, PNG, GIF, WebP, SVG)
-    const fileBuffer = await readFile(resolve(filePath));
+    let readFileFn: ((path: string) => Promise<Buffer>) | null = null;
+    let resolveFn: ((path: string) => string) | null = null;
+
+    if (
+      typeof process !== "undefined" &&
+      typeof (process as any).getBuiltinModule === "function"
+    ) {
+      const fsMod = (process as any).getBuiltinModule("node:fs/promises");
+      const pathMod = (process as any).getBuiltinModule("node:path");
+      readFileFn = fsMod?.readFile;
+      resolveFn = pathMod?.resolve;
+    }
+
+    if (!readFileFn) {
+      return null;
+    }
+
+    const resolvedPath = resolveFn ? resolveFn(filePath) : filePath;
+    const fileBuffer = await readFileFn(resolvedPath);
     return getImageDimensionsFromBuffer(fileBuffer);
   } catch {
     return null;

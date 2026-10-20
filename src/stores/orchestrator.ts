@@ -1565,21 +1565,32 @@ export class OrchestratorStore {
     }
     await yieldToMain();
 
+    const historyState =
+      typeof window !== "undefined" && window.history
+        ? (window.history.state as any)
+        : null;
+    const isFeedScroll = !!(
+      historyState?.inFeedScroll ||
+      historyState?.scrollSpy ||
+      historyState?.suppressRouter
+    );
+
     const isRootLocation =
-      typeof window !== "undefined" &&
-      window.location &&
-      (() => {
-        let pathname = window.location.pathname || "/";
-        const basePath = getAppBasePath();
-        if (basePath !== "/" && pathname.startsWith(basePath)) {
-          pathname = "/" + pathname.slice(basePath.length);
-        }
-        const parts = pathname.split("/").filter(Boolean);
-        return (
-          parts.length === 0 ||
-          (parts.length === 1 && parts[0] === "index.html")
-        );
-      })();
+      isFeedScroll ||
+      (typeof window !== "undefined" &&
+        window.location &&
+        (() => {
+          let pathname = window.location.pathname || "/";
+          const basePath = getAppBasePath();
+          if (basePath !== "/" && pathname.startsWith(basePath)) {
+            pathname = "/" + pathname.slice(basePath.length);
+          }
+          const parts = pathname.split("/").filter(Boolean);
+          return (
+            parts.length === 0 ||
+            (parts.length === 1 && parts[0] === "index.html")
+          );
+        })());
 
     let activePinnedSet = false;
     if (

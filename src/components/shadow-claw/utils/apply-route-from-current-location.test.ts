@@ -343,6 +343,45 @@ describe("applyRouteFromCurrentLocation", () => {
     window.history.replaceState(null, "", "/");
   });
 
+  it("should bypass routing when history.state has inFeedScroll and #postsFeed is inside shadow-claw-pages shadow root", async () => {
+    const mockFeedEl = document.createElement("div");
+    mockFeedEl.id = "postsFeed";
+
+    const mockPages = {
+      shadowRoot: {
+        querySelector: (sel: string) =>
+          sel === "#postsFeed" ? mockFeedEl : null,
+      },
+    };
+
+    const shadowWithPages = {
+      querySelector: (sel: string) => {
+        if (sel === "shadow-claw-pages") return mockPages;
+        return null;
+      },
+    } as unknown as ShadowRoot;
+
+    window.history.replaceState(
+      { inFeedScroll: true },
+      "",
+      "/2024/12/24/declarative-shadow-dom/",
+    );
+
+    await applyRouteFromCurrentLocation(
+      shadowWithPages,
+      shadowClaw,
+      db,
+      fStore,
+      oStore,
+      new URL("http://localhost:8888/2024/12/24/declarative-shadow-dom/"),
+    );
+
+    expect(mockApplyRoute).not.toHaveBeenCalled();
+    expect(mockParseRouteFromUrlAsync).not.toHaveBeenCalled();
+
+    window.history.replaceState(null, "", "/");
+  });
+
   it("should proceed with routing when history.state has inFeedScroll but #postsFeed is NOT in the DOM (e.g. reload of individual post)", async () => {
     window.history.replaceState(
       { inFeedScroll: true },

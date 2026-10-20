@@ -29,9 +29,20 @@ export async function applyRouteFromCurrentLocation(
     typeof document !== "undefined" &&
     (!!document.getElementById("postsFeed") ||
       !!shadow?.querySelector("#postsFeed") ||
+      !!(
+        shadow?.querySelector("shadow-claw-pages") as any
+      )?.shadowRoot?.querySelector("#postsFeed") ||
       !!document
         .querySelector("shadow-claw")
-        ?.shadowRoot?.querySelector("#postsFeed"));
+        ?.shadowRoot?.querySelector("#postsFeed") ||
+      !!(
+        document
+          .querySelector("shadow-claw")
+          ?.shadowRoot?.querySelector("shadow-claw-pages") as any
+      )?.shadowRoot?.querySelector("#postsFeed") ||
+      !!(
+        document.querySelector("shadow-claw-pages") as any
+      )?.shadowRoot?.querySelector("#postsFeed"));
 
   if (
     (historyState?.inFeedScroll ||

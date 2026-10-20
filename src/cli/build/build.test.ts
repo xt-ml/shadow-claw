@@ -474,10 +474,13 @@ describe("build without and with pages", () => {
   });
 
   it("builds in-repo with isProduction, copyAllAssets, and prerenderMainMemory false", async () => {
+    const tempInRepoRoot = await mkdtemp(
+      path.join(os.tmpdir(), "shadow-claw-in-repo-prod-"),
+    );
     const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
     try {
       await runConsumerBuild({
-        contentRoot: projectRoot,
+        contentRoot: tempInRepoRoot,
         toolchainRoot: projectRoot,
         isProduction: true,
         copyAllAssets: true,
@@ -489,15 +492,16 @@ describe("build without and with pages", () => {
       });
 
       const indexHtml = await readFile(
-        path.join(projectRoot, "dist/public/index.html"),
+        path.join(tempInRepoRoot, "dist/public/index.html"),
         "utf8",
       );
       expect(indexHtml).toContain('<base href="/shadow-claw/"');
       expect(
-        fs.existsSync(path.join(projectRoot, "dist/public/.nojekyll")),
+        fs.existsSync(path.join(tempInRepoRoot, "dist/public/.nojekyll")),
       ).toBe(true);
     } finally {
       logSpy.mockRestore();
+      await rm(tempInRepoRoot, { recursive: true, force: true });
     }
   });
 });

@@ -3665,5 +3665,62 @@ describe("OrchestratorStore", () => {
         script.remove();
       }
     });
+
+    it("pins defaultPinnedPage when history.state has inFeedScroll even if pathname is non-root", async () => {
+      const configElement = document.createElement("script");
+      configElement.id = "shadow-claw-site-config";
+      configElement.type = "application/json";
+      configElement.textContent = JSON.stringify({
+        pages: {
+          defaultPinnedPage: "/pages/main/index.html",
+        },
+      });
+      document.head.appendChild(configElement);
+
+      const dbGetConfig = await import("../db/get-config.js");
+      const getConfigSpy = jest
+        .spyOn(dbGetConfig, "getConfig")
+        .mockImplementation(async (_db: any, key: string) => {
+          if (key === CONFIG_KEYS.LAST_SELECTED_PINNED_PAGE) {
+            return JSON.stringify({
+              groupId: "br:main",
+              path: "posts/last-visited.md",
+            });
+          }
+          return undefined;
+        });
+
+      try {
+        window.history.replaceState(
+          { inFeedScroll: true },
+          "",
+          "/2026/06/30/on-developing-loops/",
+        );
+
+        const store = new OrchestratorStore();
+        const orch: any = {
+          provider: "openrouter",
+          model: "openai/gpt-4o",
+          events: { on: jest.fn() },
+        };
+        const mockDb: any = {};
+
+        jest.spyOn(store, "loadHistory").mockResolvedValue(undefined as any);
+        jest.spyOn(store, "loadTasks").mockResolvedValue(undefined as any);
+        jest.spyOn(store, "loadFiles").mockResolvedValue(undefined as any);
+
+        await store.init(mockDb, orch);
+
+        // When inFeedScroll is true, activePinnedPage MUST be defaultPinnedPage, not the last visited page!
+        expect(store.activePinnedPage).toEqual({
+          groupId: "br:main",
+          path: "index.html",
+        });
+      } finally {
+        configElement.remove();
+        getConfigSpy.mockRestore();
+        window.history.replaceState(null, "", "/");
+      }
+    });
   });
 });

@@ -1449,14 +1449,19 @@ dialog.chat__prompt-api-dialog::backdrop {
 }
 
 .chat__prompt-api-secondary-btn {
+  align-items: center;
   background-color: transparent;
   border: 0.0625rem solid var(--shadow-claw-border-color);
   border-radius: var(--shadow-claw-radius-pill, 62.5rem);
   color: var(--shadow-claw-text-secondary);
   cursor: pointer;
+  display: inline-flex;
   font-family: inherit;
   font-size: 0.8125rem;
   font-weight: 500;
+  justify-content: center;
+  line-height: 1.25rem;
+  min-height: 2.25rem;
   padding: 0.5rem 1rem;
   transition:
     background-color 0.15s,
@@ -1473,16 +1478,20 @@ dialog.chat__prompt-api-dialog::backdrop {
 }
 
 .chat__prompt-api-confirm-btn {
+  align-items: center;
   background-color: var(--shadow-claw-accent-primary);
-  border: none;
+  border: 0.0625rem solid transparent;
   border-radius: var(--shadow-claw-radius-pill, 62.5rem);
   color: var(--shadow-claw-on-primary, #ffffff);
   cursor: pointer;
+  display: inline-flex;
   font-family: inherit;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
   font-weight: 600;
-  margin-left: auto;
-  padding: 0.625rem 1.25rem;
+  justify-content: center;
+  line-height: 1.25rem;
+  min-height: 2.25rem;
+  padding: 0.5rem 1.25rem;
   transition:
     background-color 0.15s,
     transform 0.15s,

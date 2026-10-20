@@ -25,7 +25,8 @@
   },
   "pages": {
     "allowList": [],
-    "denyList": []
+    "denyList": [],
+    "iframe": true
   },
   "feed": {
     "enabled": false

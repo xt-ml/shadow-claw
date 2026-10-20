@@ -44,7 +44,18 @@ export function buildCustomElementScriptTags(
           : ' type="module"';
         const asyncAttr = entry.async ? " async" : "";
         const deferAttr = entry.defer ? " defer" : "";
-        return `    <script${type}${asyncAttr}${deferAttr} src="${escapeHtml(src)}"></script>`;
+        const tags = [
+          `    <script${type}${asyncAttr}${deferAttr} src="${escapeHtml(src)}"></script>`,
+        ];
+        // Emit a companion inline module that calls m.init() so that scripts
+        // declaring hasInit:true (like block-garden-adapter.js) actually run
+        // their initialization and install BroadcastChannel bridges.
+        if (entry.hasInit) {
+          tags.push(
+            `    <script type="module">import("${escapeHtml(src)}").then((m) => { try { if (typeof m?.init === "function") m.init(); } catch (e) { console.error("[ShadowClaw] Error executing init for ${escapeHtml(src)}", e); } }).catch(() => {});</script>`,
+          );
+        }
+        return tags.join("\n");
       }
 
       return "";

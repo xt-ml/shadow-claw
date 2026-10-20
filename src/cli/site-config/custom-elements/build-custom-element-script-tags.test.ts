@@ -17,11 +17,30 @@ describe("buildCustomElementScriptTags", () => {
       (s) => s.replace(/"/g, "&quot;"),
     );
 
-    expect(tags).toContain('<script type="module" src="a.mjs"></script>');
+    expect(tags).toContain('<script type="module" src="/a.mjs"></script>');
     expect(tags).toContain(
-      '<script type="module&quot;onload=&quot;x" async defer src="b.mjs"></script>',
+      '<script type="module&quot;onload=&quot;x" async defer src="/b.mjs"></script>',
     );
-    expect(tags).toContain('<script type="module" src="c.mjs"></script>');
+    expect(tags).toContain('<script type="module" src="/c.mjs"></script>');
+  });
+
+  it("emits a companion init script for hasInit:true entries", () => {
+    const tags = buildCustomElementScriptTags(
+      [
+        {
+          src: ".agents/scripts/main/block-garden-adapter.js",
+          hasInit: true,
+        },
+      ],
+      (s) => s,
+    );
+    expect(tags).toContain(
+      '<script type="module" src="/.agents/scripts/main/block-garden-adapter.js"></script>',
+    );
+    expect(tags).toContain(
+      'import("/.agents/scripts/main/block-garden-adapter.js")',
+    );
+    expect(tags).toContain("m.init()");
   });
 
   it("returns empty output for non-array, empty, and invalid entries", () => {

@@ -73,6 +73,7 @@ import { handleWindowFocusEvent } from "./utils/handle-window-focus-event.js";
 import { IframeBroadcastProxy } from "./utils/iframe-broadcast-proxy.js";
 import { isNavigationSuppressed } from "./utils/is-navigation-suppressed.js";
 import { isHtmlPath, isMarkdownPath } from "./utils/page-file-types.js";
+import { shouldPageRenderInIframe } from "./utils/should-page-render-in-iframe.js";
 import { pageRefKey } from "./utils/page-ref-key.js";
 import { parseIframeMessage } from "./utils/parse-iframe-message.js";
 import { readImageAsDataUrl } from "./utils/read-image-as-data-url.js";
@@ -1291,7 +1292,7 @@ export class ShadowClawPages extends ShadowClawElement {
       this.renderedKey === pageKey &&
       this.dsdInitialPath &&
       matchesPagePath(this.dsdInitialPath, selectedPage.path) &&
-      (isMarkdownPath(selectedPage.path) || isHtmlPath(selectedPage.path)) &&
+      isMarkdownPath(selectedPage.path) &&
       rendered.children.length > 0 &&
       !rendered.hidden;
 
@@ -1309,10 +1310,7 @@ export class ShadowClawPages extends ShadowClawElement {
       rendered.children.length > 0 &&
       !rendered.hidden;
 
-    if (
-      hasDsdSeed &&
-      (isMarkdownPath(selectedPage.path) || isHtmlPath(selectedPage.path))
-    ) {
+    if (hasDsdSeed && isMarkdownPath(selectedPage.path)) {
       this.renderedKey = pageKey;
       empty.hidden = true;
       rendered.hidden = false;
@@ -1400,6 +1398,18 @@ export class ShadowClawPages extends ShadowClawElement {
 
       const pageKey = `${selectedPage.groupId}:${selectedPage.path}`;
 
+      const parsedFrontmatter = splitFrontmatter(content);
+      const newData =
+        Object.keys(parsedFrontmatter.data).length > 0
+          ? parsedFrontmatter.data
+          : null;
+      const currentData = this.pageFrontmatter.get();
+      if (JSON.stringify(currentData) !== JSON.stringify(newData)) {
+        this.pageFrontmatter.set(newData);
+      }
+
+      const useIframe = shouldPageRenderInIframe(selectedPage.path, newData);
+
       // Check if DSD SSR content is already present for this initial page
       const hasDsdSeed =
         !this.renderedKey &&
@@ -1410,20 +1420,11 @@ export class ShadowClawPages extends ShadowClawElement {
 
       if (
         hasDsdSeed &&
-        (isMarkdownPath(selectedPage.path) || isHtmlPath(selectedPage.path))
+        (isMarkdownPath(selectedPage.path) ||
+          (isHtmlPath(selectedPage.path) && !useIframe))
       ) {
         this.renderedKey = pageKey;
         this.renderedContent = content;
-
-        const parsedFrontmatter = splitFrontmatter(content);
-        const newData =
-          Object.keys(parsedFrontmatter.data).length > 0
-            ? parsedFrontmatter.data
-            : null;
-        const currentData = this.pageFrontmatter.get();
-        if (JSON.stringify(currentData) !== JSON.stringify(newData)) {
-          this.pageFrontmatter.set(newData);
-        }
         if (isMarkdownPath(selectedPage.path)) {
           const renderFrontmatter = await resolveFrontmatterToggle(
             this.db,
@@ -1439,29 +1440,66 @@ export class ShadowClawPages extends ShadowClawElement {
         removePreviewIframe(root);
         this.showNavButtonsTemporarily(2500);
 
+        // Even when reusing the DSD pre-rendered shell, autoload scripts with
+        // hasInit:true (e.g. block-garden-adapter.js) must still be loaded and
+        // initialized so that their BroadcastChannel bridges are installed.
+        // Without this, /fireworks and other slash commands time-out with
+        // "Live 3D World Not Connected" because the BroadcastChannel listener
+        // is never opened.
+        if (isHtmlPath(selectedPage.path)) {
+          const dsdScriptDescriptors =
+            getApprovedCustomElementScriptDescriptors();
+          const autoloadInitScripts = dsdScriptDescriptors.filter(
+            (d) => (d.global === true || d.autoload === true) && d.hasInit,
+          );
+          await Promise.all(
+            autoloadInitScripts.map(async (desc) => {
+              const isExternal =
+                desc.src.startsWith("http://") ||
+                desc.src.startsWith("https://") ||
+                desc.src.startsWith("//");
+              const resolvedSrc = isExternal
+                ? desc.src
+                : applyBasePath(
+                    desc.src.startsWith("/")
+                      ? desc.src
+                      : `/${desc.src.replace(/^pages\/main\//, "")}`,
+                  );
+              const importUrl = isExternal
+                ? desc.src
+                : new URL(resolvedSrc, window.location.origin).href;
+              try {
+                await loadApprovedCustomElementScript(resolvedSrc);
+              } catch {}
+              try {
+                const mod = await import(/* @vite-ignore */ importUrl);
+                if (typeof mod?.cleanup === "function") {
+                  try {
+                    await mod.cleanup();
+                  } catch {}
+                }
+                if (typeof mod?.init === "function") {
+                  await mod.init(rendered);
+                }
+              } catch (e) {
+                console.error(
+                  "[ShadowClaw] Error executing init for " + desc.src,
+                  e,
+                );
+              }
+            }),
+          );
+        }
+
         return;
       }
 
       if (isHtmlPath(selectedPage.path)) {
-        const parsedFrontmatter = splitFrontmatter(content);
-        const newData =
-          Object.keys(parsedFrontmatter.data).length > 0
-            ? parsedFrontmatter.data
-            : null;
-
-        const currentData = this.pageFrontmatter.get();
-        if (JSON.stringify(currentData) !== JSON.stringify(newData)) {
-          this.pageFrontmatter.set(newData);
-        }
-
-        const hasFrontmatter = newData !== null;
-        const isInitialDsdPage = Boolean(
-          this.dsdInitialPath &&
-          matchesPagePath(this.dsdInitialPath, selectedPage.path),
-        );
-        const isRootIndex = matchesPagePath(selectedPage.path, "index.html");
-
-        if (hasFrontmatter || isInitialDsdPage || isRootIndex) {
+        if (!useIframe) {
+          const isInitialDsdPage = Boolean(
+            this.dsdInitialPath &&
+            matchesPagePath(this.dsdInitialPath, selectedPage.path),
+          );
           if (
             this.renderedKey === pageKey &&
             this.renderedContent === content &&
@@ -1518,8 +1556,22 @@ export class ShadowClawPages extends ShadowClawElement {
 
           await Promise.all(
             resolvedScripts.map(async (desc) => {
+              // Normalize local paths (e.g. ".agents/...") to root-relative URLs
+              // so loadApprovedCustomElementScript passes isSafeCustomElementSource
+              // and the browser <script> src resolves correctly from any route.
+              const isExternal =
+                desc.src.startsWith("http://") ||
+                desc.src.startsWith("https://") ||
+                desc.src.startsWith("//");
+              const resolvedSrc = isExternal
+                ? desc.src
+                : applyBasePath(
+                    desc.src.startsWith("/")
+                      ? desc.src
+                      : `/${desc.src.replace(/^pages\/main\//, "")}`,
+                  );
               try {
-                await loadApprovedCustomElementScript(desc.src);
+                await loadApprovedCustomElementScript(resolvedSrc);
               } catch (err) {
                 console.warn(
                   `[ShadowClaw] Error loading custom element script ${desc.src}:`,
@@ -1560,8 +1612,26 @@ export class ShadowClawPages extends ShadowClawElement {
           await Promise.all(
             resolvedScripts.map(async (desc) => {
               if (desc.hasInit) {
+                // Build a proper absolute URL so the browser ESM dynamic import
+                // can resolve .agents/... paths. A bare specifier like
+                // ".agents/scripts/main/block-garden-adapter.js" is not a valid
+                // module specifier and will throw TypeError in Chromium.
+                const isExternal =
+                  desc.src.startsWith("http://") ||
+                  desc.src.startsWith("https://") ||
+                  desc.src.startsWith("//");
+                const resolvedSrc = isExternal
+                  ? desc.src
+                  : applyBasePath(
+                      desc.src.startsWith("/")
+                        ? desc.src
+                        : `/${desc.src.replace(/^pages\/main\//, "")}`,
+                    );
+                const importUrl = isExternal
+                  ? desc.src
+                  : new URL(resolvedSrc, window.location.origin).href;
                 try {
-                  const mod = await import(/* @vite-ignore */ desc.src);
+                  const mod = await import(/* @vite-ignore */ importUrl);
                   if (typeof mod?.cleanup === "function") {
                     try {
                       await mod.cleanup();
@@ -1619,6 +1689,11 @@ export class ShadowClawPages extends ShadowClawElement {
             selectedPage.path,
           ),
         );
+        // Any visible content in the rendered slot — DSD seed *or* a prior page
+        // rendered by JS — should trigger the wait-for-iframe-load path so the
+        // swap is seamless. The original Boolean(prevRenderedKey) guard was
+        // incorrectly excluding DSD seeds whose renderedKey is null on first
+        // hydration, causing a jarring wide-SSR → narrow-iframe FOUC.
         const hasExistingRendered =
           rendered.children.length > 0 && !rendered.hidden;
         if (hasExistingRendered && rendered.offsetHeight > 0) {

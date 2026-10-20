@@ -59,9 +59,12 @@ import { toPosixPath } from "../../../utils/normalize-workspace-path.js";
 import { normalizePrerenderPagesOption } from "../utils/normalize-prerender-pages-option.js";
 import { insertBeforeClosingHead } from "../utils/insert-before-closing-head.js";
 import { injectStaticManifestScript } from "../utils/inject-static-manifest-script.js";
+import { optimizeImgTags } from "../utils/optimize-img-tags.js";
 import { isPagePathAllowed } from "../../../utils/is-page-path-allowed.js";
 import { resolvePageScriptDependencies } from "../../../utils/resolve-page-script-dependencies.js";
 import { buildCustomElementScriptTags } from "../../site-config/custom-elements/build-custom-element-script-tags.js";
+import { resolveThemeStylesheetHref } from "../../../ui/iframe-theme.js";
+import { applyBasePath } from "../../../core/app-routes.js";
 
 export { escapeHtml };
 export { sanitizeRenderedHtml };
@@ -453,6 +456,16 @@ export async function renderPageHtml(
     );
   }
 
+  const baseDir =
+    options &&
+    typeof options === "object" &&
+    !Array.isArray(options) &&
+    !(options instanceof Set)
+      ? (options as any).baseDir || (options as any).contentRoot
+      : undefined;
+
+  rendered = await optimizeImgTags(rendered, { pagePath, baseDir });
+
   if (parsed.data && Object.keys(parsed.data).length > 0) {
     const frontmatterMarkup = renderFrontmatterMarkup(
       parsed.data as any,
@@ -659,6 +672,7 @@ export function buildPagesDsdHost(
   frontmatterTitle = "",
   pagesCss = "",
   pageHeaderCss = "",
+  themeStylesheetHref = "",
 ): string {
   const pagesShadowContent = applyStaticPagesContent(
     pagesTemplateContent,
@@ -669,14 +683,21 @@ export function buildPagesDsdHost(
     pageHeaderCss,
   );
 
+  const themeLinkTag = themeStylesheetHref
+    ? `<link rel="stylesheet" data-theme-stylesheet="true" href="${escapeHtml(themeStylesheetHref)}">`
+    : "";
+
   return [
     "<shadow-claw-pages>",
     '<template shadowrootmode="open" data-shadow-claw-pages-dsd="true">',
     `<style data-dsd-style>${pagesCss}</style>`,
+    themeLinkTag,
     pagesShadowContent,
     "</template>",
     "</shadow-claw-pages>",
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function applyNoSeedPagesContent(templateContent: string): string {
@@ -692,17 +713,24 @@ function applyNoSeedPagesContent(templateContent: string): string {
 function buildPagesDsdHostEmpty(
   pagesTemplateContent: string,
   pagesCss = "",
+  themeStylesheetHref = "",
 ): string {
   const pagesShadowContent = applyNoSeedPagesContent(pagesTemplateContent);
+  const themeLinkTag = themeStylesheetHref
+    ? `<link rel="stylesheet" data-theme-stylesheet="true" href="${escapeHtml(themeStylesheetHref)}">`
+    : "";
 
   return [
     "<shadow-claw-pages>",
     '<template shadowrootmode="open" data-shadow-claw-pages-dsd="true">',
     `<style data-dsd-style>${pagesCss}</style>`,
+    themeLinkTag,
     pagesShadowContent,
     "</template>",
     "</shadow-claw-pages>",
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function wrapShadowClawDialogContentInTemplate(html: string): string {
@@ -1277,11 +1305,24 @@ export async function prerenderDsdShell(
     pageHeaderTemplateSource,
   );
 
+  const themeStylesheet = siteConfig?.theme?.stylesheet;
+  let normalizedThemeHref = "";
+  if (typeof themeStylesheet === "string" && themeStylesheet.trim()) {
+    const resolved = resolveThemeStylesheetHref(themeStylesheet.trim());
+    normalizedThemeHref =
+      resolved.startsWith("http://") ||
+      resolved.startsWith("https://") ||
+      resolved.startsWith("//")
+        ? resolved
+        : applyBasePath(resolved.startsWith("/") ? resolved : `/${resolved}`);
+  }
+
   let shadowClawDsdTemplate: string;
   if (filteredPageSources.length === 0) {
     const pagesDsdHost = buildPagesDsdHostEmpty(
       pagesTemplateContent,
       pagesCssSource,
+      normalizedThemeHref,
     );
     shadowClawDsdTemplate = buildShadowClawDsdTemplate(
       shadowClawTemplateContent,
@@ -1313,6 +1354,7 @@ export async function prerenderDsdShell(
       frontmatterTitle,
       pagesCssSource,
       pageHeaderCssSource,
+      normalizedThemeHref,
     );
     shadowClawDsdTemplate = buildShadowClawDsdTemplate(
       shadowClawTemplateContent,

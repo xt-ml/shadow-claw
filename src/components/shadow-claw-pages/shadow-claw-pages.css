@@ -2,6 +2,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 :host {
   display: block;
   height: calc(100dvh + 4rem);
@@ -214,6 +218,10 @@ article :is(h1, h2),
   min-height: 20rem;
   overflow: hidden;
   width: 100%;
+}
+
+.pages__iframe[hidden] {
+  display: none !important;
 }
 
 .pages__empty {

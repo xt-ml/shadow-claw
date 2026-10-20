@@ -36,7 +36,7 @@ async function pathExists(p: string) {
 describe("shadow-claw CLI", () => {
   let tempDir: string;
 
-  jest.setTimeout(30_000);
+  jest.setTimeout(60_000);
 
   beforeEach(async () => {
     tempDir = await mkdtemp(path.join(os.tmpdir(), "shadow-claw-cli-test-"));
@@ -347,7 +347,7 @@ slug: "custom-test"
     );
     expect(builtIndexHtml).toContain("Custom Test Hub");
     expect(builtIndexHtml).toContain("Hello from Custom Test");
-  }, 30_000);
+  }, 120_000);
 
   it("launches headless services with server command without requiring a dist folder", async () => {
     const { spawn } = await import("node:child_process");

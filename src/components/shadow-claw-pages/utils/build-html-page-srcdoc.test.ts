@@ -109,4 +109,34 @@ describe("buildHtmlPageSrcdoc", () => {
 
     expect(html).toContain('src="/block-garden.js"');
   });
+
+  it("excludes global scripts from being injected into srcdoc", async () => {
+    setAllowedCustomElements(["feed-scroller"]);
+    const script = document.createElement("script");
+    script.id = "shadow-claw-site-config";
+    script.type = "application/json";
+    script.textContent = JSON.stringify({
+      customElements: {
+        allowedElements: ["feed-scroller"],
+        scripts: [
+          {
+            src: "pages/main/assets/feed-scroller.js",
+            global: true,
+          },
+        ],
+      },
+    });
+    document.head.appendChild(script);
+
+    const html = await buildHtmlPageSrcdoc({
+      content: '<feed-scroller id="feed"></feed-scroller>',
+      filePath: "index.html",
+      groupId: "main",
+      origin: "http://localhost:3000",
+    });
+
+    expect(html).not.toMatch(
+      /<script\b[^>]*src=["'][^"']*feed-scroller\.js["']/,
+    );
+  });
 });

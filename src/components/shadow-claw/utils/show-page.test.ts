@@ -203,4 +203,21 @@ describe("showPage", () => {
     expect(mainContent?.classList.contains("split-chat-active")).toBe(false);
     expect(handle?.hasAttribute("hidden")).toBe(true);
   });
+
+  it("should not scroll to (0, 0) when resetScroll is false", () => {
+    shadowRoot.innerHTML = `
+      <div class="main-content">
+        <div class="page" data-page-id="pages"></div>
+      </div>
+    `;
+    mockResolvePageForVisibility.mockReturnValue("pages");
+    const activePage = shadowRoot.querySelector(
+      '[data-page-id="pages"]',
+    ) as HTMLElement;
+    activePage.scrollTo = jest.fn();
+
+    showPage(shadowRoot, shadowClaw, db, oStore, "pages", false, false);
+
+    expect(activePage.scrollTo).not.toHaveBeenCalled();
+  });
 });

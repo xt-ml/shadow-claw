@@ -77,6 +77,10 @@ Builds a static site bundle into `./dist/public`.
 
 When pretty paths are prerendered (`--prerender-pages`), the build automatically extracts and patches Yoast-style SEO metadata into head tags across all generated `index.html` files (page titles formatted via `formatSeoTitle`, meta descriptions via `extractMarkdownDescription`, canonical URLs via `resolveCanonicalUrl`, and Open Graph/Twitter tags via `patchHtmlHeadMetadata`). When the content project has no configured or existing sitemap, the build generates `sitemap.xml` from `routes.json` if a canonical origin is set with `--origin` / `PAGES_ORIGIN` or `branding.siteUrl`. The generated sitemap includes the site root and unique pretty paths. See [Pages System](pages.md#pre-rendered-content-routing--pretty-paths) for sitemap precedence, routing details, and SEO metadata configuration.
 
+Pre-rendered HTML and Markdown pages automatically run through the image optimization pipeline (`optimizeImgTags`), which reads image file headers to inject explicit `width` and `height` attributes to prevent Cumulative Layout Shift (CLS), assigns `loading="eager" fetchpriority="high" decoding="async"` to the above-the-fold hero image, and sets `loading="lazy" decoding="async"` on subsequent images.
+
+In production mode (`--prod`), the build enables Rolldown JS/CSS minification and pre-compresses all static distribution assets into sibling `.br` (Brotli) and `.gz` (Gzip) files (`precompressAssets`) for zero-overhead static server delivery.
+
 When syndication feeds are enabled (`feed: { enabled: true }` or `feed: true` in `shadow-claw.config.json` or via custom `feedPath`), the build automatically generates RSS 2.0 (`feed/rss.xml`), Atom 1.0 (`feed/atom/atom.xml`), and RDF 1.0 (`feed/rdf/index.xml`) feeds, companion HTML redirect helpers (`feed/index.html`, `feed/atom/index.html`, `feed/rdf/index.html`), and injects `<link rel="alternate">` autodiscovery tags into `index.html` `<head>`. Custom external feeds can also be copied directly to distribution via `feedPath`.
 
 ### `shadow-claw dev [port]` / `shadow-claw run [port]`

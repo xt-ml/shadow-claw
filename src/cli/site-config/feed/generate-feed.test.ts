@@ -19,7 +19,7 @@ describe("generateRss2Xml", () => {
     feedUrl: "https://example.com/feed/",
     description: "A test feed for ShadowClaw",
     lang: "en-US",
-    author: "Karl Herrick",
+    author: "ShadowClaw User",
     lastBuildDate: new Date("2026-10-18T12:00:00Z"),
     items: [
       {
@@ -29,7 +29,7 @@ describe("generateRss2Xml", () => {
         pubDate: new Date("2026-10-15T00:00:00Z"),
         description: "Summary of second post",
         content: "<p>Full content of second post</p>",
-        author: "Karl Herrick",
+        author: "ShadowClaw User",
         categories: ["Tech", "AI"],
       },
       {
@@ -38,7 +38,7 @@ describe("generateRss2Xml", () => {
         guid: "https://example.com/posts/first/",
         pubDate: new Date("2026-09-01T00:00:00Z"),
         description: "Summary with <special> & characters",
-        author: "Karl Herrick",
+        author: "ShadowClaw User",
       },
     ],
   };
@@ -81,7 +81,9 @@ describe("generateRss2Xml", () => {
     expect(xml).toContain(
       '<guid isPermaLink="true">https://example.com/posts/second/</guid>',
     );
-    expect(xml).toContain("<dc:creator><![CDATA[Karl Herrick]]></dc:creator>");
+    expect(xml).toContain(
+      "<dc:creator><![CDATA[ShadowClaw User]]></dc:creator>",
+    );
     expect(xml).toContain(
       "<description><![CDATA[Summary of second post]]></description>",
     );
@@ -119,7 +121,7 @@ describe("generateAtomXml", () => {
     feedUrl: "https://example.com/feed/atom/",
     description: "An Atom test feed for ShadowClaw",
     lang: "en-US",
-    author: "Karl Herrick",
+    author: "ShadowClaw User",
     lastBuildDate: new Date("2026-10-18T12:00:00Z"),
     items: [
       {
@@ -130,7 +132,7 @@ describe("generateAtomXml", () => {
         updated: new Date("2026-10-16T10:00:00Z"),
         description: "Summary of second post",
         content: "<p>Full content of second post</p>",
-        author: "Karl Herrick",
+        author: "ShadowClaw User",
         categories: ["Tech"],
       },
     ],
@@ -171,7 +173,7 @@ describe("generateAtomXml", () => {
     expect(xml).toContain("<id>https://example.com/posts/second/</id>");
     expect(xml).toContain("<published>2026-10-15T00:00:00.000Z</published>");
     expect(xml).toContain("<updated>2026-10-16T10:00:00.000Z</updated>");
-    expect(xml).toContain("<author><name>Karl Herrick</name></author>");
+    expect(xml).toContain("<author><name>ShadowClaw User</name></author>");
     expect(xml).toContain(
       '<summary type="html"><![CDATA[Summary of second post]]></summary>',
     );
@@ -190,7 +192,7 @@ describe("generateRdfXml", () => {
     feedUrl: "https://example.com/feed/rdf/",
     description: "An RDF test feed for ShadowClaw",
     lang: "en-US",
-    author: "Karl Herrick",
+    author: "ShadowClaw User",
     lastBuildDate: new Date("2026-10-18T12:00:00Z"),
     items: [
       {
@@ -200,7 +202,7 @@ describe("generateRdfXml", () => {
         pubDate: new Date("2026-10-15T00:00:00Z"),
         description: "Summary of second post",
         content: "<p>Full content</p>",
-        author: "Karl Herrick",
+        author: "ShadowClaw User",
       },
     ],
   };
@@ -235,7 +237,7 @@ describe("generateRdfXml", () => {
     expect(xml).toContain("<title>Second Post</title>");
     expect(xml).toContain("<link>https://example.com/posts/second/</link>");
     expect(xml).toContain("<dc:date>2026-10-15T00:00:00.000Z</dc:date>");
-    expect(xml).toContain("<dc:creator>Karl Herrick</dc:creator>");
+    expect(xml).toContain("<dc:creator>ShadowClaw User</dc:creator>");
     expect(xml).toContain(
       "<description><![CDATA[Summary of second post]]></description>",
     );

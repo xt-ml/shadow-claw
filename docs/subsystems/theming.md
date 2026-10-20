@@ -184,6 +184,17 @@ When viewing markdown documents or HTML files in the Pages preview or File Viewe
 
 ---
 
+## Shadow DOM Theme Stylesheet Injection
+
+To ensure typography, layout tokens, and custom CSS classes apply seamlessly inside the component shadow root without leaking or causing Flash of Unstyled Content (FOUC):
+
+1. **Declarative Shadow DOM (DSD SSR)**:
+   - During SSR pre-rendering (`prerender-dsd-shell.ts` and `prerender-pretty-paths.ts`), if `theme.stylesheet` is configured, `<link rel="stylesheet" data-theme-stylesheet="true" href="...">` is injected directly into `<template shadowrootmode="open">` inside `<shadow-claw-pages>`.
+2. **Client-Side Rendering (CSR Hydration)**:
+   - When mounting or navigating dynamically on the client, `shadow-claw-pages` calls `ensureThemeStylesheet()`, dynamically verifying and injecting the theme stylesheet `<link>` tag into its shadow root if not already present.
+
+---
+
 ## Complete Theming Example
 
 Below is a complete, working `pages/main/theme.css` example implementing custom layout tokens, viewport containment, and slotted sidebar styling:

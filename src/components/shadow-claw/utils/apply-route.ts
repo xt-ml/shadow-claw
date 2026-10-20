@@ -59,7 +59,11 @@ export async function applyRoute(
   }
 
   if (resolvedPage) {
-    showPage(shadow, shadowClaw, db, oStore, resolvedPage);
+    if (anchor) {
+      showPage(shadow, shadowClaw, db, oStore, resolvedPage, true, false);
+    } else {
+      showPage(shadow, shadowClaw, db, oStore, resolvedPage);
+    }
   }
 
   if (resolvedPage === "files" && path) {
@@ -149,7 +153,7 @@ export async function applyRoute(
           }
 
           return false;
-        });
+        }, 10);
       }
     }
   }

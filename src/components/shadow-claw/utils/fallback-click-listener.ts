@@ -13,7 +13,7 @@ export const fallbackClickListener =
     db: ShadowClawDatabase,
     fStore: FileViewerStore,
     oStore: OrchestratorStore,
-    url: URL,
+    _url?: URL,
   ) =>
   (event: MouseEvent) => {
     if (
@@ -79,5 +79,12 @@ export const fallbackClickListener =
       useTrailingSlash: false,
     });
 
-    applyRouteFromCurrentLocation(shadow, shadowClaw, db, fStore, oStore, url);
+    applyRouteFromCurrentLocation(
+      shadow,
+      shadowClaw,
+      db,
+      fStore,
+      oStore,
+      new URL(window.location.href),
+    );
   };

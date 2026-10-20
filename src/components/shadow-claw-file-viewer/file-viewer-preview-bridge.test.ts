@@ -258,4 +258,27 @@ describe("file-viewer-preview-bridge.js (Preview IFrame Navigation & Broadcast B
       );
     });
   });
+
+  describe("Anchor Navigation Handling", () => {
+    test("scrolls target element into view on shadow-claw-scroll-to-anchor message", () => {
+      const heading = document.createElement("h2");
+      heading.id = "target-section";
+      heading.scrollIntoView = jest.fn();
+      document.body.appendChild(heading);
+
+      const event = new MessageEvent("message", {
+        data: {
+          type: "shadow-claw-scroll-to-anchor",
+          anchor: "target-section",
+        },
+      });
+
+      window.dispatchEvent(event);
+
+      expect(heading.scrollIntoView).toHaveBeenCalledWith({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  });
 });

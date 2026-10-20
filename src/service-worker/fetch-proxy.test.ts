@@ -511,4 +511,103 @@ describe("service-worker fetch proxy", () => {
     expect(response.status).toBe(200);
     expect(networkFetch).toHaveBeenCalledWith(crossOriginGetRequest);
   });
+
+  it("serves precached app shell with ignoreSearch when offline for app root navigation", async () => {
+    const cachedShell = new TestResponse("offline-precached-app-shell", {
+      status: 200,
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    });
+
+    // Simulate Workbox precache where key has __WB_REVISION__ query parameter
+    const matchMock = jest.fn(async (key: string, options?: any) => {
+      if (
+        options?.ignoreSearch &&
+        (key.includes("index.html") ||
+          key === "/" ||
+          key === `${globalThis.location.origin}/`)
+      ) {
+        return cachedShell;
+      }
+      return null;
+    });
+
+    Object.defineProperty(globalThis, "caches", {
+      configurable: true,
+      writable: true,
+      value: {
+        match: matchMock,
+        keys: async () => ["workbox-precache-v2"],
+        open: async () => ({ match: matchMock }),
+      },
+    });
+
+    // Simulate network error (offline)
+    networkFetch.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+    try {
+      const navigationRequest = {
+        url: `${globalThis.location.origin}/`,
+        method: "GET",
+        mode: "navigate",
+        destination: "document",
+        headers: new TestHeaders(),
+      };
+
+      const response = await dispatchFetch(navigationRequest);
+
+      expect(await response.text()).toBe("offline-precached-app-shell");
+      expect(response.headers.get("Origin-Agent-Cluster")).toBe("?1");
+    } finally {
+      delete (globalThis as any).caches;
+    }
+  });
+
+  it("falls back to app shell when offline for unknown or un-cached pretty path navigation", async () => {
+    const cachedShell = new TestResponse("fallback-offline-app-shell", {
+      status: 200,
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    });
+
+    const matchMock = jest.fn(async (key: string, options?: any) => {
+      if (
+        options?.ignoreSearch &&
+        (key.includes("index.html") ||
+          key === "/" ||
+          key === `${globalThis.location.origin}/`)
+      ) {
+        return cachedShell;
+      }
+      return null;
+    });
+
+    Object.defineProperty(globalThis, "caches", {
+      configurable: true,
+      writable: true,
+      value: {
+        match: matchMock,
+        keys: async () => ["workbox-precache-v2"],
+        open: async () => ({ match: matchMock }),
+      },
+    });
+
+    // Simulate network error (offline)
+    networkFetch.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+    try {
+      const navigationRequest = {
+        url: `${globalThis.location.origin}/2025/12/30/block-garden/`,
+        method: "GET",
+        mode: "navigate",
+        destination: "document",
+        headers: new TestHeaders(),
+      };
+
+      const response = await dispatchFetch(navigationRequest);
+
+      expect(await response.text()).toBe("fallback-offline-app-shell");
+      expect(response.headers.get("Origin-Agent-Cluster")).toBe("?1");
+    } finally {
+      delete (globalThis as any).caches;
+    }
+  });
 });

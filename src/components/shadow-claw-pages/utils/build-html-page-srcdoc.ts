@@ -103,11 +103,12 @@ export async function buildHtmlPageSrcdoc({
     ? `<script nonce="${nonce}">(function(){try{Object.defineProperty(globalThis.location,"search",{get:function(){return ${JSON.stringify(searchParams)};},configurable:true});}catch(e){}})();</script>`
     : "";
 
+  const scopedScripts = approvedScripts.filter((s) => !s.global);
   const shouldInjectCustomElementScripts =
-    approvedScripts.length > 0 && hasApprovedCustomElement(safeContent);
+    scopedScripts.length > 0 && hasApprovedCustomElement(safeContent);
 
   const customElementScriptsHtml = shouldInjectCustomElementScripts
-    ? approvedScripts
+    ? scopedScripts
         .map(({ src, hasInit }) => {
           const isExternal =
             src.startsWith("http://") ||

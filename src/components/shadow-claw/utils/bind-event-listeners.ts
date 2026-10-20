@@ -351,6 +351,7 @@ export function bindEventListeners(
       );
     };
     win.addEventListener("popstate", shadowClaw.popstateListener);
+    win.addEventListener("hashchange", shadowClaw.popstateListener);
 
     doc.addEventListener("click", shadowClaw.fallbackClickListener);
 

@@ -40,6 +40,8 @@ import {
   patchHtmlHeadMetadata,
   resolveCanonicalUrl,
 } from "../../../utils/seo.js";
+import { resolveThemeStylesheetHref } from "../../../ui/iframe-theme.js";
+import { applyBasePath } from "../../../core/app-routes.js";
 
 export { injectStaticRoutingScript };
 export { insertBeforeClosingHead };
@@ -449,6 +451,18 @@ export async function prerenderPrettyPaths(
       { approvedScripts },
     );
 
+    const themeStylesheet = siteConfig?.theme?.stylesheet;
+    let normalizedThemeHref = "";
+    if (typeof themeStylesheet === "string" && themeStylesheet.trim()) {
+      const resolved = resolveThemeStylesheetHref(themeStylesheet.trim());
+      normalizedThemeHref =
+        resolved.startsWith("http://") ||
+        resolved.startsWith("https://") ||
+        resolved.startsWith("//")
+          ? resolved
+          : applyBasePath(resolved.startsWith("/") ? resolved : `/${resolved}`);
+    }
+
     let shadowClawDsdTemplate: string;
     if (prerenderPages === 0) {
       shadowClawDsdTemplate = buildShadowClawDsdTemplateWithoutPages(
@@ -465,6 +479,7 @@ export async function prerenderPrettyPaths(
         frontmatterTitle,
         pagesCssSource,
         pageHeaderCssSource,
+        normalizedThemeHref,
       );
       shadowClawDsdTemplate = buildShadowClawDsdTemplate(
         shadowClawTemplateContent,

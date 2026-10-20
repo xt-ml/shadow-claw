@@ -292,6 +292,7 @@ export class ShadowClaw extends ShadowClawElement {
 
     if (this.popstateListener) {
       window.removeEventListener("popstate", this.popstateListener);
+      window.removeEventListener("hashchange", this.popstateListener);
       this.popstateListener = null;
     }
 
@@ -348,6 +349,7 @@ export class ShadowClaw extends ShadowClawElement {
 
     if (typeof navigateEvent.intercept === "function") {
       navigateEvent.intercept({
+        scroll: "manual",
         handler: async () => {
           const { parseRouteFromUrlAsync } =
             await import("../../core/app-routes.js");

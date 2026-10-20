@@ -119,6 +119,19 @@
       } catch (e) {}
     }
 
+    if (event.data.type === "shadow-claw-scroll-to-anchor") {
+      var anchorId = event.data.anchor || "";
+      if (anchorId) {
+        var el =
+          document.getElementById(anchorId) ||
+          document.querySelector('a[name="' + anchorId + '"]');
+        if (el && typeof el.scrollIntoView === "function") {
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }
+      return;
+    }
+
     if (event.data.type === "shadow-claw-update-url-params") {
       var searchStr = event.data.search || "";
       if (searchStr) {

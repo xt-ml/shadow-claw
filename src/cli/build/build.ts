@@ -320,6 +320,26 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
       await patchServiceWorkerTrustedTypesFile(swPath, { logImpl: () => {} });
     }
 
+    if (isProduction) {
+      try {
+        const { precompressAssets } =
+          await import("../tools/precompress-assets.js");
+        const result = await precompressAssets("dist/public", {
+          silent: isQuiet,
+        });
+        if (!isQuiet && result.count > 0) {
+          log(`Pre-compressed ${result.count} assets (.br and .gz).`);
+        }
+      } catch (err) {
+        if (!isQuiet) {
+          console.warn(
+            "Notice: Asset pre-compression encountered an issue:",
+            err,
+          );
+        }
+      }
+    }
+
     log("Build completed successfully.");
     return;
   }
@@ -715,6 +735,27 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
   const swPath = join(distPublicDir, "service-worker.js");
   if (await pathExists(swPath)) {
     await patchServiceWorkerTrustedTypesFile(swPath, { logImpl: () => {} });
+  }
+
+  // 12. Pre-compress assets for production
+  if (isProduction) {
+    try {
+      const { precompressAssets } =
+        await import("../tools/precompress-assets.js");
+      const result = await precompressAssets(distPublicDir, {
+        silent: isQuiet,
+      });
+      if (!isQuiet && result.count > 0) {
+        log(`Pre-compressed ${result.count} assets (.br and .gz).`);
+      }
+    } catch (err) {
+      if (!isQuiet) {
+        console.warn(
+          "Notice: Asset pre-compression encountered an issue:",
+          err,
+        );
+      }
+    }
   }
 
   log("Build completed successfully.");

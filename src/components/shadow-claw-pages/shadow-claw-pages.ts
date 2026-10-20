@@ -39,6 +39,7 @@ import { orchestratorStore } from "../../stores/orchestrator.js";
 import { toolsStore } from "../../stores/tools.js";
 
 import { showError, showSuccess } from "../../ui/toast.js";
+import { getIframeThemeStylesheetLink } from "../../ui/iframe-theme.js";
 
 import {
   getNamespacedItem,
@@ -167,6 +168,7 @@ export class ShadowClawPages extends ShadowClawElement {
   touchStartY: number = 0;
 
   private dsdInitialPath: string | null = null;
+  private dsdInitialHtml: string | null = null;
   private renderedContent: string | null = null;
   private renderedFrontmatterToggle: boolean | null = null;
   private renderedKey: string | null = null;
@@ -181,6 +183,7 @@ export class ShadowClawPages extends ShadowClawElement {
     if (!root) {
       throw new Error("shadowRoot not found");
     }
+    this.ensureThemeStylesheet();
     // Use the authoritative class set synchronously by theme-init.ts rather
     // than re-reading localStorage directly. theme-init.ts applies a
     // null → __PRERENDER_MAIN_MEMORY__ fallback that a plain
@@ -212,6 +215,9 @@ export class ShadowClawPages extends ShadowClawElement {
         this.dsdInitialPath = initialPathAttr;
       } else if (dsdSelected && dsdSelected !== "Select a page...") {
         this.dsdInitialPath = dsdSelected;
+      }
+      if (rendered instanceof HTMLElement && rendered.innerHTML.trim()) {
+        this.dsdInitialHtml = rendered.innerHTML;
       }
     }
 
@@ -425,8 +431,13 @@ export class ShadowClawPages extends ShadowClawElement {
       return false;
     }
 
-    const rendered = root.querySelector("[data-pages-rendered]") as HTMLElement;
-    return handleAnchorNavigation(anchor, rendered);
+    const rendered = root.querySelector(
+      "[data-pages-rendered]",
+    ) as HTMLElement | null;
+    const iframe = root.querySelector(
+      "[data-pages-iframe]",
+    ) as HTMLIFrameElement | null;
+    return handleAnchorNavigation(anchor, rendered, iframe);
   }
 
   handleAutoRefreshConfigChange = (event: Event) => {
@@ -1237,6 +1248,7 @@ export class ShadowClawPages extends ShadowClawElement {
     if (!root) {
       return;
     }
+    this.ensureThemeStylesheet();
 
     if (!this.db) {
       this.db = await getDb();
@@ -1279,7 +1291,7 @@ export class ShadowClawPages extends ShadowClawElement {
       this.renderedKey === pageKey &&
       this.dsdInitialPath &&
       matchesPagePath(this.dsdInitialPath, selectedPage.path) &&
-      isMarkdownPath(selectedPage.path) &&
+      (isMarkdownPath(selectedPage.path) || isHtmlPath(selectedPage.path)) &&
       rendered.children.length > 0 &&
       !rendered.hidden;
 
@@ -1297,7 +1309,10 @@ export class ShadowClawPages extends ShadowClawElement {
       rendered.children.length > 0 &&
       !rendered.hidden;
 
-    if (hasDsdSeed && isMarkdownPath(selectedPage.path)) {
+    if (
+      hasDsdSeed &&
+      (isMarkdownPath(selectedPage.path) || isHtmlPath(selectedPage.path))
+    ) {
       this.renderedKey = pageKey;
       empty.hidden = true;
       rendered.hidden = false;
@@ -1329,16 +1344,18 @@ export class ShadowClawPages extends ShadowClawElement {
             if (Object.keys(parsedFm.data).length > 0) {
               this.pageFrontmatter.set(parsedFm.data);
             }
-            const renderFrontmatter = await resolveFrontmatterToggle(
-              this.db!,
-              CONFIG_KEYS.MARKDOWN_FRONTMATTER_PAGES,
-            );
-            this.renderedFrontmatterToggle = renderFrontmatter;
-            await this.resolveMarkdownImages(
-              rendered,
-              selectedPage.groupId,
-              selectedPage.path,
-            );
+            if (isMarkdownPath(selectedPage.path)) {
+              const renderFrontmatter = await resolveFrontmatterToggle(
+                this.db!,
+                CONFIG_KEYS.MARKDOWN_FRONTMATTER_PAGES,
+              );
+              this.renderedFrontmatterToggle = renderFrontmatter;
+              await this.resolveMarkdownImages(
+                rendered,
+                selectedPage.groupId,
+                selectedPage.path,
+              );
+            }
           }
         } catch {}
       })();
@@ -1391,7 +1408,10 @@ export class ShadowClawPages extends ShadowClawElement {
         rendered.children.length > 0 &&
         !rendered.hidden;
 
-      if (hasDsdSeed && isMarkdownPath(selectedPage.path)) {
+      if (
+        hasDsdSeed &&
+        (isMarkdownPath(selectedPage.path) || isHtmlPath(selectedPage.path))
+      ) {
         this.renderedKey = pageKey;
         this.renderedContent = content;
 
@@ -1404,16 +1424,19 @@ export class ShadowClawPages extends ShadowClawElement {
         if (JSON.stringify(currentData) !== JSON.stringify(newData)) {
           this.pageFrontmatter.set(newData);
         }
-        const renderFrontmatter = await resolveFrontmatterToggle(
-          this.db,
-          CONFIG_KEYS.MARKDOWN_FRONTMATTER_PAGES,
-        );
-        this.renderedFrontmatterToggle = renderFrontmatter;
-        await this.resolveMarkdownImages(
-          rendered,
-          selectedPage.groupId,
-          selectedPage.path,
-        );
+        if (isMarkdownPath(selectedPage.path)) {
+          const renderFrontmatter = await resolveFrontmatterToggle(
+            this.db,
+            CONFIG_KEYS.MARKDOWN_FRONTMATTER_PAGES,
+          );
+          this.renderedFrontmatterToggle = renderFrontmatter;
+          await this.resolveMarkdownImages(
+            rendered,
+            selectedPage.groupId,
+            selectedPage.path,
+          );
+        }
+        removePreviewIframe(root);
         this.showNavButtonsTemporarily(2500);
 
         return;
@@ -1429,6 +1452,146 @@ export class ShadowClawPages extends ShadowClawElement {
         const currentData = this.pageFrontmatter.get();
         if (JSON.stringify(currentData) !== JSON.stringify(newData)) {
           this.pageFrontmatter.set(newData);
+        }
+
+        const hasFrontmatter = newData !== null;
+        const isInitialDsdPage = Boolean(
+          this.dsdInitialPath &&
+          matchesPagePath(this.dsdInitialPath, selectedPage.path),
+        );
+        const isRootIndex = matchesPagePath(selectedPage.path, "index.html");
+
+        if (hasFrontmatter || isInitialDsdPage || isRootIndex) {
+          if (
+            this.renderedKey === pageKey &&
+            this.renderedContent === content &&
+            rendered.children.length > 0 &&
+            !rendered.hidden
+          ) {
+            this.showNavButtonsTemporarily(2500);
+
+            const viewerScroll = root.querySelector(".pages__viewer-scroll");
+            if (viewerScroll instanceof HTMLElement) {
+              if (typeof viewerScroll.scrollTo === "function") {
+                viewerScroll.scrollTo({ top: 0, behavior: "smooth" });
+              } else {
+                viewerScroll.scrollTop = 0;
+              }
+            }
+
+            return;
+          }
+
+          this.renderedKey = pageKey;
+          this.renderedContent = content;
+          this.renderedFrontmatterToggle = null;
+          removePreviewIframe(root);
+          rendered.hidden = false;
+
+          const rawScriptSrcs: string[] = [];
+          const scriptSrcRegex = /<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi;
+          let scriptMatch: RegExpExecArray | null;
+          while ((scriptMatch = scriptSrcRegex.exec(content)) !== null) {
+            const src = scriptMatch[1];
+            if (src && isApprovedScript(src)) {
+              rawScriptSrcs.push(src);
+            }
+          }
+
+          const scriptDescriptors = getApprovedCustomElementScriptDescriptors();
+          const combinedFrontmatter = {
+            ...(parsedFrontmatter?.data || {}),
+            scripts: [
+              ...(Array.isArray(parsedFrontmatter?.data?.scripts)
+                ? parsedFrontmatter.data.scripts
+                : parsedFrontmatter?.data?.scripts
+                  ? [parsedFrontmatter.data.scripts]
+                  : []),
+              ...rawScriptSrcs,
+            ],
+          };
+          const resolvedScripts = resolvePageScriptDependencies(
+            scriptDescriptors,
+            combinedFrontmatter,
+            content,
+          );
+
+          await Promise.all(
+            resolvedScripts.map(async (desc) => {
+              try {
+                await loadApprovedCustomElementScript(desc.src);
+              } catch (err) {
+                console.warn(
+                  `[ShadowClaw] Error loading custom element script ${desc.src}:`,
+                  err,
+                );
+              }
+            }),
+          );
+          if (token !== this.renderToken) {
+            return;
+          }
+
+          const routeDir = applyBasePath(
+            getFileRouteDirPath(selectedPage.groupId, selectedPage.path),
+          );
+          const resolvedHtml = rewriteWorkspacePreviewHtml(
+            parsedFrontmatter.content,
+            selectedPage.path,
+            routeDir,
+            selectedPage.groupId,
+            window.location.origin,
+          );
+          if (token !== this.renderToken) {
+            return;
+          }
+
+          if (isInitialDsdPage && this.dsdInitialHtml) {
+            rendered.innerHTML = this.dsdInitialHtml;
+          } else {
+            setSanitizedHtml(rendered, resolvedHtml, previewSanitizeOptions);
+          }
+          await this.resolveMarkdownImages(
+            rendered,
+            selectedPage.groupId,
+            selectedPage.path,
+          );
+
+          await Promise.all(
+            resolvedScripts.map(async (desc) => {
+              if (desc.hasInit) {
+                try {
+                  const mod = await import(/* @vite-ignore */ desc.src);
+                  if (typeof mod?.cleanup === "function") {
+                    try {
+                      await mod.cleanup();
+                    } catch {}
+                  }
+                  if (typeof mod?.init === "function") {
+                    await mod.init(rendered);
+                  }
+                } catch (e) {
+                  console.error(
+                    "[ShadowClaw] Error executing init for " + desc.src,
+                    e,
+                  );
+                }
+              }
+            }),
+          );
+
+          this.showNavButtonsTemporarily(2500);
+
+          const viewerScroll = root.querySelector(".pages__viewer-scroll");
+          if (viewerScroll instanceof HTMLElement) {
+            if (typeof viewerScroll.scrollTo === "function") {
+              viewerScroll.scrollTo(0, 0);
+            } else {
+              viewerScroll.scrollTop = 0;
+            }
+          }
+
+          return;
         }
 
         if (
@@ -1458,6 +1621,9 @@ export class ShadowClawPages extends ShadowClawElement {
         );
         const hasExistingRendered =
           rendered.children.length > 0 && !rendered.hidden;
+        if (hasExistingRendered && rendered.offsetHeight > 0) {
+          iframe.style.height = `${rendered.offsetHeight}px`;
+        }
         if (
           hasExistingRendered &&
           (typeof process === "undefined" || process.env?.NODE_ENV !== "test")
@@ -1727,6 +1893,27 @@ export class ShadowClawPages extends ShadowClawElement {
 
   private syncIframeTheme(): void {
     syncIframeTheme(this.previewFrameWindow);
+  }
+
+  private ensureThemeStylesheet(): void {
+    const root = this.shadowRoot;
+    if (!root || root.querySelector("link[data-theme-stylesheet]")) {
+      return;
+    }
+
+    const themeStylesheetLink = getIframeThemeStylesheetLink();
+    if (!themeStylesheetLink) {
+      return;
+    }
+
+    const hrefMatch = /href="([^"]+)"/i.exec(themeStylesheetLink);
+    if (hrefMatch && hrefMatch[1]) {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.setAttribute("data-theme-stylesheet", "true");
+      link.href = hrefMatch[1];
+      root.appendChild(link);
+    }
   }
 
   private async reloadPreviewWithSearchParams(

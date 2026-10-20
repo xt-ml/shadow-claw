@@ -32,7 +32,7 @@ export default class ShadowClawElement extends HTMLElement {
       this.shadowRoot.adoptedStyleSheets = [styles];
 
       const dsdStyles = this.shadowRoot.querySelectorAll(
-        'style[data-dsd-style], link[rel="stylesheet"]',
+        'style[data-dsd-style], link[rel="stylesheet"]:not([data-theme-stylesheet])',
       );
 
       dsdStyles.forEach((el) => el.remove());

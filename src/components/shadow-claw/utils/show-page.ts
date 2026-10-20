@@ -63,6 +63,7 @@ export function showPage(
   oStore: OrchestratorStore,
   page: string,
   persist = true,
+  resetScroll = true,
 ) {
   if (!shadow) {
     return;
@@ -186,11 +187,13 @@ export function showPage(
   );
 
   // Scroll to top
-  const activePage = shadow.querySelector(".page.active");
-  if (activePage) {
-    const el = activePage;
-    if (typeof el.scrollTo === "function") {
-      el.scrollTo(0, 0);
+  if (resetScroll) {
+    const activePage = shadow.querySelector(".page.active");
+    if (activePage) {
+      const el = activePage;
+      if (typeof el.scrollTo === "function") {
+        el.scrollTo(0, 0);
+      }
     }
   }
 

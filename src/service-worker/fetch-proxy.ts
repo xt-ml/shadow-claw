@@ -168,23 +168,77 @@ function ensureOriginAgentClusterHeader(response: Response): Response {
 // top-level navigation is origin-keyed and @mcp-b/webmcp-polyfill can
 // register tools. See src/service-worker/init.ts for the one-time reload
 // that lets the very first, uncontrolled navigation pick this up.
+async function matchCacheEntry(
+  urlOrRequest: string | Request,
+  options: { ignoreSearch?: boolean } = { ignoreSearch: true },
+): Promise<Response | undefined> {
+  if (typeof caches === "undefined") {
+    return undefined;
+  }
+
+  try {
+    const directMatch = await caches.match(urlOrRequest, options);
+    if (directMatch) {
+      return directMatch;
+    }
+  } catch {}
+
+  try {
+    const keys = await caches.keys();
+    for (const key of keys) {
+      const cache = await caches.open(key);
+      const match = await cache.match(urlOrRequest, options);
+      if (match) {
+        return match;
+      }
+    }
+  } catch {}
+
+  return undefined;
+}
+
+async function findCachedAppShell(): Promise<Response | undefined> {
+  const shellPath = applyBasePath("index.html");
+  const shellUrl = new URL(shellPath, location.origin);
+  const candidates = [
+    shellUrl.href,
+    shellPath,
+    "index.html",
+    "/index.html",
+    "/",
+    `${location.origin}/`,
+  ];
+
+  for (const candidate of candidates) {
+    const match = await matchCacheEntry(candidate, { ignoreSearch: true });
+    if (match) {
+      return match;
+    }
+  }
+
+  return undefined;
+}
+
 async function fetchWithOriginAgentCluster(
   request: Request,
 ): Promise<Response> {
   let response: Response;
-  try {
-    if (isNavigationRequest(request)) {
-      response = await fetch(request.url, {
-        method: request.method,
-        headers: request.headers,
-        credentials: request.credentials,
-        redirect: "follow",
-      });
-    } else {
-      response = await fetch(request);
-    }
-  } catch {
+  if (isNavigationRequest(request)) {
+    response = await fetch(request.url, {
+      method: request.method,
+      headers: request.headers,
+      credentials: request.credentials,
+      redirect: "follow",
+    });
+  } else {
     response = await fetch(request);
+  }
+
+  if (response && response.ok && typeof caches !== "undefined") {
+    try {
+      const cache = await caches.open("shadow-claw-cache");
+      await cache.put(request.url, response.clone());
+    } catch {}
   }
 
   return ensureOriginAgentClusterHeader(response);
@@ -195,26 +249,23 @@ async function fetchAppShellWithOriginAgentCluster(): Promise<Response> {
   const shellUrl = new URL(shellPath, location.origin);
 
   let response: Response | undefined;
-  if (typeof caches !== "undefined") {
-    try {
-      response =
-        (await caches.match(shellUrl.href)) ||
-        (await caches.match(shellPath)) ||
-        (await caches.match("index.html"));
-    } catch {
-      // Ignore CacheStorage lookup errors and fall back to network fetch
-    }
-  }
+  try {
+    response = await findCachedAppShell();
+  } catch {}
 
   if (!response) {
     try {
       response = await fetch(shellUrl.href);
-    } catch (err) {
-      if (typeof caches !== "undefined") {
+      if (response && response.ok && typeof caches !== "undefined") {
         try {
-          response = (await caches.match("index.html")) || undefined;
+          const cache = await caches.open("shadow-claw-cache");
+          await cache.put(shellUrl.href, response.clone());
         } catch {}
       }
+    } catch (err) {
+      try {
+        response = await findCachedAppShell();
+      } catch {}
       if (!response) {
         throw err;
       }
@@ -277,27 +328,33 @@ self.addEventListener("fetch", (event: FetchEvent) => {
 
       event.respondWith(
         (async () => {
-          if (typeof caches !== "undefined") {
-            try {
-              const pathname = requestUrl.pathname;
-              const cleanPath = pathname.replace(/\/+$/, "");
-              const candidates = [
-                requestUrl.href,
-                pathname,
-                `${cleanPath}/`,
-                `${cleanPath}/index.html`,
-                `${cleanPath}.html`,
-              ];
-              for (const candidate of candidates) {
-                const match = await caches.match(candidate);
-                if (match) {
-                  return ensureOriginAgentClusterHeader(match);
-                }
-              }
-            } catch {}
+          const pathname = requestUrl.pathname;
+          const cleanPath = pathname.replace(/\/+$/, "");
+          const candidates = [
+            requestUrl.href,
+            pathname,
+            `${cleanPath}/`,
+            `${cleanPath}/index.html`,
+            `${cleanPath}.html`,
+          ];
+          for (const candidate of candidates) {
+            const match = await matchCacheEntry(candidate, {
+              ignoreSearch: true,
+            });
+            if (match) {
+              return ensureOriginAgentClusterHeader(match);
+            }
           }
 
-          return fetchWithOriginAgentCluster(event.request);
+          try {
+            return await fetchWithOriginAgentCluster(event.request);
+          } catch (fetchErr) {
+            try {
+              return await fetchAppShellWithOriginAgentCluster();
+            } catch {
+              throw fetchErr;
+            }
+          }
         })(),
       );
 

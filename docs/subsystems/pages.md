@@ -136,6 +136,20 @@ Applications pre-rendered with Declarative Shadow DOM (DSD) shell via `src/cli/p
   - Configurable page range option (`all`, `none`/`0`, or a specific number `N`, defaulting to `1` / current page).
   - Defaults to embedding only the current page in the SSR DSD shell and `#shadow-claw-static-manifest` to minimize bundle size and eliminate redundant SSR overhead.
   - The build pipeline writes the full manifest to `static-main-manifest.json` and copies all source files to `static-main/` for runtime on-demand fetching.
+- **In-Place DSD HTML Hydration & CLS Prevention**:
+  - When initial HTML pages are served with pre-rendered DSD content, `shadow-claw-pages` preserves the rendered DOM tree directly during hydration instead of swapping in a blank or unstyled preview iframe.
+  - The hidden iframe container is strictly suppressed (`[hidden] { display: none !important; }`), and container heights are preserved across subsequent navigations, eliminating Cumulative Layout Shift (CLS) between SSR and CSR.
+- **Build-Time Image Dimension & Resource Hint Injection**:
+  - During DSD pre-rendering (`renderPageHtml`), `optimizeImgTags` parses local image dimensions (`width` and `height`) directly from file headers (supporting PNG, JPEG, GIF, WebP, SVG) and injects them onto `<img>` tags.
+  - The first image is automatically designated as the LCP hero (`loading="eager"`, `fetchpriority="high"`, `decoding="async"`), while subsequent images receive lazy loading (`loading="lazy"`, `decoding="async"`).
+- **Theme Stylesheet Shadow Root Injection**:
+  - `prerender-dsd-shell.ts` and `prerender-pretty-paths.ts` inject `<link rel="stylesheet" data-theme-stylesheet="true" href="...">` directly into `<shadow-claw-pages>` DSD templates, and `ensureThemeStylesheet()` in `shadow-claw-pages.ts` injects it during CSR, preventing FOUC inside shadow roots.
+- **Root Index Direct Rendering & Script Sandboxing**:
+  - When navigating to root `index.html` or an HTML page with frontmatter or initial DSD page, `shadow-claw-pages` renders it directly in the shadow DOM container rather than an iframe.
+  - Scripts marked `global: true` are excluded from iframe srcdoc (`scopedScripts = approvedScripts.filter((s) => !s.global)`), preventing duplicate global script execution in sandboxed preview iframes.
+- **Anchor Navigation & Smooth Scrolling**:
+  - `handleAnchorNavigation` smoothly scrolls `#id` or `a[name="id"]` targets in rendered containers and preview iframes (via `shadow-claw-scroll-to-anchor` postMessage events handled by `file-viewer-preview-bridge.js`), re-scrolling once pending images settle.
+  - The router listens for `hashchange` events alongside `popstate`, configures `scroll: "manual"` during navigation interception, and suppresses scroll reset (`resetScroll = false`) when navigating with an anchor in `showPage`.
 - **Dynamic Hydration & Fallback Loading**:
   - When navigating to pages not embedded in the initial HTML or stored in local storage, `shadow-claw-pages` and `getStaticPageContent()` dynamically fetch individual markdown files from `static-main/` or fallback to `static-main-manifest.json`.
 - **Pretty Paths, Sub-Routes & SEO Metadata (Yoast SEO Pattern)**:

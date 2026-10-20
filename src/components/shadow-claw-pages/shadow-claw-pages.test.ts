@@ -396,7 +396,7 @@ describe("shadow-claw-pages", () => {
     expect(rendered.innerHTML).toBe("<p>DSD Pre-rendered Markup</p>");
   });
 
-  it("creates an iframe and renders srcdoc when initial HTML page matches selectedPage", async () => {
+  it("preserves pre-rendered DSD markup in place without creating an iframe when initial HTML page matches selectedPage", async () => {
     const component = new ShadowClawPages();
     const root = component.shadowRoot;
     if (!root) {
@@ -420,17 +420,125 @@ describe("shadow-claw-pages", () => {
 
     await component.renderSelectedPage();
 
+    const iframe = root.querySelector("[data-pages-iframe]");
+    expect(iframe).toBeNull();
+    expect(rendered.hidden).toBe(false);
+    expect(rendered.innerHTML).toBe(
+      '<div id="siteApp"><main><h1>Pre-rendered HTML Page</h1></main></div>',
+    );
+
+    // Subsequent invocations (e.g. from reactive store/routing effects) must keep the rendered DSD content
+    await component.renderSelectedPage();
+    expect(root.querySelector("[data-pages-iframe]")).toBeNull();
+    expect(rendered.hidden).toBe(false);
+  });
+
+  it("creates an iframe and renders srcdoc when navigating to a non-DSD HTML page", async () => {
+    const component = new ShadowClawPages();
+    const root = component.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const rendered = root.querySelector("[data-pages-rendered]") as HTMLElement;
+    rendered.innerHTML =
+      "<div id='siteApp'><main><h1>Pre-rendered HTML Page</h1></main></div>";
+    rendered.hidden = false;
+
+    (component as any).dsdInitialPath = "index.html";
+    component.db = {} as any;
+    // User navigates to a different HTML page
+    component.selectedPage = { groupId: "br:main", path: "other.html" };
+
+    (
+      readGroupFile as jest.MockedFunction<typeof readGroupFile>
+    ).mockResolvedValue(
+      "<!doctype html><html><body><h1>Other HTML Page</h1></body></html>",
+    );
+
+    await component.renderSelectedPage();
+
     const iframe = root.querySelector(
       "[data-pages-iframe]",
     ) as HTMLIFrameElement;
     expect(iframe).not.toBeNull();
     expect(iframe.hidden).toBe(false);
     expect(rendered.hidden).toBe(true);
+  });
 
-    // Subsequent invocations (e.g. from reactive store/routing effects) must keep the iframe
+  it("renders an HTML page with frontmatter directly into rendered container instead of an iframe", async () => {
+    const component = new ShadowClawPages();
+    const root = component.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const rendered = root.querySelector("[data-pages-rendered]") as HTMLElement;
+    rendered.innerHTML =
+      "<div id='siteApp'><main><h1>Pre-rendered HTML Page</h1></main></div>";
+    rendered.hidden = false;
+
+    (component as any).dsdInitialPath = "index.html";
+    component.db = {} as any;
+    // User navigates to an HTML template page with frontmatter (e.g. portfolio.html)
+    component.selectedPage = { groupId: "br:main", path: "portfolio.html" };
+
+    (
+      readGroupFile as jest.MockedFunction<typeof readGroupFile>
+    ).mockResolvedValue(
+      '---\ntitle: "Portfolio"\nslug: "portfolio"\n---\n<article><h2 id="corporate-sites">Corporate Sites</h2></article>',
+    );
+
     await component.renderSelectedPage();
-    expect(root.querySelector("[data-pages-iframe]")).not.toBeNull();
-    expect(rendered.hidden).toBe(true);
+
+    const iframe = root.querySelector("[data-pages-iframe]");
+    expect(iframe).toBeNull();
+    expect(rendered.hidden).toBe(false);
+    expect(rendered.querySelector("#corporate-sites")).not.toBeNull();
+    expect(component.pageFrontmatter.get()).toEqual({
+      title: "Portfolio",
+      slug: "portfolio",
+    });
+  });
+
+  it("renders index.html directly into rendered container without iframe when returning from another page", async () => {
+    const component = new ShadowClawPages();
+    const root = component.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const rendered = root.querySelector("[data-pages-rendered]") as HTMLElement;
+    rendered.innerHTML =
+      "<div id='siteApp'><main><h1>Initial Feed</h1></main></div>";
+    rendered.hidden = false;
+
+    (component as any).dsdInitialPath = "index.html";
+    component.db = {} as any;
+
+    // First navigate to a different page (e.g. portfolio)
+    component.selectedPage = { groupId: "br:main", path: "portfolio.html" };
+    (
+      readGroupFile as jest.MockedFunction<typeof readGroupFile>
+    ).mockResolvedValue(
+      '---\ntitle: "Portfolio"\nslug: "portfolio"\n---\n<article><h2 id="corporate-sites">Corporate Sites</h2></article>',
+    );
+    await component.renderSelectedPage();
+    expect(root.querySelector("[data-pages-iframe]")).toBeNull();
+
+    // Now return to index.html (the root page without frontmatter)
+    component.selectedPage = { groupId: "br:main", path: "index.html" };
+    (
+      readGroupFile as jest.MockedFunction<typeof readGroupFile>
+    ).mockResolvedValue(
+      "<!doctype html><html><body><div id='siteApp'><main><div id='postsFeed'><h1>Restored Feed</h1></div></main></div></body></html>",
+    );
+    await component.renderSelectedPage();
+
+    const iframe = root.querySelector("[data-pages-iframe]");
+    expect(iframe).toBeNull();
+    expect(rendered.hidden).toBe(false);
+    expect(rendered.querySelector("#postsFeed")).not.toBeNull();
   });
 
   it("adopts pre-rendered DSD DOM immediately without blocking on storage read or network fetch", async () => {

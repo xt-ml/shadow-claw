@@ -29,7 +29,7 @@ export function ensurePreviewIframe({
     selectedPath ? `Preview: ${selectedPath}` : "Page preview",
   );
   iframe.setAttribute("sandbox", getIframeSandboxPolicy());
-  iframe.setAttribute("allow", "fullscreen");
+  iframe.setAttribute("allow", "fullscreen; clipboard-write");
   iframe.hidden = true;
   if (onIframeLoad) {
     iframe.addEventListener("load", () => {

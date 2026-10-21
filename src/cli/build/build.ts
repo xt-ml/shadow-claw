@@ -1,6 +1,6 @@
 import { execSync } from "node:child_process";
 import { cp, mkdir, readFile, stat, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { chdir, env, exit } from "node:process";
 import { fileURLToPath } from "node:url";
 import { rimraf } from "rimraf";
@@ -148,6 +148,12 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
       await cp("pages/main", "dist/public/files/main", { recursive: true });
     } catch {}
 
+    let noTestFilter: ((src: string) => boolean) | undefined;
+    try {
+      const { isTestFileOrDir } = await import("../commands/skills-index.js");
+      noTestFilter = (src: string) => !isTestFileOrDir(basename(src), src);
+    } catch {}
+
     try {
       await cp("pages/main", "dist/public/static-main", { recursive: true });
     } catch {}
@@ -155,18 +161,21 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
     try {
       await cp(".agents/skills", "dist/public/.agents/skills", {
         recursive: true,
+        ...(noTestFilter ? { filter: noTestFilter } : {}),
       });
     } catch {}
 
     try {
       await cp(".agents/tools", "dist/public/.agents/tools", {
         recursive: true,
+        ...(noTestFilter ? { filter: noTestFilter } : {}),
       });
     } catch {}
 
     try {
       await cp(".agents/scripts", "dist/public/.agents/scripts", {
         recursive: true,
+        ...(noTestFilter ? { filter: noTestFilter } : {}),
       });
     } catch {}
 

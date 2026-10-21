@@ -33,6 +33,7 @@ describe("ensurePreviewIframe", () => {
 
     expect(iframe).toBeInstanceOf(HTMLIFrameElement);
     expect(iframe.getAttribute("title")).toBe("Preview: guide.md");
+    expect(iframe.getAttribute("allow")).toBe("fullscreen; clipboard-write");
     expect(iframe.hidden).toBe(true);
 
     iframe.dispatchEvent(new Event("load"));

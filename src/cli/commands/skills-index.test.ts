@@ -5,6 +5,7 @@ import path from "node:path";
 import {
   computeSha256,
   generateSkillsIndex,
+  isTestFileOrDir,
   runSkillsIndexCommand,
 } from "./skills-index.js";
 
@@ -312,5 +313,128 @@ metadata:
     expect(fs.existsSync(materializedSkill)).toBe(true);
     const content = await fs.promises.readFile(materializedSkill, "utf8");
     expect(content).toContain("skill-creator");
+  });
+
+  it("accurately identifies test files and test directories via isTestFileOrDir", () => {
+    // Test filenames
+    expect(isTestFileOrDir("pwgen-adapter.test.mjs")).toBe(true);
+    expect(isTestFileOrDir("pwgen-adapter.test.js")).toBe(true);
+    expect(isTestFileOrDir("pwgen-adapter.spec.js")).toBe(true);
+    expect(isTestFileOrDir("pwgen-adapter.test.ts")).toBe(true);
+    expect(isTestFileOrDir("pwgen-tool.test.json")).toBe(true);
+
+    // Test directory names
+    expect(isTestFileOrDir("__tests__")).toBe(true);
+    expect(isTestFileOrDir("test")).toBe(true);
+    expect(isTestFileOrDir("tests")).toBe(true);
+
+    // Full path checks
+    expect(
+      isTestFileOrDir(
+        "helper.js",
+        path.join(tempDir, ".agents", "scripts", "__tests__", "helper.js"),
+      ),
+    ).toBe(true);
+    expect(
+      isTestFileOrDir(
+        "util.js",
+        path.join(tempDir, ".agents", "scripts", "test", "util.js"),
+      ),
+    ).toBe(true);
+
+    // Legitimate non-test files and skills
+    expect(isTestFileOrDir("pwgen-adapter.js")).toBe(false);
+    expect(isTestFileOrDir("pwgen.js")).toBe(false);
+    expect(isTestFileOrDir("test-skill.js")).toBe(false);
+    expect(isTestFileOrDir("test-skill")).toBe(false);
+    expect(isTestFileOrDir("contest.js")).toBe(false);
+    expect(isTestFileOrDir("latest.js")).toBe(false);
+  });
+
+  it("excludes test files and test directories from skill, tool, and script discovery", async () => {
+    const skillDir = path.join(tempDir, ".agents", "skills", "main", "pwgen");
+    const scriptDir = path.join(tempDir, ".agents", "scripts", "main");
+    const testDir = path.join(
+      tempDir,
+      ".agents",
+      "scripts",
+      "main",
+      "__tests__",
+    );
+    const toolDir = path.join(tempDir, ".agents", "tools", "main");
+
+    await mkdir(skillDir, { recursive: true });
+    await mkdir(scriptDir, { recursive: true });
+    await mkdir(testDir, { recursive: true });
+    await mkdir(toolDir, { recursive: true });
+
+    // Main skill
+    await writeFile(
+      path.join(skillDir, "SKILL.md"),
+      `---
+name: pwgen
+description: Password generator.
+---
+# pwgen
+`,
+      "utf8",
+    );
+
+    // Main script
+    await writeFile(
+      path.join(scriptDir, "pwgen-adapter.js"),
+      `export function init() {}`,
+      "utf8",
+    );
+
+    // Test file co-located next to script (must be ignored)
+    await writeFile(
+      path.join(scriptDir, "pwgen-adapter.test.mjs"),
+      `import test from "node:test";`,
+      "utf8",
+    );
+
+    // Test file in nested __tests__ directory (must be ignored)
+    await writeFile(
+      path.join(testDir, "pwgen-helper.js"),
+      `// test helper`,
+      "utf8",
+    );
+
+    // Tool file and test tool file
+    await writeFile(
+      path.join(toolDir, "pwgen.json"),
+      JSON.stringify({ name: "pwgen", description: "Generate password" }),
+      "utf8",
+    );
+    await writeFile(
+      path.join(toolDir, "pwgen.test.json"),
+      JSON.stringify({ name: "pwgen.test", description: "Mock tool" }),
+      "utf8",
+    );
+
+    const indexDoc = await generateSkillsIndex(tempDir, { write: false });
+
+    // Verify only the real script is indexed, not the test files
+    const scriptNames = indexDoc.scripts.map((s: any) => s.name);
+    expect(scriptNames).toContain("pwgen-adapter");
+    expect(scriptNames).not.toContain("pwgen-adapter.test");
+    expect(scriptNames).not.toContain("pwgen-helper");
+    expect(indexDoc.scripts).toHaveLength(1);
+
+    // Verify pwgen skill does not have pwgen-adapter.test in its scripts
+    const pwgenSkill = indexDoc.skills.find((s: any) => s.name === "pwgen");
+    expect(pwgenSkill).toBeDefined();
+    if (pwgenSkill.scripts) {
+      const skillScriptNames = pwgenSkill.scripts.map((s: any) => s.name);
+      expect(skillScriptNames).toContain("pwgen-adapter");
+      expect(skillScriptNames).not.toContain("pwgen-adapter.test");
+    }
+
+    // Verify tool list does not include pwgen.test.json
+    const toolNames = indexDoc.tools.map((t: any) => t.name);
+    expect(toolNames).toContain("pwgen");
+    expect(toolNames).not.toContain("pwgen.test");
+    expect(indexDoc.tools).toHaveLength(1);
   });
 });

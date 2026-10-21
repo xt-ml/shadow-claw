@@ -151,11 +151,23 @@
   display: flex;
   flex: 1;
   flex-direction: row;
+  margin: var(
+    --shadow-claw-pages-viewer-margin,
+    var(--shadow-claw-pages-margin, 0 auto)
+  );
+  max-width: var(
+    --shadow-claw-pages-viewer-max-width,
+    var(--shadow-claw-pages-max-width, none)
+  );
   min-height: calc(100vh - 11rem);
   min-height: calc(100dvh - 11rem);
   min-width: 0;
   overflow: hidden;
   position: relative;
+  width: var(
+    --shadow-claw-pages-viewer-width,
+    var(--shadow-claw-pages-width, 100%)
+  );
 }
 
 .pages__viewer-scroll {
@@ -168,7 +180,10 @@
 }
 
 .pages__rendered {
-  max-width: 72rem;
+  max-width: var(
+    --shadow-claw-pages-rendered-max-width,
+    var(--shadow-claw-pages-viewer-max-width, 72rem)
+  );
   padding: 1rem 1.5rem 1rem 1rem;
 }
 

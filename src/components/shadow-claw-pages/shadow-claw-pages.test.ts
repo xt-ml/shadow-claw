@@ -168,7 +168,7 @@ describe("shadow-claw-pages", () => {
     expect(iframe).toBeInstanceOf(HTMLIFrameElement);
     expect((iframe as HTMLIFrameElement).hidden).toBe(false);
     expect((iframe as HTMLIFrameElement).getAttribute("allow")).toBe(
-      "fullscreen",
+      "fullscreen; clipboard-write",
     );
     expect((iframe as HTMLIFrameElement).hasAttribute("allowfullscreen")).toBe(
       false,
@@ -2917,6 +2917,14 @@ describe("shadow-claw-pages", () => {
         .mockImplementation(async () => {});
       registeredCallbacks[2]();
       expect(renderSpy).toHaveBeenCalled();
+    });
+
+    it("defines configurable custom property hooks for .pages__viewer layout in stylesheet", () => {
+      const styles = ShadowClawPages.styles as any;
+      const cssText = styles?.cssText || "";
+      expect(cssText).toContain("--shadow-claw-pages-viewer-max-width");
+      expect(cssText).toContain("--shadow-claw-pages-viewer-margin");
+      expect(cssText).toContain("--shadow-claw-pages-viewer-width");
     });
   });
 });

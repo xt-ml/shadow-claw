@@ -582,7 +582,7 @@ describe("shadow-claw-file-viewer", () => {
     expect(srcdoc).not.toContain("alert(1)");
   });
 
-  it("sets allow='fullscreen' and omits allowfullscreen on HTML iframe previews", async () => {
+  it("sets allow='fullscreen; clipboard-write' and omits allowfullscreen on HTML iframe previews", async () => {
     const component = new ShadowClawFileViewer();
     const content = document.createElement("div");
 
@@ -595,7 +595,7 @@ describe("shadow-claw-file-viewer", () => {
 
     const iframe = content.querySelector("iframe");
     expect(iframe).toBeInstanceOf(HTMLIFrameElement);
-    expect(iframe?.getAttribute("allow")).toBe("fullscreen");
+    expect(iframe?.getAttribute("allow")).toBe("fullscreen; clipboard-write");
     expect(iframe?.hasAttribute("allowfullscreen")).toBe(false);
   });
 

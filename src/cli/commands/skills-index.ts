@@ -36,6 +36,36 @@ async function pathExists(p: string): Promise<boolean> {
 }
 
 /**
+ * Checks whether a file path or directory represents test code.
+ */
+export function isTestFileOrDir(name: string, fullPath?: string): boolean {
+  // Test filenames or test dirnames ending in .test or .spec:
+  // e.g. foo.test.js, foo.test.mjs, foo.spec.ts, foo.test
+  if (/\.(test|spec)(\.[^.]+)?$/i.test(name)) {
+    return true;
+  }
+  // Standard test directories
+  if (name === "__tests__" || name === "test" || name === "tests") {
+    return true;
+  }
+  if (fullPath) {
+    const segments = fullPath.split(/[/\\]/);
+    if (
+      segments.some(
+        (seg) =>
+          seg === "__tests__" ||
+          seg === "test" ||
+          seg === "tests" ||
+          /\.(test|spec)(\.[^.]+)?$/i.test(seg),
+      )
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Recursively find all files matching a filter under a root directory.
  */
 async function findFilesRecursively(
@@ -50,9 +80,12 @@ async function findFilesRecursively(
     for (const entry of entries) {
       const fullPath = path.join(currentDir, entry.name);
       if (entry.isDirectory()) {
-        await walk(fullPath);
+        if (!isTestFileOrDir(entry.name, fullPath)) {
+          await walk(fullPath);
+        }
       } else if (
         entry.isFile() &&
+        !isTestFileOrDir(entry.name, fullPath) &&
         (!filterFn || filterFn(entry.name, fullPath))
       ) {
         results.push(fullPath);

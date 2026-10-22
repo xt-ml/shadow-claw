@@ -729,7 +729,7 @@ npx shadow-claw skills:index --out-file custom/discovery/index.json
 | `--stdout`              | boolean | Print generated JSON directly to stdout                         | `false`                      |
 | `--no-write`            | boolean | Skip writing the generated index file to disk                   | `false`                      |
 
-> **Build Pipeline Integration:** `src/cli/build/build.ts` (invoked via `bin/build.mjs`) automatically generates `.well-known/agent-skills/index.json` during builds into `dist/public`, indexing both content skills and bundled skills (such as `skill-creator`) using the content root's site metadata, and keeps `.agents/scripts` and repository `.well-known` synchronized.
+> **Build Pipeline Integration:** `src/cli/build/build.ts` (invoked via `bin/build.mjs`) automatically generates `.well-known/agent-skills/index.json` during builds into `dist/public`, indexing both content skills and bundled skills (such as `skill-creator`) using the content root's site metadata, and keeps `.agents/scripts` and repository `.well-known` synchronized. The exported `isTestFileOrDir` helper (from `src/cli/commands/skills-index.ts`) is reused by the build to filter test files and directories (`.test.js`, `.spec.ts`, `__tests__/`, `test/`, `tests/`) from `.agents/skills`, `.agents/tools`, and `.agents/scripts` when copying them into `dist/public`, preventing test fixtures from being published as live agent assets.
 
 ---
 

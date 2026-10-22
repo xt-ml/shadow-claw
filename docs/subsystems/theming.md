@@ -65,16 +65,19 @@ ShadowClaw exposes CSS variables across several functional categories:
 
 These tokens allow a custom site to selectively hide or reconfigure default built-in chrome without modifying core component templates:
 
-| CSS Custom Property                              | Default        | Purpose / Usage                                                                             |
-| :----------------------------------------------- | :------------- | :------------------------------------------------------------------------------------------ |
-| `--shadow-claw-sidebar-footer-display`           | `block`        | Set to `none` to hide the default sidebar footer containing the Settings button.            |
-| `--shadow-claw-sidebar-nav-display`              | `flex`         | Set to `none` to hide the default built-in sidebar navigation menu (`.nav-menu`).           |
-| `--shadow-claw-header-main-toggle-display`       | `block`        | Set to `none` to hide the top-left main app drawer / hamburger toggle button in the header. |
-| `--shadow-claw-page-header-display`              | `flex`         | Set to `none` to hide the `<shadow-claw-page-header>` component entirely.                   |
-| `--shadow-claw-pages-dropdown-container-display` | `flex`         | Set to `none` to hide the page navigation dropdown / breadcrumb selector.                   |
-| `--shadow-claw-article-header-margin-bottom`     | `1.5rem`       | Controls the bottom margin beneath markdown article headers.                                |
-| `--shadow-claw-logo-size`                        | `1.5rem`       | Controls the width and height of the header logo element.                                   |
-| `--shadow-claw-logo-margin`                      | `0 0 0.375rem` | Controls margin spacing around the header logo.                                             |
+| CSS Custom Property                              | Default        | Purpose / Usage                                                                                                             |
+| :----------------------------------------------- | :------------- | :-------------------------------------------------------------------------------------------------------------------------- |
+| `--shadow-claw-sidebar-footer-display`           | `block`        | Set to `none` to hide the default sidebar footer containing the Settings button.                                            |
+| `--shadow-claw-sidebar-nav-display`              | `flex`         | Set to `none` to hide the default built-in sidebar navigation menu (`.nav-menu`).                                           |
+| `--shadow-claw-header-main-toggle-display`       | `block`        | Set to `none` to hide the top-left main app drawer / hamburger toggle button in the header.                                 |
+| `--shadow-claw-page-header-display`              | `flex`         | Set to `none` to hide the `<shadow-claw-page-header>` component entirely.                                                   |
+| `--shadow-claw-pages-dropdown-container-display` | `flex`         | Set to `none` to hide the page navigation dropdown / breadcrumb selector.                                                   |
+| `--shadow-claw-article-header-margin-bottom`     | `1.5rem`       | Controls the bottom margin beneath markdown article headers.                                                                |
+| `--shadow-claw-logo-size`                        | `1.5rem`       | Controls the width and height of the header logo element.                                                                   |
+| `--shadow-claw-logo-margin`                      | `0 0 0.375rem` | Controls margin spacing around the header logo.                                                                             |
+| `--shadow-claw-pages-viewer-margin`              | `0 auto`       | Outer margin on the `.pages__viewer` content container (falls back to `--shadow-claw-pages-margin`).                        |
+| `--shadow-claw-pages-viewer-max-width`           | `none`         | Max-width constraint on the `.pages__viewer` container for centred layouts (falls back to `--shadow-claw-pages-max-width`). |
+| `--shadow-claw-pages-viewer-width`               | `100%`         | Explicit width of the `.pages__viewer` container (falls back to `--shadow-claw-pages-width`).                               |
 
 ### 2. Design Tokens (Colors, Typography & Radii)
 

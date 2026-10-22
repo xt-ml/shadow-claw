@@ -135,35 +135,41 @@ npm install && npm run dev  # Dev server → http://localhost:8888
 ShadowClaw follows a **dual-runtime agent pattern**, sharing a unified tool-use loop, prompt assembly engine, and skill execution pipeline across both client environments:
 
 ```text
-┌─────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                    SHADOWCLAW RUNTIMES                                      │
-├──────────────────────────────────────────────────────────┬──────────────────────────────────┤
-│           1. INTERACTIVE FRONTEND CLIENT                 │  2. HEADLESS SERVER-SIDE CLIENT  │
-│               (Browser PWA & Electron)                   │        (shadow-claw agent)       │
-├──────────────────────────────────────────────────────────┼──────────────────────────────────┤
-│ ┌──────────────────────────────────────────────────────┐ │ ┌──────────────────────────────┐ │
-│ │        Web Components (Chat, Files, Tasks)           │ │ │  CLI Commands (init/run/etc) │ │
-│ └──────────────────────────┬───────────────────────────┘ │ └──────────────┬───────────────┘ │
-│                            ▼                             │                ▼                 │
-│ ┌──────────────────────────────────────────────────────┐ │ ┌──────────────────────────────┐ │
-│ │  Orchestrator State Machine (Signal Reactivity)      │ │ │   Headless Agent Participant │ │
-│ └──────────────────────────┬───────────────────────────┘ │ └──────────────┬───────────────┘ │
-│                            ▼                             │                ▼                 │
-│ ┌──────────────────────────────────────────────────────┐ │ ┌──────────────────────────────┐ │
-│ │  Agent Worker (Off-Main-Thread Web Worker)           │ │ │   Node.js Execution Target   │ │
-│ └──────────────────────────┬───────────────────────────┘ │ └──────────────┬───────────────┘ │
-├────────────────────────────┴─────────────────────────────┴────────────────┴─────────────────┤
-│                             SHARED AGENTIC CORE & TOOLS                                     │
-│          handleInvoke · executeTool · executeToolChain · discoverSkills · Memory            │
-├──────────────────────────────────────────────────────────┬──────────────────────────────────┤
-│ ┌──────────────────────────────────────────────────────┐ │ ┌──────────────────────────────┐ │
-│ │  Browser Execution Layer                             │ │ │  Host OS Execution Layer     │ │
-│ │  • Storage: IndexedDB + OPFS Group Workspaces        │ │ │  • Storage: SQLite Database  │ │
-│ │  • Shell: just-bash POSIX Emulator or WebVM          │ │ │    + NodeFsDirectoryHandle   │ │
-│ │  • Group ID: br:main                                 │ │ │  • Shell: native child_proc  │ │
-│ │                                                      │ │ │  • Group ID: server:main     │ │
-│ └──────────────────────────────────────────────────────┘ │ └──────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────────┐
+│                          SHADOWCLAW RUNTIMES                          │
+├───────────────────────────────────┬───────────────────────────────────┤
+│  1. INTERACTIVE FRONTEND CLIENT   │  2. HEADLESS SERVER-SIDE CLIENT   │
+│     (Browser PWA & Electron)      │        (shadow-claw agent)        │
+├───────────────────────────────────┼───────────────────────────────────┤
+│ ┌───────────────────────────────┐ │ ┌───────────────────────────────┐ │
+│ │        Web Components         │ │ │         CLI Commands          │ │
+│ │     (Chat, Files, Tasks)      │ │ │        (init/run/etc)         │ │
+│ └───────────────┬───────────────┘ │ └───────────────┬───────────────┘ │
+│                 ▼                 │                 ▼                 │
+│ ┌───────────────────────────────┐ │ ┌───────────────────────────────┐ │
+│ │  Orchestrator State Machine   │ │ │  Headless Agent Participant   │ │
+│ │      (Signal Reactivity)      │ │ │                               │ │
+│ └───────────────┬───────────────┘ │ └───────────────┬───────────────┘ │
+│                 ▼                 │                 ▼                 │
+│ ┌───────────────────────────────┐ │ ┌───────────────────────────────┐ │
+│ │         Agent Worker          │ │ │   Node.js Execution Target    │ │
+│ │ (Off-Main-Thread Web Worker)  │ │ │                               │ │
+│ └───────────────┬───────────────┘ │ └───────────────┬───────────────┘ │
+├─────────────────┴─────────────────┴─────────────────┴─────────────────┤
+│                      SHARED AGENTIC CORE & TOOLS                      │
+│                  handleInvoke · executeTool · Memory                  │
+│                   discoverSkills · executeToolChain                   │
+├───────────────────────────────────┬───────────────────────────────────┤
+│ ┌───────────────────────────────┐ │ ┌───────────────────────────────┐ │
+│ │    Browser Execution Layer    │ │ │    Host OS Execution Layer    │ │
+│ │───────────────────────────────│ │ │───────────────────────────────│ │
+│ │ • Storage: OPFS Group         │ │ │ • Storage: SQLite Database    │ │
+│ │   Workspaces + IndexedDB      │ │ │   + NodeFsDirectoryHandle     │ │
+│ │ • Shell: just-bash POSIX      │ │ │ • Shell: native child_proc    │ │
+│ │   Emulator or WebVM           │ │ │   (Host OS processes)         │ │
+│ │ • Group ID: br:main           │ │ │ • Group ID: server:main       │ │
+│ └───────────────────────────────┘ │ └───────────────────────────────┘ │
+└───────────────────────────────────────────────────────────────────────┘
 ```
 
 **Key design principles:**
@@ -335,44 +341,44 @@ The `shadow-claw` CLI provides runtime driving, server services, and the headles
 
 ```bash
 # Headless Server-Side Agent Participant
-npx shadow-claw agent init [dir]                     # Initialize workspace with interactive model selection (supports HF browsing, paging, search)
-npx shadow-claw agent model list                     # List local cached ONNX and GGUF models
-npx shadow-claw agent model download [modelId]       # Download model from Hugging Face with progress bar
-npx shadow-claw agent model set [modelId]            # Configure default headless agent model
-npx shadow-claw agent model remote --query <search>  # Search Hugging Face onnx-community repository
-npx shadow-claw agent run "prompt"                   # Run agent prompt (retains multi-turn history by default)
-npx shadow-claw agent run "prompt" --no-history      # Run isolated one-shot prompt without prior history
-npx shadow-claw agent run "prompt" --tools none      # Strip all tool schemas for pure text completion (or --no-tools)
-npx shadow-claw agent run "prompt" --no-system-prompt # Strip system prompt for direct text completion
-npx shadow-claw agent clear                          # Reset conversation history for the group (default server:main)
-cat doc.txt | npx shadow-claw agent run -o sum.txt   # Pipe document into agent prompt and write to file
+npx shadow-claw agent init [dir]                       # Initialize workspace with interactive model selection (supports HF browsing, paging, search)
+npx shadow-claw agent model list                       # List local cached ONNX and GGUF models
+npx shadow-claw agent model download [modelId]         # Download model from Hugging Face with progress bar
+npx shadow-claw agent model set [modelId]              # Configure default headless agent model
+npx shadow-claw agent model remote --query <search>    # Search Hugging Face onnx-community repository
+npx shadow-claw agent run "prompt"                     # Run agent prompt (retains multi-turn history by default)
+npx shadow-claw agent run "prompt" --no-history        # Run isolated one-shot prompt without prior history
+npx shadow-claw agent run "prompt" --tools none        # Strip all tool schemas for pure text completion (or --no-tools)
+npx shadow-claw agent run "prompt" --no-system-prompt  # Strip system prompt for direct text completion
+npx shadow-claw agent clear                            # Reset conversation history for the group (default server:main)
+cat doc.txt | npx shadow-claw agent run -o sum.txt     # Pipe document into agent prompt and write to file
 npx shadow-claw agent run "Describe" -f a.png -f b.pdf # Attach one or more local files (repeatable)
-npx shadow-claw agent skills                         # List discovered workspace skills
-npx shadow-claw agent tools                          # List tools with capability matrix
-npx shadow-claw agent tool <name> [jsonArgs]         # Inspect tool schema or execute directly
-echo "hello" | npx shadow-claw agent tool <name>     # Pipe text directly into tool (schema auto-mapping)
-npx shadow-claw agent skill <name>                   # Execute a declarative skill tool chain
-npx shadow-claw agent import <url> [options]         # Discover and import remote RFC v0.2.0 skills and tools
-npx shadow-claw agent listen                         # Start headless agent WebRTC listener with orchestration loop
+npx shadow-claw agent skills                           # List discovered workspace skills
+npx shadow-claw agent tools                            # List tools with capability matrix
+npx shadow-claw agent tool <name> [jsonArgs]           # Inspect tool schema or execute directly
+echo "hello" | npx shadow-claw agent tool <name>       # Pipe text directly into tool (schema auto-mapping)
+npx shadow-claw agent skill <name>                     # Execute a declarative skill tool chain
+npx shadow-claw agent import <url> [options]           # Discover and import remote RFC v0.2.0 skills and tools
+npx shadow-claw agent listen                           # Start headless agent WebRTC listener with orchestration loop
 
 # Browser & Client Interactivity
-npx shadow-claw clients                              # List connected browser/Electron clients
-npx shadow-claw send "your prompt" --client <id>     # Send a prompt to a connected client or peer agent (supports -f, --file)
-npx shadow-claw send-file <file> --client <peerId>   # Transfer a file to a peer over WebRTC with optional --prompt
-npx shadow-claw tasks --client <id>                  # List scheduled tasks on a client
-npx shadow-claw backup                               # Trigger OPFS workspace backup
-npx shadow-claw backup list                          # List available backup snapshots
-npx shadow-claw backup delete --backup-id <id>       # Delete a backup snapshot
+npx shadow-claw clients                                # List connected browser/Electron clients
+npx shadow-claw send "your prompt" --client <id>       # Send a prompt to a connected client or peer agent (supports -f, --file)
+npx shadow-claw send-file <file> --client <peerId>     # Transfer a file to a peer over WebRTC with optional --prompt
+npx shadow-claw tasks --client <id>                    # List scheduled tasks on a client
+npx shadow-claw backup                                 # Trigger OPFS workspace backup
+npx shadow-claw backup list                            # List available backup snapshots
+npx shadow-claw backup delete --backup-id <id>         # Delete a backup snapshot
 
 # Server Services & Daemon
-npx shadow-claw mcp                                  # Run Stateless MCP server (STDIO, isolated tmpdir sandbox)
-npx shadow-claw mcp --workspace .                    # Run Stateless MCP server exposing tools for current workspace
-npx shadow-claw mcp --tool-prefix none               # Expose unprefixed tools (read_file, bash) for Cursor/Claude
-npx shadow-claw server --tmp                         # Run services with temporary directory cache (/tmp/shadow-claw)
-npx shadow-claw server --cache-dir <dir>             # Run services with custom cache directory
-npx shadow-claw webrtc listen                        # Start headless WebRTC DataChannel daemon
-npx shadow-claw peer-id                              # Get or generate persistent CLI Peer ID
-npx shadow-claw skills:index                         # Generate or update .well-known/agent-skills/index.json
+npx shadow-claw mcp                                    # Run Stateless MCP server (STDIO, isolated tmpdir sandbox)
+npx shadow-claw mcp --workspace .                      # Run Stateless MCP server exposing tools for current workspace
+npx shadow-claw mcp --tool-prefix none                 # Expose unprefixed tools (read_file, bash) for Cursor/Claude
+npx shadow-claw server --tmp                           # Run services with temporary directory cache (/tmp/shadow-claw)
+npx shadow-claw server --cache-dir <dir>               # Run services with custom cache directory
+npx shadow-claw webrtc listen                          # Start headless WebRTC DataChannel daemon
+npx shadow-claw peer-id                                # Get or generate persistent CLI Peer ID
+npx shadow-claw skills:index                           # Generate or update .well-known/agent-skills/index.json
 ```
 
 When launching `dev`, `run`, `serve`, or `server` without an existing cache, ShadowClaw prompts interactively to select between `.cache`, `tmpdir()`, or a custom path (skip prompting via `--tmp`, `-y`, `--cache-dir <dir>`, or `SHADOWCLAW_CACHE_DIR`).

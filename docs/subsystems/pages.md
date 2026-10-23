@@ -18,20 +18,20 @@ Markdown pages can optionally surface YAML frontmatter as a visible metadata blo
 
 ```mermaid
 graph TD
-  "User / UI" --> "shadow-claw-pages"
-  "shadow-claw-pages" --> "orchestratorStore"
-  "orchestratorStore" --> "CONFIG_KEYS.PAGES_LIST (DB)"
-  "orchestratorStore" --> "seedStaticMainSite()"
-  "seedStaticMainSite()" --> "suppressedPages (DB)"
+  User["User / UI"] --> Pages["shadow-claw-pages"]
+  Pages --> Orchestrator["orchestratorStore"]
+  Orchestrator --> PagesList["CONFIG_KEYS.PAGES_LIST (DB)"]
+  Orchestrator --> Seed["seedStaticMainSite()"]
+  Seed --> SuppressedPages["suppressedPages (DB)"]
 
-  "shadow-claw-pages" -- "Markdown" --> "renderMarkdown()"
-  "renderMarkdown()" --> "DOMPurify + Image Data URL Conversion"
+  Pages -->|Markdown| RenderMarkdown["renderMarkdown()"]
+  RenderMarkdown --> Sanitization["DOMPurify + Image Data URL Conversion"]
 
-  "shadow-claw-pages" -- "HTML" --> "Iframe srcdoc"
-  "Iframe srcdoc" --> "sanitizeSrcdocHtml()"
-  "Iframe srcdoc" --> "file-viewer-preview-bridge.js"
-  "file-viewer-preview-bridge.js" -- "postMessage" --> "shadow-claw-pages"
-  "shadow-claw-pages" -- "shadow-claw-navigate" --> "Browser History API"
+  Pages -->|HTML| Iframe["Iframe srcdoc"]
+  Iframe --> SanitizeSrcdoc["sanitizeSrcdocHtml()"]
+  Iframe --> PreviewBridge["file-viewer-preview-bridge.js"]
+  PreviewBridge -->|postMessage| Pages
+  Pages -->|shadow-claw-navigate| History["Browser History API"]
 ```
 
 ---
@@ -184,6 +184,8 @@ Applications pre-rendered with Declarative Shadow DOM (DSD) shell via `src/cli/p
     - **`branding`**: `titleText`, `siteUrl`, `repoUrl`, `repoLabel`, `faviconPath`, `appleTouchIconPath`, `logoSlotHtml` (custom logo markup, or `"none"` / `""` to remove the header logo).
     - **`sidebar`**: `pagesHidden`, `chatHidden`, `tasksHidden`, `filesHidden`, `defaultPage` (`"pages"` | `"chat"` | `"tasks"` | `"files"`), `slotHtml` (raw HTML string), `slotPath` (path to a custom sidebar HTML file), `sections` (array of declarative sidebar sections with `title`, `headerHref`, `items: [{ title, label, href, target, rel, active }]`, or `html`).
     - **`pages`**: `sortOrder` (`"asc"` | `"desc"`), `defaultPinnedPage`, `allowList` (array of allowed page or directory path patterns), `denyList` (array of denied page or directory path patterns excluded from the viewer, page navigation, and static manifest seeding), `iframe` (boolean, defaults to `true` for sandboxed iframe rendering; set `false` for direct shadow DOM rendering), `render` (`"iframe"` | `"shadow"` | `"direct"`), `shadowDom` (boolean), `directPages` / `shadowDomPages` (array of page paths to render directly in shadow DOM), `iframePages` (array of page paths to force iframe rendering).
+    - **`feed`**: `true` or `{ "enabled": true }` generates RSS 2.0, Atom 1.0, and RDF 1.0 feeds from routed pages; optional `allowList` and `denyList` filter feed entries. `feedPath` copies a custom feed file into the build output.
+    - **`sitemapPath`**: Selects a custom sitemap file to copy into the build output. Without a supplied sitemap, the build generates `sitemap.xml` from `routes.json` when a canonical origin is available.
     - **`theme`**: `stylesheet` (custom theme CSS stylesheet injected into head).
     - **`settings`**: `assistantName` (pre-seeds the default assistant name), `defaultToolsProfile` (pre-seeds the default tool profile e.g. `"__builtin_default"` or `"none"`), `enabledTools` (pre-seeds default enabled built-in tool array), `overridePrerenderSkeleton` (set `false` to disable the skeleton overlay at build time).
     - **`cacheDir`** / **`server.cacheDir`**: Custom directory for storing cache, control tokens, and SQLite databases.
@@ -192,7 +194,7 @@ Applications pre-rendered with Declarative Shadow DOM (DSD) shell via `src/cli/p
     - `applySiteConfig` discovers sidebar markup from `sidebar.slotHtml`, `sidebar.sections`, or auto-discovered candidate files (`pages/main/sidebar.html`, `pages/sidebar.html`, `sidebar.html`, `resources/sidebar.html`), patching the markup directly into `<shadow-claw>` light DOM.
     - Slotted links (`.sidebar-link`, `[slot^="sidebar"] a`) automatically synchronize active classes (`.active`) and `aria-current="page"` via `syncSlottedSidebarActiveLinks` on route changes, `popstate`, and Navigation API `navigate`.
     - On mobile viewports (<896px), clicking any slotted sidebar link automatically closes the navigation drawer.
-  - **Build-Time Application**: `src/cli/site-config/apply.ts` patches `index.html`, `manifest.json`, and any copied `sitemap.xml` / `sitemap.txt`, and copies custom theme stylesheets into the build distribution. A custom sitemap can be selected with top-level `sitemapPath`; otherwise existing `sitemap.xml` or `sitemap.txt` files are copied. If neither exists, the build generates `sitemap.xml` from `routes.json` when a canonical origin is available, using the site root and each unique `prettyPath`. The origin comes from `--origin` / `PAGES_ORIGIN`, falling back to `branding.siteUrl`. Stylesheets under `pages/resources/`, `pages/deps/`, `resources/`, `deps/`, `pages/assets/`, or `pages/main/assets/` are flattened to the distribution root and have that prefix removed from the generated `href`; other paths, such as `pages/main/theme.css`, retain their path.
+  - **Build-Time Application**: `src/cli/site-config/apply.ts` patches `index.html`, `manifest.json`, and any copied `sitemap.xml` / `sitemap.txt`, and copies custom theme stylesheets into the build distribution. A custom sitemap can be selected with top-level `sitemapPath`; otherwise existing `sitemap.xml` or `sitemap.txt` files are copied. If neither exists, the build generates `sitemap.xml` from `routes.json` when a canonical origin is available, using the site root and each unique `prettyPath`. The origin comes from `--origin` / `PAGES_ORIGIN`, falling back to `branding.siteUrl`. When feeds are enabled with `feed: true` or `feed.enabled: true`, the build emits RSS 2.0, Atom 1.0, and RDF 1.0 feeds under `/feed/`, `/feed/atom/`, and `/feed/rdf/`, plus HTML redirects and autodiscovery links. Feed allow/deny lists and page frontmatter can filter entries. `robots.txt` is copied as-is, so its sitemap URL must already match the deployed origin and base path. Stylesheets under `pages/resources/`, `pages/deps/`, `resources/`, `deps/`, `pages/assets/`, or `pages/main/assets/` are flattened to the distribution root and have that prefix removed from the generated `href`; other paths, such as `pages/main/theme.css`, retain their path.
   - **Branding Asset Precedence**: For `faviconPath` and `appleTouchIconPath`, content-specific locations under `pages/` and its supported resource/dependency paths are checked before bare repository-root defaults, so a published site's branding assets are not shadowed by ShadowClaw's built-in assets.
   - **DSD Shell Navigation Visibility**: `src/cli/prerender/dsd-shell/prerender-dsd-shell.ts` applies `hidden` and `aria-hidden` attributes to sidebar navigation items at build time, preventing layout shift on first paint.
   - **Runtime Seeding**: `orchestratorStore.init()` reads the embedded `<script id="shadow-claw-site-config" type="application/json">` via `applySiteConfigDefaults()` to seed preferences into IndexedDB on first load.

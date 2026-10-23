@@ -142,23 +142,64 @@ Minimal `pages/routes.json`:
 ```json
 {
   "routes": {
-    "/pages/main/index.html": { "prettyPath": "/main" },
-    "/pages/main/~/content/about.md": { "prettyPath": "/main/about" },
-    "/pages/main/MEMORY.md": { "prettyPath": "/main/memory" }
+    "/pages/main/index.html": { "prettyPath": "/" },
+    "/pages/main/~/content/about.md": { "prettyPath": "/about" },
+    "/pages/main/MEMORY.md": { "prettyPath": "/memory" }
   }
 }
 ```
 
 > **Reserved path prefixes** — the following first-path-segments are owned by
-> ShadowClaw's own router and **must not** be used as pretty path prefixes:
-> `/`, `/chat`, `/files`, `/tasks`, `/pages`, `/settings`, `/tools`, `/channels`.
-> `/` (root) is also reserved as the default pinned page and is unreachable as
-> a pretty path. Use a safe namespace like `/main/`, `/articles/`, `/docs/`, or
-> any custom prefix that doesn't collide with the list above.
+> ShadowClaw's own router and **must not** be used as custom pretty path
+> prefixes: `/chat`, `/files`, `/tasks`, `/pages`, `/settings`, `/tools`, and
+> `/channels`. Root (`/`) is supported as an explicit pretty path. If no route
+> maps to `/`, the default pinned page is shown there. For other routes, use a
+> namespace like `/main/`, `/articles/`, or `/docs/`.
+
+#### Sitemaps, `robots.txt`, and Feeds
+
+ShadowClaw copies a custom sitemap selected by `sitemapPath`; otherwise it
+copies existing `sitemap.xml` and/or `sitemap.txt` files. If neither exists,
+it generates `sitemap.xml` from `routes.json` when a canonical origin is
+available. The generated sitemap includes the site root and each unique
+`prettyPath`. The origin comes from `--origin` or `PAGES_ORIGIN`, falling back
+to `branding.siteUrl`. Existing XML and text sitemap URLs are rewritten to
+`--origin` or `PAGES_ORIGIN` when either is set.
+
+`robots.txt` is copied as-is; its sitemap URL is not rewritten from
+`PAGES_ORIGIN`. Provide a content-specific file such as
+`pages/resources/robots.txt` with the deployed URL, including the repository
+subpath for GitHub Pages project sites:
+
+```text
+User-agent: *
+Disallow:
+
+Sitemap: https://<owner>.github.io/<repository>/sitemap.xml
+```
+
+To generate RSS 2.0, Atom 1.0, and RDF 1.0 feeds from routed pages, enable
+feeds in `shadow-claw.config.json`:
+
+```json
+{
+  "feed": { "enabled": true }
+}
+```
+
+`"feed": true` is also supported. Feed generation requires `routes.json` and
+publishes files under `/feed/`, `/feed/atom/`, and `/feed/rdf/`, along with
+HTML redirect pages and feed-discovery links in the app shell. Set
+`branding.siteUrl` to the deployed base URL, including any GitHub Pages
+repository subpath, so those discovery links resolve correctly. Feed entries
+can be filtered with `feed.allowList` / `feed.denyList`; page frontmatter can
+opt out with `feed: false`, `syndication: false`, or `rss: false`.
 
 #### Default Pinned Page (`/`)
 
-When visitors navigate to the root URL (`/`) of your published site, ShadowClaw displays the **default pinned page**.
+When no `routes.json` entry maps a pretty path to `/`, visitors see the
+**default pinned page** at the root URL. An explicit route such as
+`"/pages/main/index.html": { "prettyPath": "/" }` takes precedence.
 
 **How ShadowClaw selects the default page for `/`:**
 

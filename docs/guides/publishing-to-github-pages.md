@@ -146,6 +146,29 @@ Minimal `pages/routes.json`:
 > `/chat`, `/files`, `/tasks`, `/pages`, `/settings`, `/tools`, `/channels`.
 > Root (`/`) is supported as a pretty path (e.g. `"/pages/main/index.html": { "prettyPath": "/" }`). For custom subpaths, use a safe namespace like `/main/`, `/articles/`, `/docs/`, or any custom prefix that doesn't collide with the reserved list above.
 
+#### Sitemaps, `robots.txt`, and Feeds
+
+ShadowClaw copies a custom sitemap selected by `sitemapPath`; otherwise it copies existing `sitemap.xml` and/or `sitemap.txt` files. If neither exists, it generates `sitemap.xml` from `routes.json` when a canonical origin is available. The generated sitemap includes the site root and each unique `prettyPath`. The origin comes from `--origin` or `PAGES_ORIGIN`, falling back to `branding.siteUrl`. Existing XML and text sitemap URLs are rewritten to `--origin` or `PAGES_ORIGIN` when either is set.
+
+`robots.txt` is copied as-is; its sitemap URL is not rewritten from `PAGES_ORIGIN`. Provide a content-specific file such as `pages/resources/robots.txt` with the deployed URL, including the repository subpath for GitHub Pages project sites:
+
+```text
+User-agent: *
+Disallow:
+
+Sitemap: https://<owner>.github.io/<repository>/sitemap.xml
+```
+
+To generate RSS 2.0, Atom 1.0, and RDF 1.0 feeds from routed pages, enable feeds in `shadow-claw.config.json`:
+
+```json
+{
+  "feed": { "enabled": true }
+}
+```
+
+`"feed": true` is also supported. Feed generation requires `routes.json` and publishes files under `/feed/`, `/feed/atom/`, and `/feed/rdf/`, along with HTML redirect pages and feed-discovery links in the app shell. Set `branding.siteUrl` to the deployed base URL, including any GitHub Pages repository subpath, so those discovery links resolve correctly. Feed entries can be filtered with `feed.allowList` / `feed.denyList`; page frontmatter can opt out with `feed: false`, `syndication: false`, or `rss: false`.
+
 #### Custom Sidebar Navigation & Slots
 
 Customize the navigation sidebar either by providing a custom sidebar template or defining declarative sections in `shadow-claw.config.json`:

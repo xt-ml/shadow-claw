@@ -40,10 +40,13 @@ test.describe("Storage Integration", () => {
     await page.waitForTimeout(1000);
 
     const dbInitialized = await page.evaluate(async () => {
+      const bridge = (globalThis as any).__SHADOWCLAW_E2E__;
+      const dbName = bridge?.getDbName ? bridge.getDbName() : "shadowclaw";
+
       return new Promise((resolve) => {
         let request;
         try {
-          request = indexedDB.open("shadowclaw");
+          request = indexedDB.open(dbName);
         } catch {
           resolve({ dbExists: false, hasStores: false, storeCount: 0 });
 
@@ -185,9 +188,14 @@ test.describe("Storage Integration", () => {
     await page.waitForTimeout(1500);
 
     const workspaceStructure = await page.evaluate(async () => {
+      const bridge = (globalThis as any).__SHADOWCLAW_E2E__;
+      const opfsRootName = bridge?.getOpfsRootName
+        ? bridge.getOpfsRootName()
+        : "shadowclaw";
+
       try {
         const root = await navigator.storage.getDirectory();
-        const shadowclawHandle = await root.getDirectoryHandle("shadowclaw", {
+        const shadowclawHandle = await root.getDirectoryHandle(opfsRootName, {
           create: false,
         });
 
@@ -221,10 +229,13 @@ test.describe("Storage Integration", () => {
     await page.waitForTimeout(1000);
 
     const configAccess = await page.evaluate(async () => {
+      const bridge = (globalThis as any).__SHADOWCLAW_E2E__;
+      const dbName = bridge?.getDbName ? bridge.getDbName() : "shadowclaw";
+
       return new Promise((resolve) => {
         let request;
         try {
-          request = indexedDB.open("shadowclaw");
+          request = indexedDB.open(dbName);
         } catch {
           resolve({ hasConfigStore: false, error: "IDB unavailable" });
 

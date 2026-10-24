@@ -120,6 +120,17 @@ describe("E2E Bridge", () => {
       expect(bridge.getActiveGroupId()).toBe("br:main");
     });
 
+    it("bridge.getDbName and bridge.getOpfsRootName return string identifiers", () => {
+      const store = createMockStore();
+      const ui = createMockUiElement();
+
+      installE2eBridge(store as any, ui as any);
+      const bridge = (globalThis as any).__SHADOWCLAW_E2E__;
+
+      expect(typeof bridge.getDbName()).toBe("string");
+      expect(typeof bridge.getOpfsRootName()).toBe("string");
+    });
+
     it("bridge.createConversation delegates to store.createConversation", async () => {
       const store = createMockStore();
       const ui = createMockUiElement();

@@ -504,4 +504,125 @@ describe("build without and with pages", () => {
       await rm(tempInRepoRoot, { recursive: true, force: true });
     }
   });
+
+  it("applies branding.siteUrl base href to index.html and pre-rendered pretty paths during consumer build in production", async () => {
+    const tempConsumerRoot = await mkdtemp(
+      path.join(os.tmpdir(), "shadow-claw-base-href-consumer-"),
+    );
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      await writeFile(
+        path.join(tempConsumerRoot, "shadow-claw.config.json"),
+        JSON.stringify({
+          site: { title: "Template Hub", description: "Template." },
+          branding: {
+            siteUrl: "https://xt-ml.github.io/shadow-claw-template/",
+          },
+        }),
+        "utf8",
+      );
+
+      const mainDir = path.join(tempConsumerRoot, "pages/main");
+      await mkdir(mainDir, { recursive: true });
+      await writeFile(
+        path.join(mainDir, "about.md"),
+        "# About\n\nAbout page content.",
+        "utf8",
+      );
+      await writeFile(
+        path.join(tempConsumerRoot, "pages/routes.json"),
+        JSON.stringify({
+          routes: {
+            "/pages/main/about.md": { prettyPath: "/docs/about" },
+          },
+        }),
+        "utf8",
+      );
+
+      await runConsumerBuild({
+        contentRoot: tempConsumerRoot,
+        toolchainRoot: tempProjectRoot,
+        isProduction: true,
+        quiet: true,
+        stdio: "pipe",
+      });
+
+      const indexHtml = await readFile(
+        path.join(tempConsumerRoot, "dist/public/index.html"),
+        "utf8",
+      );
+      const prettyIndexHtml = await readFile(
+        path.join(tempConsumerRoot, "dist/public/docs/about/index.html"),
+        "utf8",
+      );
+      const prettyFileHtml = await readFile(
+        path.join(tempConsumerRoot, "dist/public/docs/about.html"),
+        "utf8",
+      );
+
+      expect(indexHtml).toContain('<base href="/shadow-claw-template/" />');
+      expect(prettyIndexHtml).toContain(
+        '<base href="/shadow-claw-template/" />',
+      );
+      expect(prettyFileHtml).toContain(
+        '<base href="/shadow-claw-template/" />',
+      );
+    } finally {
+      logSpy.mockRestore();
+      await rm(tempConsumerRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("defaults to root / base href during consumer build in development", async () => {
+    const tempConsumerRoot = await mkdtemp(
+      path.join(os.tmpdir(), "shadow-claw-base-href-dev-"),
+    );
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      await writeFile(
+        path.join(tempConsumerRoot, "shadow-claw.config.json"),
+        JSON.stringify({
+          site: { title: "Template Hub", description: "Template." },
+          branding: {
+            siteUrl: "https://xt-ml.github.io/shadow-claw-template/",
+          },
+        }),
+        "utf8",
+      );
+
+      const mainDir = path.join(tempConsumerRoot, "pages/main");
+      await mkdir(mainDir, { recursive: true });
+      await writeFile(
+        path.join(mainDir, "about.md"),
+        "# About\n\nAbout page content.",
+        "utf8",
+      );
+      await writeFile(
+        path.join(tempConsumerRoot, "pages/routes.json"),
+        JSON.stringify({
+          routes: {
+            "/pages/main/about.md": { prettyPath: "/docs/about" },
+          },
+        }),
+        "utf8",
+      );
+
+      await runConsumerBuild({
+        contentRoot: tempConsumerRoot,
+        toolchainRoot: tempProjectRoot,
+        isProduction: false,
+        quiet: true,
+        stdio: "pipe",
+      });
+
+      const indexHtml = await readFile(
+        path.join(tempConsumerRoot, "dist/public/index.html"),
+        "utf8",
+      );
+      expect(indexHtml).toContain('<base href="/" />');
+    } finally {
+      logSpy.mockRestore();
+      await rm(tempConsumerRoot, { recursive: true, force: true });
+    }
+  });
 });

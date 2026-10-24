@@ -31,8 +31,11 @@ test.describe("Orchestrator Integration", () => {
     await page.waitForTimeout(1000);
 
     const messagesPersisted = await page.evaluate(async () => {
+      const bridge = (globalThis as any).__SHADOWCLAW_E2E__;
+      const dbName = bridge?.getDbName ? bridge.getDbName() : "shadowclaw";
+
       return new Promise((resolve) => {
-        const request = indexedDB.open("shadowclaw");
+        const request = indexedDB.open(dbName);
 
         request.onsuccess = (event) => {
           const db = (event.target as any).result;

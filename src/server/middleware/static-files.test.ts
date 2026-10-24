@@ -211,6 +211,41 @@ describe("static-files-middleware", () => {
     }
   });
 
+  it("serves SPA shell for subpath-prefixed app routes", async () => {
+    await register();
+    const middleware = app.use.mock.calls[1][0];
+
+    for (const appPath of [
+      "/shadow-claw/files",
+      "/shadow-claw/chat",
+      "/shadow-claw/tasks",
+    ]) {
+      const req = {
+        method: "GET",
+        headers: {
+          accept: "text/html",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+        },
+        originalUrl: appPath,
+        url: appPath,
+      };
+      const res = { setHeader: jest.fn(), sendFile: jest.fn() };
+      const next = jest.fn();
+
+      fsMock.stat.mockImplementation((_targetPath: string, cb: any) => {
+        cb(new Error("ENOENT"));
+      });
+
+      middleware(req, res, next);
+
+      expect(res.sendFile).toHaveBeenCalledWith(
+        expect.stringContaining("/root/index.html"),
+      );
+      expect(next).not.toHaveBeenCalled();
+    }
+  });
+
   it("does not serve SPA shell for non-HTML missing requests", async () => {
     await register();
     const middleware = app.use.mock.calls[1][0];

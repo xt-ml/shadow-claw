@@ -141,15 +141,40 @@ export async function getCurrentPageId(page: Page): Promise<string | null> {
 
 export async function getAllGroupIds(page: Page): Promise<string[]> {
   return page.evaluate(async () => {
-    const dbName = "shadowclaw";
-    const dbVersion = 1;
+    const bridge = (globalThis as any).__SHADOWCLAW_E2E__;
+    const activeDb = bridge?.getDb ? bridge.getDb() : null;
+
+    if (activeDb && typeof activeDb.transaction === "function") {
+      try {
+        const tx = activeDb.transaction("sessions", "readonly");
+        const store = tx.objectStore("sessions");
+        const getAllRequest = store.getAllKeys();
+
+        return await new Promise((resolve) => {
+          getAllRequest.onsuccess = () =>
+            resolve(getAllRequest.result as string[]);
+          getAllRequest.onerror = () => resolve([]);
+        });
+      } catch {
+        return [];
+      }
+    }
+
+    const dbName = bridge?.getDbName ? bridge.getDbName() : "shadowclaw";
 
     return new Promise((resolve) => {
       try {
-        const request = indexedDB.open(dbName, dbVersion);
+        const request = indexedDB.open(dbName);
 
         request.onsuccess = () => {
           const db = request.result;
+          if (!db.objectStoreNames.contains("sessions")) {
+            db.close();
+            resolve([]);
+
+            return;
+          }
+
           const tx = db.transaction("sessions", "readonly");
           const store = tx.objectStore("sessions");
           const getAllRequest = store.getAllKeys();

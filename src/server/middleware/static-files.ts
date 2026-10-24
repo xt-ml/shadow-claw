@@ -43,16 +43,28 @@ function isSpaShellRequest(req: Request, pathname: string): boolean {
   }
 
   const parts = normalized.split("/").filter(Boolean);
-  const firstSegment = parts[0] || "";
+  let firstSegment = parts[0] || "";
+  let relevantParts = parts;
 
+  // If deployed under a subpath (e.g. /shadow-claw/files or /shadow-claw-template/chat), strip the subpath prefix
+  if (
+    !SPA_ROUTE_PREFIXES.has(firstSegment) &&
+    parts.length > 1 &&
+    SPA_ROUTE_PREFIXES.has(parts[1])
+  ) {
+    firstSegment = parts[1];
+    relevantParts = parts.slice(1);
+  }
+
+  // Also support the subpath root itself if deployed under a known base path or when stripped segment is a route
   if (!SPA_ROUTE_PREFIXES.has(firstSegment)) {
     return false;
   }
 
   if (firstSegment === "pages") {
     if (
-      parts.includes("assets") ||
-      isNonPageFilePath(parts[parts.length - 1])
+      relevantParts.includes("assets") ||
+      isNonPageFilePath(relevantParts[relevantParts.length - 1])
     ) {
       return false;
     }

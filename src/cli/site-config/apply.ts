@@ -253,10 +253,73 @@ export function renderSidebarSectionsHtml(
   return `<nav slot="sidebar" class="sidebar-custom-sections" aria-label="Site Navigation">\n${sectionsHtml}\n</nav>`;
 }
 
+export interface ResolveSiteBasePathOptions {
+  basePath?: string;
+  pagesOrigin?: string;
+  siteUrl?: string;
+  defaultBasePath?: string;
+}
+
+function normalizeBasePathString(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed === "/") return "/";
+  const withLeading = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+  return withLeading.endsWith("/") ? withLeading : `${withLeading}/`;
+}
+
+function extractUrlBasePath(urlStr?: string): string | null {
+  if (!urlStr || typeof urlStr !== "string" || !urlStr.trim()) return null;
+  const trimmed = urlStr.trim();
+  try {
+    const parsed = new URL(trimmed);
+    return normalizeBasePathString(parsed.pathname || "/");
+  } catch {
+    if (trimmed.startsWith("/")) {
+      return normalizeBasePathString(trimmed);
+    }
+    return null;
+  }
+}
+
+export function resolveSiteBasePath(
+  options: ResolveSiteBasePathOptions = {},
+): string {
+  if (options.basePath && options.basePath.trim()) {
+    return normalizeBasePathString(options.basePath);
+  }
+  const fromPagesOrigin = extractUrlBasePath(options.pagesOrigin);
+  if (fromPagesOrigin) {
+    return fromPagesOrigin;
+  }
+  const fromSiteUrl = extractUrlBasePath(options.siteUrl);
+  if (fromSiteUrl) {
+    return fromSiteUrl;
+  }
+  if (options.defaultBasePath && options.defaultBasePath.trim()) {
+    return normalizeBasePathString(options.defaultBasePath);
+  }
+  return "/";
+}
+
+export function patchBaseHref(html: string, basePath: string): string {
+  const normalized = normalizeBasePathString(basePath);
+  return html.replace(
+    /<base\s+href="[^"]*"\s*\/?>/iu,
+    `<base href="${escapeHtml(normalized)}" />`,
+  );
+}
+
+export interface PatchIndexHtmlOptions {
+  basePath?: string;
+  pagesOrigin?: string;
+  isProduction?: boolean;
+}
+
 export function patchIndexHtml(
   html: string,
   config: SiteConfig,
   customSidebarHtml?: string,
+  options?: PatchIndexHtmlOptions,
 ): string {
   let next = html;
 
@@ -288,6 +351,17 @@ export function patchIndexHtml(
   }
 
   const branding = config.branding || {};
+  const isProd = options?.isProduction ?? process.env.NODE_ENV === "production";
+
+  if (options?.basePath && options.basePath.trim()) {
+    next = patchBaseHref(next, options.basePath);
+  } else if (isProd && (options?.pagesOrigin || branding.siteUrl)) {
+    const resolvedBasePath = resolveSiteBasePath({
+      pagesOrigin: options?.pagesOrigin,
+      siteUrl: branding.siteUrl,
+    });
+    next = patchBaseHref(next, resolvedBasePath);
+  }
 
   if (branding.faviconPath) {
     const faviconHref = branding.faviconPath.replace(/^pages\/main\//, "");
@@ -1279,9 +1353,16 @@ export async function copyBrandingAssets(
   }
 }
 
+export interface ApplySiteConfigOptions {
+  basePath?: string;
+  pagesOrigin?: string;
+  isProduction?: boolean;
+}
+
 export async function applySiteConfig(
   distPublicDir: string,
   siteConfigPath: string,
+  options?: ApplySiteConfigOptions,
 ): Promise<{ applied: boolean }> {
   const config = await readJson(siteConfigPath);
   if (!config) {
@@ -1291,8 +1372,10 @@ export async function applySiteConfig(
 
   console.log("Applying site-config.json...");
 
-  const pagesOrigin = process.env.PAGES_ORIGIN || "";
-  const basePath = process.env.PAGES_BASE_PATH || "";
+  const pagesOrigin = options?.pagesOrigin || process.env.PAGES_ORIGIN || "";
+  const basePath = options?.basePath || process.env.PAGES_BASE_PATH || "";
+  const isProduction =
+    options?.isProduction ?? process.env.NODE_ENV === "production";
 
   await copyCustomSiteFiles(config, distPublicDir, siteConfigPath);
 
@@ -1328,7 +1411,11 @@ export async function applySiteConfig(
   const indexPath = path.join(distPublicDir, "index.html");
   const indexHtml = await readText(indexPath);
   if (indexHtml) {
-    const patched = patchIndexHtml(indexHtml, config, sidebarHtml);
+    const patched = patchIndexHtml(indexHtml, config, sidebarHtml, {
+      basePath,
+      pagesOrigin,
+      isProduction,
+    });
     await writeText(indexPath, patched);
     console.log("  Patched index.html");
   }

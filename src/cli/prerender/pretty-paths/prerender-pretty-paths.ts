@@ -42,6 +42,7 @@ import {
 } from "../../../utils/seo.js";
 import { resolveThemeStylesheetHref } from "../../../ui/iframe-theme.js";
 import { applyBasePath } from "../../../core/app-routes.js";
+import { patchBaseHref, resolveSiteBasePath } from "../../site-config/apply.js";
 
 export { injectStaticRoutingScript };
 export { insertBeforeClosingHead };
@@ -61,6 +62,9 @@ export interface PrerenderPrettyPathsOptions {
   silent?: boolean;
   siteConfigPath?: string;
   siteConfig?: any;
+  basePath?: string;
+  pagesOrigin?: string;
+  isProduction?: boolean;
 }
 
 export interface PrerenderPrettyPathsResult {
@@ -84,6 +88,7 @@ export async function prerenderPrettyPaths(
   );
 
   let siteConfig: any = options.siteConfig || {};
+  let hasExplicitOrLocalSiteConfig = Boolean(options.siteConfig);
   if (!options.siteConfig) {
     const configCandidatePaths = [
       options.siteConfigPath,
@@ -99,6 +104,14 @@ export async function prerenderPrettyPaths(
       try {
         const raw = await readFile(candidate, "utf8");
         siteConfig = JSON.parse(raw);
+        if (
+          options.siteConfigPath ||
+          candidate.startsWith(path.dirname(sourcePath)) ||
+          candidate.startsWith(publicDir) ||
+          publicDir.startsWith(process.cwd())
+        ) {
+          hasExplicitOrLocalSiteConfig = true;
+        }
         break;
       } catch {}
     }
@@ -252,7 +265,7 @@ export async function prerenderPrettyPaths(
   );
 
   const [
-    indexHtml,
+    rawIndexHtml,
     shadowClawTemplateSource,
     pagesTemplateSource,
     pageHeaderTemplateSource,
@@ -281,6 +294,38 @@ export async function prerenderPrettyPaths(
     readFile(pagesCssPath, "utf8").catch(() => ""),
     readFile(pageHeaderCssPath, "utf8").catch(() => ""),
   ]);
+
+  const isProd = options.isProduction ?? process.env.NODE_ENV === "production";
+  const effectiveBasePathOpt =
+    options.basePath !== undefined
+      ? options.basePath
+      : process.env.PAGES_BASE_PATH || "";
+  const effectivePagesOriginOpt =
+    options.pagesOrigin || process.env.PAGES_ORIGIN || "";
+  const effectiveSiteUrl =
+    hasExplicitOrLocalSiteConfig && (isProd || options.basePath === undefined)
+      ? siteConfig?.branding?.siteUrl
+      : undefined;
+  const existingBaseMatch = rawIndexHtml.match(/<base\s+href="([^"]*)"/i);
+  const existingBaseHref = existingBaseMatch ? existingBaseMatch[1] : "/";
+  const resolvedCandidateBase =
+    effectiveBasePathOpt || effectivePagesOriginOpt || effectiveSiteUrl
+      ? resolveSiteBasePath({
+          basePath: effectiveBasePathOpt,
+          pagesOrigin: effectivePagesOriginOpt,
+          siteUrl: effectiveSiteUrl,
+          defaultBasePath: existingBaseHref,
+        })
+      : existingBaseHref;
+  const finalBaseHref =
+    effectiveBasePathOpt !== ""
+      ? effectiveBasePathOpt
+      : resolvedCandidateBase !== "/"
+        ? resolvedCandidateBase
+        : existingBaseHref;
+  const indexHtml = existingBaseMatch
+    ? patchBaseHref(rawIndexHtml, finalBaseHref)
+    : rawIndexHtml;
 
   // Load all page contents
   const rawPageSourcesWithContent = await Promise.all(

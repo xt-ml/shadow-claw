@@ -1311,4 +1311,89 @@ Body content paragraph for auto description.`;
     expect(result.generatedPaths).toContain("article/index.html");
     expect(result.generatedPaths).not.toContain("feed/index.html");
   });
+
+  it("updates <base href> across root index.html and all pre-rendered pretty paths when siteUrl or basePath is configured", async () => {
+    const publicDir = path.join(tmpDir, "dist/public");
+    const routesPath = path.join(tmpDir, "pages/routes.json");
+    const sourcePath = path.join(tmpDir, "pages/main");
+    const indexPath = path.join(publicDir, "index.html");
+
+    await mkdir(sourcePath, { recursive: true });
+    await mkdir(path.join(publicDir, "components/shadow-claw"), {
+      recursive: true,
+    });
+    await mkdir(path.join(publicDir, "components/shadow-claw-pages"), {
+      recursive: true,
+    });
+    await mkdir(path.join(publicDir, "components/shadow-claw-page-header"), {
+      recursive: true,
+    });
+
+    await writeFile(
+      indexPath,
+      '<!doctype html><html><head><title>Base</title><base href="/" /></head><body><shadow-claw></shadow-claw></body></html>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(publicDir, "components/shadow-claw/shadow-claw.html"),
+      '<template><div class="app"></div></template>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(
+        publicDir,
+        "components/shadow-claw-pages/shadow-claw-pages.html",
+      ),
+      '<template><div class="pages"></div></template>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(
+        publicDir,
+        "components/shadow-claw-page-header/shadow-claw-page-header.html",
+      ),
+      "<template><header></header></template>",
+      "utf8",
+    );
+
+    const routes = {
+      routes: {
+        "/pages/main/skill-creator.md": { prettyPath: "/docs/skill-creator" },
+      },
+    };
+    await writeFile(routesPath, JSON.stringify(routes), "utf8");
+    await writeFile(
+      path.join(sourcePath, "skill-creator.md"),
+      "# Skill Creator\n\nContent",
+      "utf8",
+    );
+
+    const result = await prerenderPrettyPaths({
+      publicDir,
+      routesPath,
+      sourcePath,
+      indexPath,
+      prerenderPages: 1,
+      siteConfig: {
+        branding: {
+          siteUrl: "https://xt-ml.github.io/shadow-claw/",
+        },
+      },
+    });
+
+    expect(result.count).toBe(1);
+    const rootHtml = await readFile(indexPath, "utf8");
+    const dirPrettyHtml = await readFile(
+      path.join(publicDir, "docs/skill-creator/index.html"),
+      "utf8",
+    );
+    const filePrettyHtml = await readFile(
+      path.join(publicDir, "docs/skill-creator.html"),
+      "utf8",
+    );
+
+    expect(rootHtml).toContain('<base href="/shadow-claw/" />');
+    expect(dirPrettyHtml).toContain('<base href="/shadow-claw/" />');
+    expect(filePrettyHtml).toContain('<base href="/shadow-claw/" />');
+  });
 });

@@ -292,10 +292,15 @@ async function uploadTestFile(page: Page, fileName: string, content: string) {
     return !!bridge?.isReady() && !!bridge?.getActiveGroupId();
   });
 
-  const groupId = await page.evaluate(() => {
+  const { groupId, opfsRootName } = await page.evaluate(() => {
     const bridge = (globalThis as any).__SHADOWCLAW_E2E__;
 
-    return bridge?.getActiveGroupId() || null;
+    return {
+      groupId: bridge?.getActiveGroupId() || null,
+      opfsRootName: bridge?.getOpfsRootName
+        ? bridge.getOpfsRootName()
+        : "shadowclaw",
+    };
   });
 
   if (!groupId) {
@@ -304,10 +309,16 @@ async function uploadTestFile(page: Page, fileName: string, content: string) {
 
   // Create the file in OPFS
   const created = await page.evaluate(
-    async ({ fileName: name, content: text, groupId: activeGroupId }) => {
+    async ({
+      fileName: name,
+      content: text,
+      groupId: activeGroupId,
+      rootName,
+    }) => {
       console.log("[E2E] Creating file in OPFS:", {
         name,
         groupId: activeGroupId,
+        rootName,
       });
 
       if (!activeGroupId) {
@@ -316,7 +327,7 @@ async function uploadTestFile(page: Page, fileName: string, content: string) {
 
       try {
         const root = await navigator.storage.getDirectory();
-        const workspaceDir = await root.getDirectoryHandle("shadowclaw", {
+        const workspaceDir = await root.getDirectoryHandle(rootName, {
           create: true,
         });
 
@@ -348,7 +359,7 @@ async function uploadTestFile(page: Page, fileName: string, content: string) {
         throw error;
       }
     },
-    { fileName, content, groupId },
+    { fileName, content, groupId, rootName: opfsRootName },
   );
 
   if (!created.success) {

@@ -445,15 +445,20 @@ describe("rolldown.config.mjs", () => {
     it("transforms files via copy plugin in development and production modes", async () => {
       expect(copyPlugin).toBeDefined();
 
-      // Test dev mode buildEnd (already loaded with !isProduction)
-      if (typeof copyPlugin.buildEnd === "function") {
-        await copyPlugin.buildEnd();
-      }
+      const indexPath = path.resolve("dist/public/index.html");
+      const savedIndexHtml = fs.existsSync(indexPath)
+        ? fs.readFileSync(indexPath, "utf8")
+        : null;
 
-      // Test production mode buildEnd
+      // Test dev mode buildEnd (already loaded with !isProduction)
       const origEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = "production";
       try {
+        if (typeof copyPlugin.buildEnd === "function") {
+          await copyPlugin.buildEnd();
+        }
+
+        // Test production mode buildEnd
+        process.env.NODE_ENV = "production";
         const prodModule = await import(
           `../../../configs/rolldown/rolldown.config.mjs?prodTest=${Date.now()}`
         );
@@ -468,6 +473,9 @@ describe("rolldown.config.mjs", () => {
         }
       } finally {
         process.env.NODE_ENV = origEnv;
+        if (savedIndexHtml !== null) {
+          fs.writeFileSync(indexPath, savedIndexHtml, "utf8");
+        }
       }
     }, 30000);
   });

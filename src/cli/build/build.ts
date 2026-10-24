@@ -14,7 +14,11 @@ import { getSiteConfigCandidates } from "./utils/get-site-config-candidates.js";
 import { resolveBuildFlags } from "./utils/resolve-build-flags.js";
 import { prerenderDsdShell } from "../prerender/dsd-shell/prerender-dsd-shell.js";
 import { prerenderPrettyPaths } from "../prerender/pretty-paths/prerender-pretty-paths.js";
-import { applySiteConfig } from "../site-config/apply.js";
+import {
+  applySiteConfig,
+  patchBaseHref,
+  resolveSiteBasePath,
+} from "../site-config/apply.js";
 import { patchServiceWorkerTrustedTypesFile } from "../tools/patch-service-worker-trusted-types.js";
 import { touchNoJekyll } from "../tools/touch-nojekyll.js";
 
@@ -209,6 +213,25 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
     );
     const siteConfigPath = siteConfigCandidate || "pages/site-config.json";
 
+    let inRepoSiteConfig: Record<string, any> | undefined;
+    if (siteConfigCandidate) {
+      try {
+        inRepoSiteConfig = JSON.parse(
+          await readFile(siteConfigCandidate, "utf8"),
+        ) as Record<string, any>;
+      } catch {}
+    }
+
+    const pagesOrigin = options.pagesOrigin || env.PAGES_ORIGIN;
+    const basePath = isProduction
+      ? resolveSiteBasePath({
+          basePath: options.basePath || env.PAGES_BASE_PATH,
+          pagesOrigin,
+          siteUrl: inRepoSiteConfig?.branding?.siteUrl,
+          defaultBasePath: "/shadow-claw/",
+        })
+      : options.basePath || env.PAGES_BASE_PATH || "/";
+
     if (prerenderMainMemory) {
       await prerenderDsdShell({
         indexPath: "dist/public/index.html",
@@ -225,7 +248,11 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
     }
 
     try {
-      await applySiteConfig("dist/public", siteConfigPath);
+      await applySiteConfig("dist/public", siteConfigPath, {
+        basePath,
+        pagesOrigin,
+        isProduction,
+      });
     } catch {}
 
     try {
@@ -264,12 +291,20 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
       }
     } catch {}
 
+    try {
+      const idxPath = "dist/public/index.html";
+      const idxHtml = await readFile(idxPath, "utf8");
+      await writeFile(idxPath, patchBaseHref(idxHtml, basePath), "utf8");
+
+      const sharePath = "dist/public/share/share-target.html";
+      if (await pathExists(sharePath)) {
+        const shareHtml = await readFile(sharePath, "utf8");
+        await writeFile(sharePath, patchBaseHref(shareHtml, basePath), "utf8");
+      }
+    } catch {}
+
     if (isProduction) {
       log("Running production post-build steps...");
-
-      const pagesOrigin = options.pagesOrigin || env.PAGES_ORIGIN;
-      const basePath =
-        options.basePath || (env.PAGES_BASE_PATH ?? "/shadow-claw/");
 
       log(`  PAGES_ORIGIN   : ${pagesOrigin || "(relative ./)"}`);
       log(`  PAGES_BASE_PATH: ${basePath}`);
@@ -290,15 +325,6 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
         } catch {}
       }
 
-      try {
-        const idxPath = "dist/public/index.html";
-        let idxHtml = await readFile(idxPath, "utf8");
-        idxHtml = idxHtml.replace(
-          /<base\s+href="[^"]*"\s*\/?>/i,
-          `<base href="${basePath}" />`,
-        );
-        await writeFile(idxPath, idxHtml, "utf8");
-      } catch {}
       await touchNoJekyll("dist/public");
 
       let meta = "";
@@ -321,6 +347,8 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
       sourcePath: "pages/main",
       prerenderPages,
       siteConfigPath,
+      basePath,
+      pagesOrigin,
     });
 
     await run("npm run -s build:service-worker");
@@ -575,23 +603,28 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
   // injected by applySiteConfig. Pre-rendering of main memory remains enabled so
   // pre-rendered DSD content is available on first paint.
   let effectivePrerenderMainMemory = prerenderMainMemory;
-  if (options.prerenderMainMemory === undefined && siteConfigCandidate) {
+  let consumerSiteConfig: Record<string, any> | undefined;
+  if (siteConfigCandidate) {
     try {
-      const rawCfg = JSON.parse(
+      consumerSiteConfig = JSON.parse(
         await readFile(siteConfigCandidate, "utf8"),
       ) as Record<string, any>;
-      if (rawCfg?.settings?.prerenderMainMemory === false) {
-        effectivePrerenderMainMemory = false;
-        log(
-          "  site-config: prerenderMainMemory=false — pages DSD pre-rendering disabled.",
-        );
-      } else if (rawCfg?.settings?.overridePrerenderSkeleton === false) {
-        log(
-          "  site-config: overridePrerenderSkeleton=false — skeleton overlay disabled.",
-        );
-      }
     } catch {
       // Non-critical: ignore parse errors and keep the default.
+    }
+  }
+  if (options.prerenderMainMemory === undefined && consumerSiteConfig) {
+    if (consumerSiteConfig?.settings?.prerenderMainMemory === false) {
+      effectivePrerenderMainMemory = false;
+      log(
+        "  site-config: prerenderMainMemory=false — pages DSD pre-rendering disabled.",
+      );
+    } else if (
+      consumerSiteConfig?.settings?.overridePrerenderSkeleton === false
+    ) {
+      log(
+        "  site-config: overridePrerenderSkeleton=false — skeleton overlay disabled.",
+      );
     }
   }
 
@@ -611,22 +644,28 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
     });
   }
 
-  try {
-    await applySiteConfig(distPublicDir, siteConfigPath);
-  } catch {}
-
   // 9. Base href normalization & Production post-build
-  const defaultBasePath = isProduction
-    ? options.basePath || env.PAGES_BASE_PATH || "/"
-    : options.basePath || "/";
-  const basePath = defaultBasePath;
+  const pagesOrigin = options.pagesOrigin || env.PAGES_ORIGIN;
+  const basePath = isProduction
+    ? resolveSiteBasePath({
+        basePath: options.basePath || env.PAGES_BASE_PATH,
+        pagesOrigin,
+        siteUrl: consumerSiteConfig?.branding?.siteUrl,
+        defaultBasePath: "/",
+      })
+    : options.basePath || env.PAGES_BASE_PATH || "/";
+
+  try {
+    await applySiteConfig(distPublicDir, siteConfigPath, {
+      basePath,
+      pagesOrigin,
+      isProduction,
+    });
+  } catch {}
 
   try {
     let idxHtml = await readFile(indexPath, "utf8");
-    idxHtml = idxHtml.replace(
-      /<base\s+href="[^"]*"\s*\/?>/i,
-      `<base href="${basePath}" />`,
-    );
+    idxHtml = patchBaseHref(idxHtml, basePath);
 
     let pkgVersion = "";
     try {
@@ -672,7 +711,6 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
   if (isProduction) {
     log("Running production post-build steps...");
 
-    const pagesOrigin = options.pagesOrigin || env.PAGES_ORIGIN;
     log(`  PAGES_ORIGIN   : ${pagesOrigin || "(relative ./)"}`);
     log(`  PAGES_BASE_PATH: ${basePath}`);
 
@@ -738,6 +776,8 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
     sourcePath: mainSourcePath,
     prerenderPages,
     siteConfigPath,
+    basePath,
+    pagesOrigin,
   });
 
   // 11. Service Worker patch

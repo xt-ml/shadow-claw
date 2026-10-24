@@ -19,6 +19,7 @@ import {
 } from "../orchestrator/utils/operations/provider.js";
 
 import { setStreamingEnabled } from "../orchestrator/utils/settings.js";
+import { getDbName, getOpfsRootName } from "../../config/config.js";
 
 import type { ShadowClaw } from "../../components/shadow-claw/shadow-claw.js";
 import type { GroupMeta, ShadowClawDatabase } from "../../db/types.js";
@@ -33,6 +34,12 @@ export interface E2eBridge {
 
   /** Get the currently active group (conversation) ID. */
   getActiveGroupId(): string;
+
+  /** Get active deployment database name. */
+  getDbName(): string;
+
+  /** Get active deployment OPFS root name. */
+  getOpfsRootName(): string;
 
   /** Create a new conversation and return its metadata. */
   createConversation(name: string): Promise<GroupMeta>;
@@ -75,6 +82,21 @@ export function installE2eBridge(
 
     getActiveGroupId(): string {
       return store.activeGroupId;
+    },
+
+    getDbName(): string {
+      if (
+        uiElement.db &&
+        "name" in uiElement.db &&
+        typeof (uiElement.db as any).name === "string"
+      ) {
+        return (uiElement.db as any).name;
+      }
+      return getDbName();
+    },
+
+    getOpfsRootName(): string {
+      return getOpfsRootName();
     },
 
     async createConversation(name: string): Promise<GroupMeta> {

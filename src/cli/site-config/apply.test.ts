@@ -12,9 +12,11 @@ import {
   copyBrandingAssets,
   escapeHtml,
   patch404Html,
+  patchBaseHref,
   patchIndexHtml,
   patchManifest,
   patchSitemap,
+  resolveSiteBasePath,
 } from "./apply.js";
 
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
@@ -437,6 +439,88 @@ describe("apply-site-config", () => {
 
       expect(patched).toContain('<span class="header-title">New Title</span>');
       expect(patched).toContain('<circle cx="10" cy="10" r="5" />');
+    });
+
+    it("resolves site base path from basePath, pagesOrigin, or branding.siteUrl", () => {
+      expect(
+        resolveSiteBasePath({
+          siteUrl: "https://xt-ml.github.io/shadow-claw/",
+        }),
+      ).toBe("/shadow-claw/");
+      expect(
+        resolveSiteBasePath({
+          siteUrl: "https://xt-ml.github.io/shadow-claw-template/",
+        }),
+      ).toBe("/shadow-claw-template/");
+      expect(
+        resolveSiteBasePath({
+          siteUrl: "https://kherrick.github.io/block-garden-knowledge-hub/",
+        }),
+      ).toBe("/block-garden-knowledge-hub/");
+      expect(
+        resolveSiteBasePath({
+          siteUrl: "https://kherrick.github.io/pwgen-knowledge-hub/",
+        }),
+      ).toBe("/pwgen-knowledge-hub/");
+      expect(
+        resolveSiteBasePath({
+          basePath: "custom-repo",
+          siteUrl: "https://xt-ml.github.io/shadow-claw/",
+        }),
+      ).toBe("/custom-repo/");
+      expect(
+        resolveSiteBasePath({
+          pagesOrigin: "https://example.com/sub-path",
+          siteUrl: "https://xt-ml.github.io/shadow-claw/",
+        }),
+      ).toBe("/sub-path/");
+      expect(resolveSiteBasePath({})).toBe("/");
+    });
+
+    it("updates <base href> in patchIndexHtml from branding.siteUrl in production or explicit basePath", () => {
+      const htmlWithBase = baseHtml.replace(
+        "<head>",
+        '<head>\n    <base href="/" />',
+      );
+
+      const patchedFromSiteUrlProd = patchIndexHtml(
+        htmlWithBase,
+        {
+          branding: {
+            siteUrl: "https://xt-ml.github.io/shadow-claw-template/",
+          },
+        },
+        undefined,
+        { isProduction: true },
+      );
+      expect(patchedFromSiteUrlProd).toContain(
+        '<base href="/shadow-claw-template/" />',
+      );
+
+      const patchedFromSiteUrlDev = patchIndexHtml(htmlWithBase, {
+        branding: {
+          siteUrl: "https://xt-ml.github.io/shadow-claw-template/",
+        },
+      });
+      expect(patchedFromSiteUrlDev).toContain('<base href="/" />');
+
+      const patchedFromOption = patchIndexHtml(
+        htmlWithBase,
+        {
+          branding: {
+            siteUrl: "https://xt-ml.github.io/shadow-claw-template/",
+          },
+        },
+        undefined,
+        { basePath: "/pwgen-knowledge-hub/" },
+      );
+      expect(patchedFromOption).toContain(
+        '<base href="/pwgen-knowledge-hub/" />',
+      );
+
+      expect(
+        patchBaseHref('<head><base href="/"></head>', "/shadow-claw/"),
+      ).toBe('<head><base href="/shadow-claw/" /></head>');
     });
   });
 

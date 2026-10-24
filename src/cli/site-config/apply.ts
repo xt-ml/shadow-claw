@@ -1420,6 +1420,23 @@ export async function applySiteConfig(
     console.log("  Patched index.html");
   }
 
+  const shareTargetPath = path.join(distPublicDir, "share/share-target.html");
+  const shareTargetHtml = await readText(shareTargetPath);
+  if (shareTargetHtml) {
+    let effectiveBasePath = "/";
+    if (basePath && basePath.trim()) {
+      effectiveBasePath = basePath;
+    } else if (isProduction && (pagesOrigin || config.branding?.siteUrl)) {
+      effectiveBasePath = resolveSiteBasePath({
+        pagesOrigin,
+        siteUrl: config.branding?.siteUrl,
+      });
+    }
+    const patched = patchBaseHref(shareTargetHtml, effectiveBasePath);
+    await writeText(shareTargetPath, patched);
+    console.log("  Patched share/share-target.html");
+  }
+
   const manifestPath = path.join(distPublicDir, "manifest.json");
   const manifestText = await readText(manifestPath);
   if (manifestText) {

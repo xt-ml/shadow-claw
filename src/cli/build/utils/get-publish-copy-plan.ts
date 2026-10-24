@@ -166,6 +166,14 @@ export function getPublishCopyPlan({
     return basePlan;
   }
 
+  const toolchainFallbackDests = new Set([
+    "dist/public/404.html",
+    "dist/public/manifest.json",
+    "dist/public/robots.txt",
+    "dist/public/favicon.svg",
+    "dist/public/favicon.ico",
+  ]);
+
   return basePlan.map((entry) => {
     const dest = distPublicDir
       ? entry.dest.replace(/^dist\/public/, distPublicDir)
@@ -177,7 +185,11 @@ export function getPublishCopyPlan({
         sources.push(path.join(contentRoot, src));
       }
     }
-    if (toolchainRoot && toolchainRoot !== contentRoot) {
+    if (
+      toolchainRoot &&
+      toolchainRoot !== contentRoot &&
+      toolchainFallbackDests.has(entry.dest)
+    ) {
       for (const src of entry.sources) {
         sources.push(path.join(toolchainRoot, src));
       }

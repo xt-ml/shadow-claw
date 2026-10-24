@@ -559,6 +559,10 @@ describe("build without and with pages", () => {
         path.join(tempConsumerRoot, "dist/public/docs/about.html"),
         "utf8",
       );
+      const shareTargetHtml = await readFile(
+        path.join(tempConsumerRoot, "dist/public/share/share-target.html"),
+        "utf8",
+      );
 
       expect(indexHtml).toContain('<base href="/shadow-claw-template/" />');
       expect(prettyIndexHtml).toContain(
@@ -567,6 +571,19 @@ describe("build without and with pages", () => {
       expect(prettyFileHtml).toContain(
         '<base href="/shadow-claw-template/" />',
       );
+      expect(shareTargetHtml).toContain(
+        '<base href="/shadow-claw-template/" />',
+      );
+
+      // Verify toolchain docs and site pages do not leak into consumer dist
+      expect(
+        fs.existsSync(
+          path.join(tempConsumerRoot, "dist/public/docs/skill-creator.html"),
+        ),
+      ).toBe(false);
+      expect(
+        fs.existsSync(path.join(tempConsumerRoot, "dist/public/main.html")),
+      ).toBe(false);
     } finally {
       logSpy.mockRestore();
       await rm(tempConsumerRoot, { recursive: true, force: true });
@@ -619,7 +636,17 @@ describe("build without and with pages", () => {
         path.join(tempConsumerRoot, "dist/public/index.html"),
         "utf8",
       );
+      const shareTargetHtml = await readFile(
+        path.join(tempConsumerRoot, "dist/public/share/share-target.html"),
+        "utf8",
+      );
       expect(indexHtml).toContain('<base href="/" />');
+      expect(shareTargetHtml).toContain('<base href="/" />');
+      expect(
+        fs.existsSync(
+          path.join(tempConsumerRoot, "dist/public/docs/skill-creator.html"),
+        ),
+      ).toBe(false);
     } finally {
       logSpy.mockRestore();
       await rm(tempConsumerRoot, { recursive: true, force: true });

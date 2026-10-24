@@ -1,6 +1,6 @@
 import { execSync } from "node:child_process";
 import { cp, mkdir, readFile, stat, writeFile } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { basename, join, relative, resolve } from "node:path";
 import { chdir, env, exit } from "node:process";
 import { fileURLToPath } from "node:url";
 import { rimraf } from "rimraf";
@@ -413,7 +413,46 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
         src.includes("\\cache\\") ||
         src.endsWith("/cache") ||
         src.endsWith("\\cache");
-      return !isCache;
+      if (isCache) {
+        return false;
+      }
+
+      // Do not leak the toolchain's own site-specific docs, pages, or manifests into consumer builds
+      if (contentRoot !== toolchainRoot) {
+        const rel = relative(toolchainDist, src).replace(/\\/g, "/");
+        if (
+          rel === "docs" ||
+          rel.startsWith("docs/") ||
+          rel === "main" ||
+          rel.startsWith("main/") ||
+          rel === "main.html" ||
+          rel.startsWith("main.html.") ||
+          rel === "static-main" ||
+          rel.startsWith("static-main/") ||
+          rel === "static-main-manifest.json" ||
+          rel.startsWith("static-main-manifest.json.") ||
+          rel === "static-routing.json" ||
+          rel.startsWith("static-routing.json.") ||
+          rel === "files" ||
+          rel.startsWith("files/") ||
+          rel === "pages" ||
+          rel.startsWith("pages/") ||
+          rel === "sitemap.xml" ||
+          rel.startsWith("sitemap.xml.") ||
+          rel === "sitemap.txt" ||
+          rel.startsWith("sitemap.txt.") ||
+          rel === "llms.txt" ||
+          rel.startsWith("llms.txt.") ||
+          rel === "README.md" ||
+          rel.startsWith("README.md.") ||
+          rel === "AGENTS.md" ||
+          rel.startsWith("AGENTS.md.")
+        ) {
+          return false;
+        }
+      }
+
+      return true;
     },
   });
 
@@ -706,6 +745,12 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
       }
     }
     await writeFile(indexPath, idxHtml, "utf8");
+
+    const sharePath = join(distPublicDir, "share/share-target.html");
+    if (await pathExists(sharePath)) {
+      const shareHtml = await readFile(sharePath, "utf8");
+      await writeFile(sharePath, patchBaseHref(shareHtml, basePath), "utf8");
+    }
   } catch {}
 
   if (isProduction) {

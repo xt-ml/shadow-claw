@@ -38,4 +38,39 @@ describe("getPublishCopyPlan", () => {
     expect(readmeEntry!.sources).toContain("/custom/content/README.md");
     expect(readmeEntry!.sources).toContain("/custom/content/pages/README.md");
   });
+
+  it("does not leak toolchain docs, README, or sitemap when toolchainRoot !== contentRoot", () => {
+    const contentRoot = "/custom/content";
+    const toolchainRoot = "/toolchain/root";
+    const distPublicDir = "/custom/content/dist/public";
+    const plan = getPublishCopyPlan({
+      contentRoot,
+      toolchainRoot,
+      distPublicDir,
+    });
+
+    const docsEntry = plan.find(
+      (entry) => entry.dest === "/custom/content/dist/public/docs",
+    );
+    expect(docsEntry).toBeTruthy();
+    expect(
+      docsEntry!.sources.some((src) => src.startsWith(toolchainRoot)),
+    ).toBe(false);
+
+    const readmeEntry = plan.find(
+      (entry) => entry.dest === "/custom/content/dist/public/README.md",
+    );
+    expect(readmeEntry).toBeTruthy();
+    expect(
+      readmeEntry!.sources.some((src) => src.startsWith(toolchainRoot)),
+    ).toBe(false);
+
+    const manifestEntry = plan.find(
+      (entry) => entry.dest === "/custom/content/dist/public/manifest.json",
+    );
+    expect(manifestEntry).toBeTruthy();
+    expect(
+      manifestEntry!.sources.some((src) => src.startsWith(toolchainRoot)),
+    ).toBe(true);
+  });
 });

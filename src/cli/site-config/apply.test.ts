@@ -1344,5 +1344,47 @@ https://example.com/about`;
       } catch {}
       expect(exists).toBe(false);
     });
+
+    it("patches share/share-target.html base href when present", async () => {
+      const distPublicDir = path.join(tmpDir, "dist/public");
+      const shareDir = path.join(distPublicDir, "share");
+      await mkdir(shareDir, { recursive: true });
+
+      const indexPath = path.join(distPublicDir, "index.html");
+      const sharePath = path.join(shareDir, "share-target.html");
+      const siteConfigPath = path.join(tmpDir, "site-config.json");
+
+      await writeFile(
+        indexPath,
+        '<!doctype html><html><head><base href="/" /></head><body></body></html>',
+        "utf8",
+      );
+      await writeFile(
+        sharePath,
+        '<!doctype html><html><head><base href="/shadow-claw/" /></head><body></body></html>',
+        "utf8",
+      );
+
+      const config = {
+        branding: { siteUrl: "https://kherrick.github.io/block-garden/" },
+      };
+      await writeFile(siteConfigPath, JSON.stringify(config), "utf8");
+
+      // In production
+      await applySiteConfig(distPublicDir, siteConfigPath, {
+        isProduction: true,
+      });
+
+      const shareContentProd = await readFile(sharePath, "utf8");
+      expect(shareContentProd).toContain('<base href="/block-garden/" />');
+
+      // In development
+      await applySiteConfig(distPublicDir, siteConfigPath, {
+        isProduction: false,
+      });
+
+      const shareContentDev = await readFile(sharePath, "utf8");
+      expect(shareContentDev).toContain('<base href="/" />');
+    });
   });
 });

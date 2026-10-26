@@ -702,6 +702,20 @@ describe("custom-element-security", () => {
       const csp = getIframeCsp("test-nonce");
       expect(csp).toContain("https://api.custom.com");
       expect(csp).toContain("https://cdn.custom.com");
+      expect(csp).toContain("'nonce-test-nonce'");
+    });
+
+    it("omits nonce from getIframeCsp script-src when unsafe-inline is specified", () => {
+      configureCustomElementSecurity({
+        security: {
+          scriptSrc: ["'unsafe-inline'", "https://cdn.custom.com"],
+        },
+      });
+
+      const csp = getIframeCsp("test-nonce");
+      expect(csp).toContain("'unsafe-inline'");
+      expect(csp).toContain("https://cdn.custom.com");
+      expect(csp).not.toContain("'nonce-test-nonce'");
     });
 
     it("reads approved script descriptors from embedded site config script element", () => {

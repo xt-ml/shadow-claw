@@ -65,7 +65,6 @@ import { isPagePathAllowed } from "../../../utils/is-page-path-allowed.js";
 import { resolvePageScriptDependencies } from "../../../utils/resolve-page-script-dependencies.js";
 import { buildCustomElementScriptTags } from "../../site-config/custom-elements/build-custom-element-script-tags.js";
 import { resolveThemeStylesheetHref } from "../../../ui/iframe-theme.js";
-import { applyBasePath } from "../../../core/app-routes.js";
 
 export { escapeHtml };
 export { sanitizeRenderedHtml };
@@ -103,6 +102,7 @@ export interface PrerenderDsdShellOptions {
   noSeed?: boolean;
   prerenderPages?: string | number | boolean | null;
   siteConfigPath?: string;
+  siteConfig?: any;
   sortOrder?: "asc" | "desc";
   silent?: boolean;
 }
@@ -1139,24 +1139,26 @@ export async function prerenderDsdShell(
         : (process.env.PRERENDER_PAGES ?? 1);
   const prerenderPages = normalizePrerenderPagesOption(rawPagesOpt);
 
-  let siteConfig: any = {};
-  const configCandidatePaths = [
-    options.siteConfigPath,
-    path.resolve("shadow-claw-config.json"),
-    path.resolve("shadow-claw.config.json"),
-    path.resolve("shadowclaw.config.json"),
-    path.resolve("pages/shadow-claw-config.json"),
-    path.resolve("pages/shadow-claw.config.json"),
-    path.resolve("site-config.json"),
-    path.resolve("pages/site-config.json"),
-  ].filter(Boolean) as string[];
+  let siteConfig: any = options.siteConfig || {};
+  if (!options.siteConfig) {
+    const configCandidatePaths = [
+      options.siteConfigPath,
+      path.resolve("shadow-claw-config.json"),
+      path.resolve("shadow-claw.config.json"),
+      path.resolve("shadowclaw.config.json"),
+      path.resolve("pages/shadow-claw-config.json"),
+      path.resolve("pages/shadow-claw.config.json"),
+      path.resolve("site-config.json"),
+      path.resolve("pages/site-config.json"),
+    ].filter(Boolean) as string[];
 
-  for (const cfgPath of configCandidatePaths) {
-    try {
-      const raw = await readFile(path.resolve(cfgPath), "utf8");
-      siteConfig = JSON.parse(raw);
-      break;
-    } catch {}
+    for (const cfgPath of configCandidatePaths) {
+      try {
+        const raw = await readFile(path.resolve(cfgPath), "utf8");
+        siteConfig = JSON.parse(raw);
+        break;
+      } catch {}
+    }
   }
 
   const sortOrder = (options.sortOrder ||
@@ -1397,7 +1399,7 @@ export async function prerenderDsdShell(
       resolved.startsWith("https://") ||
       resolved.startsWith("//")
         ? resolved
-        : applyBasePath(resolved.startsWith("/") ? resolved : `/${resolved}`);
+        : resolved.replace(/^\/+/, "");
   }
 
   let shadowClawDsdTemplate: string;

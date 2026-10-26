@@ -684,7 +684,7 @@ describe("shadow-claw-file-viewer", () => {
       content: "<block-garden></block-garden>",
     });
 
-    expect(srcdoc).toContain('<link rel="stylesheet" href="/theme.css">');
+    expect(srcdoc).toContain('<link rel="stylesheet" href="theme.css">');
     expect(srcdoc).toContain('id="shadow-claw-site-config"');
     expect(srcdoc).toContain('src="/block-garden-adapter.js"');
     expect(srcdoc).toContain(
@@ -716,7 +716,7 @@ describe("shadow-claw-file-viewer", () => {
       content: "<p>Hello</p>",
     });
 
-    expect(srcdoc).not.toContain('<link rel="stylesheet" href="/theme.css">');
+    expect(srcdoc).not.toContain('<link rel="stylesheet" href="theme.css">');
 
     document.head.removeChild(configScript);
   });

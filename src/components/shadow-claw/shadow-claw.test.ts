@@ -770,7 +770,12 @@ describe("shadow-claw", () => {
     const component = new ShadowClaw();
     component.orchestrator = stub;
     document.body.appendChild(component);
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    for (let i = 0; i < 50; i++) {
+      if (stub.events.on.mock.calls.some(([event]) => event === "vm-status")) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
 
     // Emit vm-status with error when terminalVisible is true
     component.terminalVisible = true;
@@ -878,7 +883,9 @@ describe("shadow-claw", () => {
     comp.orchestrator = createOrchestratorStub();
     document.body.appendChild(comp);
 
-    await new Promise((resolve) => setTimeout(resolve, 80));
+    for (let i = 0; i < 50 && yieldMock.mock.calls.length < 6; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
 
     try {
       expect(yieldMock.mock.calls.length).toBeGreaterThanOrEqual(6);

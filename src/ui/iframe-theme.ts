@@ -1,5 +1,3 @@
-import { applyBasePath } from "../core/app-routes.js";
-
 /**
  * Prefixes whose contents are flattened into the distribution root.
  */
@@ -18,10 +16,10 @@ const FLATTENED_STYLESHEET_PREFIXES = [
 export function resolveThemeStylesheetHref(stylesheet: string): string {
   for (const prefix of FLATTENED_STYLESHEET_PREFIXES) {
     if (stylesheet.startsWith(prefix)) {
-      return stylesheet.slice(prefix.length);
+      return stylesheet.slice(prefix.length).replace(/^\/+/, "");
     }
   }
-  return stylesheet;
+  return stylesheet.replace(/^\/+/, "");
 }
 
 /**
@@ -69,12 +67,11 @@ export function getIframeThemeStylesheetLink(siteConfig?: unknown): string {
     return `<link rel="stylesheet" href="${stylesheet}">`;
   }
 
-  const resolvedHref = resolveThemeStylesheetHref(stylesheet);
-  const normalizedPath = resolvedHref.startsWith("/")
-    ? resolvedHref
-    : `/${resolvedHref}`;
-
-  return `<link rel="stylesheet" href="${applyBasePath(normalizedPath)}">`;
+  const resolvedHref = resolveThemeStylesheetHref(stylesheet).replace(
+    /^\/+/,
+    "",
+  );
+  return `<link rel="stylesheet" href="${resolvedHref}">`;
 }
 
 /**

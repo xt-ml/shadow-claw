@@ -86,8 +86,9 @@ export function getIframeCsp(nonce: string): string {
     } catch {}
   }
 
+  const hasUnsafeInline = activeScriptSrc.includes("'unsafe-inline'");
   const scriptSources = [
-    `'nonce-${nonce}'`,
+    ...(hasUnsafeInline ? [] : [`'nonce-${nonce}'`]),
     ...Array.from(allowedScriptHosts),
     ...activeScriptSrc,
   ];

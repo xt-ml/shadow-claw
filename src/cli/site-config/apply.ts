@@ -171,10 +171,10 @@ const FLATTENED_STYLESHEET_PREFIXES = [
 function resolveThemeStylesheetHref(stylesheet: string): string {
   for (const prefix of FLATTENED_STYLESHEET_PREFIXES) {
     if (stylesheet.startsWith(prefix)) {
-      return stylesheet.slice(prefix.length);
+      return stylesheet.slice(prefix.length).replace(/^\/+/, "");
     }
   }
-  return stylesheet;
+  return stylesheet.replace(/^\/+/, "");
 }
 
 async function readJson(filePath: string): Promise<any | null> {
@@ -867,7 +867,8 @@ function getCandidateFilePaths(
   if (!relativePath || typeof relativePath !== "string") return [];
   if (path.isAbsolute(relativePath)) return [relativePath];
 
-  const cleanPath = relativePath.replace(
+  const relPath = relativePath.replace(/^\/+/, "");
+  const cleanPath = relPath.replace(
     /^(pages\/)?(resources\/|deps\/|main\/)?/,
     "",
   );

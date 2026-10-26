@@ -41,7 +41,6 @@ import {
   resolveCanonicalUrl,
 } from "../../../utils/seo.js";
 import { resolveThemeStylesheetHref } from "../../../ui/iframe-theme.js";
-import { applyBasePath } from "../../../core/app-routes.js";
 import { patchBaseHref, resolveSiteBasePath } from "../../site-config/apply.js";
 
 export { injectStaticRoutingScript };
@@ -505,7 +504,7 @@ export async function prerenderPrettyPaths(
         resolved.startsWith("https://") ||
         resolved.startsWith("//")
           ? resolved
-          : applyBasePath(resolved.startsWith("/") ? resolved : `/${resolved}`);
+          : resolved.replace(/^\/+/, "");
     }
 
     let shadowClawDsdTemplate: string;

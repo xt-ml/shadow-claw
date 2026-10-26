@@ -72,14 +72,14 @@ describe("iframe-theme utility", () => {
       const link = getIframeThemeStylesheetLink({
         theme: { stylesheet: "pages/main/theme.css" },
       });
-      expect(link).toBe('<link rel="stylesheet" href="/pages/main/theme.css">');
+      expect(link).toBe('<link rel="stylesheet" href="pages/main/theme.css">');
     });
 
     it("returns link element for flattened stylesheet path pages/resources/theme.css", () => {
       const link = getIframeThemeStylesheetLink({
         theme: { stylesheet: "pages/resources/theme.css" },
       });
-      expect(link).toBe('<link rel="stylesheet" href="/theme.css">');
+      expect(link).toBe('<link rel="stylesheet" href="theme.css">');
     });
 
     it("returns link element for external URL as-is", () => {
@@ -101,7 +101,7 @@ describe("iframe-theme utility", () => {
       document.head.appendChild(script);
 
       expect(getIframeThemeStylesheetLink()).toBe(
-        '<link rel="stylesheet" href="/pages/main/theme.css">',
+        '<link rel="stylesheet" href="pages/main/theme.css">',
       );
     });
   });

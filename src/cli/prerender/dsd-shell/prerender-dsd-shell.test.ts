@@ -737,5 +737,67 @@ describe("prerenderDsdShell purge flag pages", () => {
         '<template shadowrootmode="open"><div><span>Text</span></div></template>',
       );
     });
+
+    it("renders theme stylesheet href as a clean relative path without leading slash", async () => {
+      const publicDir = path.join(tmpDir, "dist/public");
+      const indexPath = path.join(publicDir, "index.html");
+      const sourcePath = path.join(tmpDir, "pages/main");
+
+      await mkdir(path.join(publicDir, "components/shadow-claw"), {
+        recursive: true,
+      });
+      await mkdir(path.join(publicDir, "components/shadow-claw-pages"), {
+        recursive: true,
+      });
+      await mkdir(path.join(publicDir, "components/shadow-claw-page-header"), {
+        recursive: true,
+      });
+      await mkdir(sourcePath, { recursive: true });
+
+      await writeFile(
+        indexPath,
+        '<!doctype html><html><head><base href="/repo/"><title>Test</title></head><body><shadow-claw></shadow-claw></body></html>',
+        "utf8",
+      );
+      await writeFile(
+        path.join(publicDir, "components/shadow-claw/shadow-claw.html"),
+        '<template><div class="app"><shadow-claw-pages></shadow-claw-pages></div></template>',
+        "utf8",
+      );
+      await writeFile(
+        path.join(
+          publicDir,
+          "components/shadow-claw-pages/shadow-claw-pages.html",
+        ),
+        '<template><div class="pages"></div></template>',
+        "utf8",
+      );
+      await writeFile(
+        path.join(
+          publicDir,
+          "components/shadow-claw-page-header/shadow-claw-page-header.html",
+        ),
+        '<template><header class="header"></header></template>',
+        "utf8",
+      );
+      await writeFile(path.join(sourcePath, "index.md"), "# Welcome", "utf8");
+
+      await prerenderDsdShell({
+        indexPath,
+        sourcePath,
+        publicDir,
+        siteConfig: {
+          theme: {
+            stylesheet: "/pages/main/theme.css",
+          },
+        },
+      });
+
+      const outputHtml = await readFile(indexPath, "utf8");
+      expect(outputHtml).toContain(
+        'data-theme-stylesheet="true" href="pages/main/theme.css"',
+      );
+      expect(outputHtml).not.toContain('href="/pages/main/theme.css"');
+    });
   });
 });

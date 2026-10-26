@@ -187,6 +187,21 @@ describe("apply-site-config", () => {
       );
     });
 
+    it("strips leading slashes from theme.stylesheet ensuring relative href", () => {
+      const config = {
+        theme: {
+          stylesheet: "/pages/main/theme.css",
+        },
+      };
+
+      const patched = patchIndexHtml(baseHtml, config);
+
+      expect(patched).toContain(
+        '<link rel="stylesheet" href="pages/main/theme.css" />',
+      );
+      expect(patched).not.toContain('href="/pages/main/theme.css"');
+    });
+
     it.each([
       ["pages/resources/theme.css", "theme.css"],
       ["pages/deps/theme.css", "theme.css"],

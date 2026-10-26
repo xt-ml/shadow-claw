@@ -19,15 +19,14 @@ An Agent Skill is a directory containing a `SKILL.md` file located inside your w
 
 ```text
 .agents/skills/
-└── main/
-    ├── skill-creator/
-    │   ├── SKILL.md
-    │   └── references/
-    │       ├── frontmatter-spec.md
-    │       ├── declarative-pipelines.md
-    │       └── declarative-tools.md
-    └── toast-random-number/
-        └── SKILL.md
+├── skill-creator/
+│   ├── SKILL.md
+│   └── references/
+│       ├── frontmatter-spec.md
+│       ├── declarative-pipelines.md
+│       └── declarative-tools.md
+└── toast-random-number/
+    └── SKILL.md
 ```
 
 Each skill includes:
@@ -46,8 +45,8 @@ ShadowClaw comes with an official bundled **Skill Creator**. You can trigger it 
 
 1. **Define the Scope & Trigger**: Decide on a clear skill name (e.g. `toast-random-number`) and write a concise description of what it does.
 2. **Set Up Workspace Folders**:
-   - Skill files belong in `.agents/skills/main/<skill-name>/SKILL.md`.
-   - Custom declarative tools belong in `.agents/tools/main/<tool-name>.json`.
+   - Skill files belong in `.agents/skills/<skill-name>/SKILL.md` (canonical flat layout; legacy `.agents/skills/main/` is supported for backward-compatible reads).
+   - Custom declarative tools belong in `.agents/tools/<tool-name>.json` (or legacy `.agents/tools/main/<tool-name>.json`).
 3. **Write `SKILL.md`**: Configure standard frontmatter attributes and instructions.
 4. **Add Technical References**: Store detailed reference materials under the skill's `references/` directory.
 
@@ -57,13 +56,13 @@ ShadowClaw comes with an official bundled **Skill Creator**. You can trigger it 
 
 For deep technical details, explore the co-located reference guides bundled with the official `skill-creator` skill:
 
-- 📋 **[Frontmatter Specification](file:///.agents/skills/main/skill-creator/references/frontmatter-spec.md)**  
+- 📋 **[Frontmatter Specification](file:///.agents/skills/skill-creator/references/frontmatter-spec.md)**
   Complete schema rules for `name`, `description`, `user-invocable`, `disable-model-invocation`, `argument-hint`, and `metadata.allowed-tools`.
 
-- ⚡ **[Declarative Execution Pipelines](file:///.agents/skills/main/skill-creator/references/declarative-pipelines.md)**  
+- ⚡ **[Declarative Execution Pipelines](file:///.agents/skills/skill-creator/references/declarative-pipelines.md)**
   How to write zero-LLM tool chains using `execution.type: "tools"`, `$pipe` output piping, `suppressToast`, and `suppressOutput`.
 
-- 🛠️ **[Declarative Tools Reference](file:///.agents/skills/main/skill-creator/references/declarative-tools.md)**  
+- 🛠️ **[Declarative Tools Reference](file:///.agents/skills/skill-creator/references/declarative-tools.md)**
   How to author custom JSON tool definitions in `.agents/tools/` with sandboxed JavaScript evaluation and WebMCP model context integration.
 
 ---
@@ -99,3 +98,32 @@ This skill generates a random integer and displays it instantly in a toast notif
 ```
 
 When you type `/toast-random-number`, ShadowClaw executes the two steps directly without delay!
+
+---
+
+## 🌐 Installing Skills from skills.sh & Publishing
+
+ShadowClaw integrates directly with the [Open Agent Skills](https://agentskills.io) ecosystem and [skills.sh](https://skills.sh):
+
+### Finding & Adding Skills
+
+Search thousands of community and vendor skills from `skills.sh`:
+
+```bash
+# Search skills.sh directory
+npx shadow-claw skills find "react"
+
+# Install directly into .agents/skills/
+npx shadow-claw skills add vercel-labs/agent-skills
+# or using npx skills:
+npx skills add mattpocock/skills@grilling -a universal --yes
+```
+
+### Publishing Discovery Indexes
+
+To publish your workspace skills so external agents and clients can discover them over HTTP:
+
+```bash
+# Generate RFC v0.2.0 discovery manifest at .well-known/agent-skills/index.json
+npx shadow-claw skills:index
+```

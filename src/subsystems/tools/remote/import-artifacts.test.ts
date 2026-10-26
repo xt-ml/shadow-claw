@@ -72,11 +72,11 @@ describe("importArtifacts", () => {
       });
 
       expect(result.status).toBe("imported");
-      expect(result.path).toBe(".agents/tools/main/calc.json");
+      expect(result.path).toBe(".agents/tools/calc.json");
       expect(mockWriteGroupFile).toHaveBeenCalledWith(
         fakeDb,
         groupId,
-        ".agents/tools/main/calc.json",
+        ".agents/tools/calc.json",
         expect.stringContaining('"name": "calc"'),
       );
       expect(mockSetConfig).toHaveBeenCalledWith(
@@ -289,7 +289,7 @@ describe("importArtifacts", () => {
   });
 
   describe("importRemoteScript", () => {
-    it("imports a script and writes to OPFS .agents/scripts/main/", async () => {
+    it("imports a script and writes to OPFS .agents/scripts/", async () => {
       const scriptCode = "export function hello() { return 'world'; }";
       const mockFetch = jest.fn<any>().mockResolvedValue({
         ok: true,
@@ -306,11 +306,11 @@ describe("importArtifacts", () => {
       });
 
       expect(result.status).toBe("imported");
-      expect(result.path).toBe(".agents/scripts/main/my-script.js");
+      expect(result.path).toBe(".agents/scripts/my-script.js");
       expect(mockWriteGroupFile).toHaveBeenCalledWith(
         fakeDb,
         groupId,
-        ".agents/scripts/main/my-script.js",
+        ".agents/scripts/my-script.js",
         scriptCode,
       );
     });
@@ -328,7 +328,7 @@ describe("importArtifacts", () => {
         { name: "run.js", url: "https://example.com/run.js" },
         { fetchFn: mockFetch },
       );
-      expect(resJs.path).toBe(".agents/scripts/main/run.js");
+      expect(resJs.path).toBe(".agents/scripts/run.js");
 
       const resMjs = await importRemoteScript(
         fakeDb,
@@ -336,7 +336,7 @@ describe("importArtifacts", () => {
         { name: "run.mjs", url: "https://example.com/run.mjs" },
         { fetchFn: mockFetch },
       );
-      expect(resMjs.path).toBe(".agents/scripts/main/run.mjs");
+      expect(resMjs.path).toBe(".agents/scripts/run.mjs");
     });
 
     it("skips script import when file exists and overwrite is false", async () => {
@@ -400,7 +400,7 @@ describe("importArtifacts", () => {
   });
 
   describe("importRemoteSkill", () => {
-    it("imports SKILL.md and companion files to .agents/skills/main/<name>/", async () => {
+    it("imports SKILL.md and companion files to .agents/skills/<name>/", async () => {
       const skillContent = `---
 name: sample-skill
 description: A sample skill
@@ -422,12 +422,71 @@ description: A sample skill
       });
 
       expect(result.status).toBe("imported");
-      expect(result.path).toBe(".agents/skills/main/sample-skill/SKILL.md");
+      expect(result.path).toBe(".agents/skills/sample-skill/SKILL.md");
       expect(mockWriteGroupFile).toHaveBeenCalledWith(
         fakeDb,
         groupId,
-        ".agents/skills/main/sample-skill/SKILL.md",
+        ".agents/skills/sample-skill/SKILL.md",
         skillContent,
+      );
+    });
+
+    it("imports companion files listed in skill.files without double-fetching SKILL.md and skips traversal paths", async () => {
+      const skillContent = `---
+name: multi-file-skill
+description: Skill with companion files
+---
+# Multi File Skill
+`;
+      const mockFetch = jest
+        .fn<any>()
+        .mockImplementation(async (url: string) => {
+          if (url.endsWith("/SKILL.md")) {
+            return { ok: true, text: async () => skillContent };
+          }
+          if (url.endsWith("/scripts/helper.py")) {
+            return { ok: true, text: async () => "print('hello')\n" };
+          }
+          if (url.endsWith("/references/guide.md")) {
+            return { ok: true, text: async () => "# Reference Guide\n" };
+          }
+          return { ok: false, status: 404, statusText: "Not Found" };
+        }) as unknown as typeof fetch;
+
+      const skillItem: RemoteSkillItem = {
+        name: "multi-file-skill",
+        url: "https://example.com/skills/multi-file-skill/SKILL.md",
+        files: [
+          "SKILL.md",
+          "scripts/helper.py",
+          "references/guide.md",
+          "../evil.txt",
+        ],
+      };
+
+      const result = await importRemoteSkill(fakeDb, groupId, skillItem, {
+        fetchFn: mockFetch,
+      });
+
+      expect(result.status).toBe("imported");
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+      expect(mockWriteGroupFile).toHaveBeenCalledWith(
+        fakeDb,
+        groupId,
+        ".agents/skills/multi-file-skill/SKILL.md",
+        skillContent,
+      );
+      expect(mockWriteGroupFile).toHaveBeenCalledWith(
+        fakeDb,
+        groupId,
+        ".agents/skills/multi-file-skill/scripts/helper.py",
+        "print('hello')\n",
+      );
+      expect(mockWriteGroupFile).toHaveBeenCalledWith(
+        fakeDb,
+        groupId,
+        ".agents/skills/multi-file-skill/references/guide.md",
+        "# Reference Guide\n",
       );
     });
 

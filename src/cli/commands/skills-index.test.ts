@@ -86,30 +86,28 @@ metadata:
     expect(skill.name).toBe("test-skill");
     expect(skill.type).toBe("skill-md");
     expect(skill.description).toBe("A test skill for discovery index.");
-    expect(skill.url).toBe("../../.agents/skills/main/test-skill/SKILL.md");
+    expect(skill.url).toBe("../../.agents/skills/test-skill/SKILL.md");
     expect(skill.digest).toBe(computeSha256(skillContent));
 
     // Check associated tools & scripts on skill
     expect(skill.tools).toHaveLength(1);
     expect(skill.tools[0].name).toBe("test_tool");
-    expect(skill.tools[0].url).toBe("../../.agents/tools/main/test_tool.json");
+    expect(skill.tools[0].url).toBe("../../.agents/tools/test_tool.json");
     expect(skill.tools[0].digest).toBe(computeSha256(toolContent));
 
     expect(skill.scripts).toHaveLength(1);
     expect(skill.scripts[0].name).toBe("test-skill");
-    expect(skill.scripts[0].url).toBe(
-      "../../.agents/scripts/main/test-skill.js",
-    );
+    expect(skill.scripts[0].url).toBe("../../.agents/scripts/test-skill.js");
     expect(skill.scripts[0].digest).toBe(computeSha256(scriptContent));
 
     // Check top-level arrays
     expect(indexDoc.tools).toHaveLength(1);
     expect(indexDoc.scripts).toHaveLength(1);
     expect(indexDoc.dependencies.tools).toContain(
-      "../../.agents/tools/main/test_tool.json",
+      "../../.agents/tools/test_tool.json",
     );
     expect(indexDoc.dependencies.scripts).toContain(
-      "../../.agents/scripts/main/test-skill.js",
+      "../../.agents/scripts/test-skill.js",
     );
 
     // Verify written file on disk
@@ -186,7 +184,7 @@ metadata:
     );
     expect(res.skills).toHaveLength(1);
     expect(res.skills[0].name).toBe("custom");
-    expect(res.skills[0].url).toBe("../../.agents/skills/main/custom/SKILL.md");
+    expect(res.skills[0].url).toBe("../../.agents/skills/custom/SKILL.md");
   });
 
   it("discovers bundled skills when toolchainRoot is provided and merges them without duplicates", async () => {
@@ -436,5 +434,89 @@ description: Password generator.
     expect(toolNames).toContain("pwgen");
     expect(toolNames).not.toContain("pwgen.test");
     expect(indexDoc.tools).toHaveLength(1);
+  });
+
+  it("indexes npx skills flat layout (.agents/skills/<name>), follows symlinked skill dirs, and populates files array for companion files", async () => {
+    const { symlink } = await import("node:fs/promises");
+
+    // 1. Flat skill with companion files in references/ and scripts/
+    const flatSkillDir = path.join(tempDir, ".agents", "skills", "npx-flat");
+    await mkdir(path.join(flatSkillDir, "references"), { recursive: true });
+    await mkdir(path.join(flatSkillDir, "scripts"), { recursive: true });
+    await writeFile(
+      path.join(flatSkillDir, "SKILL.md"),
+      "---\nname: npx-flat\ndescription: Skill installed via npx skills.\n---\n# Flat Skill\n",
+      "utf8",
+    );
+    await writeFile(
+      path.join(flatSkillDir, "references", "guide.md"),
+      "# Guide",
+      "utf8",
+    );
+    await writeFile(
+      path.join(flatSkillDir, "scripts", "helper.py"),
+      "print(1)",
+      "utf8",
+    );
+
+    // 2. Symlinked skill directory (e.g. from node_modules via npx skills experimental_sync)
+    const externalSkillTarget = path.join(
+      tempDir,
+      "node_modules",
+      "some-pkg",
+      "skills",
+      "linked-skill",
+    );
+    await mkdir(externalSkillTarget, { recursive: true });
+    await writeFile(
+      path.join(externalSkillTarget, "SKILL.md"),
+      "---\nname: linked-skill\ndescription: Symlinked skill from node_modules.\n---\n# Linked\n",
+      "utf8",
+    );
+    await symlink(
+      externalSkillTarget,
+      path.join(tempDir, ".agents", "skills", "linked-skill"),
+      "dir",
+    );
+
+    // 3. Duplicate skill present in both .agents/skills/main/dup and .agents/skills/dup
+    const mainDupDir = path.join(tempDir, ".agents", "skills", "main", "dup");
+    const flatDupDir = path.join(tempDir, ".agents", "skills", "dup");
+    await mkdir(mainDupDir, { recursive: true });
+    await mkdir(flatDupDir, { recursive: true });
+    await writeFile(
+      path.join(mainDupDir, "SKILL.md"),
+      "---\nname: dup\ndescription: Main dup skill.\n---\n# Main\n",
+      "utf8",
+    );
+    await writeFile(
+      path.join(flatDupDir, "SKILL.md"),
+      "---\nname: dup\ndescription: Flat dup skill.\n---\n# Flat\n",
+      "utf8",
+    );
+
+    const indexDoc = await generateSkillsIndex(tempDir, { write: false });
+
+    expect(indexDoc.skills).toHaveLength(3);
+
+    const flatSkill = indexDoc.skills.find((s: any) => s.name === "npx-flat");
+    expect(flatSkill).toBeDefined();
+    expect(flatSkill.url).toBe("../../.agents/skills/npx-flat/SKILL.md");
+    expect(flatSkill.files).toEqual([
+      "SKILL.md",
+      "references/guide.md",
+      "scripts/helper.py",
+    ]);
+
+    const linkedSkill = indexDoc.skills.find(
+      (s: any) => s.name === "linked-skill",
+    );
+    expect(linkedSkill).toBeDefined();
+    expect(linkedSkill.url).toBe("../../.agents/skills/linked-skill/SKILL.md");
+    expect(linkedSkill.files).toBeUndefined();
+
+    const dupSkills = indexDoc.skills.filter((s: any) => s.name === "dup");
+    expect(dupSkills).toHaveLength(1);
+    expect(dupSkills[0].url).toBe("../../.agents/skills/dup/SKILL.md");
   });
 });

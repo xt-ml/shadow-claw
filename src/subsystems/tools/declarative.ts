@@ -1,4 +1,5 @@
 import { CONFIG_KEYS, DEFAULT_GROUP_ID } from "../../config/config.js";
+import { isHeadlessMode } from "../../config/headless.js";
 import { getConfig } from "../../db/get-config.js";
 import { getGroupDir } from "../../storage/get-group-dir.js";
 import { readGroupFile } from "../../storage/read-group-file.js";
@@ -99,8 +100,8 @@ export async function loadDeclarativeTools(
   const diagnostics: string[] = [];
 
   const groupIdsToScan =
-    groupId === DEFAULT_GROUP_ID
-      ? [DEFAULT_GROUP_ID]
+    isHeadlessMode() || groupId === DEFAULT_GROUP_ID
+      ? [groupId]
       : [groupId, DEFAULT_GROUP_ID];
 
   for (const targetGroupId of groupIdsToScan) {
@@ -133,7 +134,16 @@ export async function loadDeclarativeTools(
         continue;
       }
 
-      for (const path of paths.sort()) {
+      const orderedPaths = paths.sort((a, b) => {
+        const aIsFlat = !a.startsWith(".agents/tools/main/");
+        const bIsFlat = !b.startsWith(".agents/tools/main/");
+        if (aIsFlat !== bIsFlat) {
+          return aIsFlat ? -1 : 1;
+        }
+        return a.localeCompare(b);
+      });
+
+      for (const path of orderedPaths) {
         try {
           const parsed = JSON.parse(
             await readGroupFile(db, targetGroupId, path),

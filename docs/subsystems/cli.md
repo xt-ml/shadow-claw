@@ -75,7 +75,7 @@ Builds a static site bundle into `./dist/public`.
 | `--prerender-pages <mode>` | string  | Prerender mode: `all`, `auto`, `none`                                           | `"auto"`          |
 | `--copy-all-assets`        | boolean | Copy entire `assets/` directory into output                                     | `false`           |
 
-When pretty paths are prerendered (`--prerender-pages`), the build automatically extracts and patches Yoast-style SEO metadata into head tags across all generated `index.html` files (page titles formatted via `formatSeoTitle`, meta descriptions via `extractMarkdownDescription`, canonical URLs via `resolveCanonicalUrl`, and Open Graph/Twitter tags via `patchHtmlHeadMetadata`). When the content project has no configured or existing sitemap, the build generates `sitemap.xml` from `routes.json` if a canonical origin is set with `--origin` / `PAGES_ORIGIN` or `branding.siteUrl`. The generated sitemap includes the site root and unique pretty paths. See [Pages System](pages.md#pre-rendered-content-routing--pretty-paths) for sitemap precedence, routing details, and SEO metadata configuration.
+When pretty paths are prerendered (`--prerender-pages`), the build resolves the site `<base href="...">` via `resolveSiteBasePath` (from `--base-path` / `PAGES_BASE_PATH`, `--origin` / `PAGES_ORIGIN` pathname, or `branding.siteUrl` pathname) and patches it across `dist/public/index.html` and all generated pretty-path `index.html` files (`patchBaseHref`), alongside Yoast-style SEO metadata (page titles formatted via `formatSeoTitle`, meta descriptions via `extractMarkdownDescription`, canonical URLs via `resolveCanonicalUrl`, and Open Graph/Twitter tags via `patchHtmlHeadMetadata`). When the content project has no configured or existing sitemap, the build generates `sitemap.xml` from `routes.json` if a canonical origin is set with `--origin` / `PAGES_ORIGIN` or `branding.siteUrl`. The generated sitemap includes the site root and unique pretty paths. See [Pages System](pages.md#pre-rendered-content-routing--pretty-paths) for sitemap precedence, routing details, and SEO metadata configuration.
 
 Pre-rendered HTML and Markdown pages automatically run through the image optimization pipeline (`optimizeImgTags`), which reads image file headers to inject explicit `width` and `height` attributes to prevent Cumulative Layout Shift (CLS), assigns `loading="eager" fetchpriority="high" decoding="async"` to the above-the-fold hero image, and sets `loading="lazy" decoding="async"` on subsequent images.
 
@@ -171,8 +171,16 @@ npx shadow-claw agent model remote --query gemma
 # Run a one-shot agent prompt against the workspace (streams to stdout)
 npx shadow-claw agent --workspace ./my-project run "what time is it"
 
-# List discovered skills in the workspace
+# List discovered skills in the workspace (with skills-lock.json provenance)
 npx shadow-claw agent skills
+
+# Manage skills via the Open Agent Skills (npx skills) ecosystem (top-level shadow-claw skills or shadow-claw agent skills)
+npx shadow-claw skills add vercel-labs/agent-skills
+npx shadow-claw skills find "react"
+npx shadow-claw skills init my-new-skill
+npx shadow-claw skills sync
+npx shadow-claw skills remove my-new-skill
+npx shadow-claw skills restore
 
 # List available tools with capability tags (headless-safe vs browser-only)
 npx shadow-claw agent tools
@@ -186,59 +194,60 @@ npx shadow-claw agent tool read_file '{"path": "package.json"}'
 # Execute a skill's tool chain pipeline directly
 npx shadow-claw agent skill <name>
 
-# Import published tools, skills, and companion scripts from an RFC v0.2.0 discovery manifest
+# Import published tools, skills, and companion scripts from an RFC v0.2.0 discovery manifest, GitHub shorthand, or local directory
 npx shadow-claw agent import https://xt-ml.github.io/shadow-claw-agent-cli-weather/.well-known/agent-skills/index.json
 npx shadow-claw agent import https://xt-ml.github.io/shadow-claw-agent-cli-weather/ --tools "get_current_weather,get_weather_forecast"
+npx shadow-claw agent import vercel-labs/agent-skills --skills react-best-practices
 ```
 
 #### Subcommands
 
-| Subcommand        | Arguments           | Description                                                                                                                                                                                                                                     |
-| :---------------- | :------------------ | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `init`            | `[dir]`             | Initializes workspace directory with `.agents/skills`, `.agents/tools`, `database/`, and default `shadow-claw.config.json`. In interactive TTY environments, prompts for default model and offers immediate prewarm downloading (`--download`). |
-| `model`, `models` | `[action] [id]`     | Inspects, queries, downloads, or configures local models (`list`, `remote`, `download`, `set`). Defaults to `list`.                                                                                                                             |
-| `run`             | `<prompt>`          | Executes a one-shot agent invocation. Persists messages to SQLite, formats conversation history, runs tool loop, streams output to stdout, and exits. Accepts `-` to read the prompt from stdin, or combines `<prompt>` with piped stdin data.  |
-| `clear`           | none                | Deletes all stored messages for the `--group` conversation (default `server:main`).                                                                                                                                                             |
-| `skills`          | `[dir]`             | Discovers and prints all available skills in `.agents/skills/` along with user-invocable status and diagnostics.                                                                                                                                |
-| `tools`           | none                | Lists all registered tools (built-in and declarative) annotated with `[headless-safe]` or `[browser-only]` capability tags.                                                                                                                     |
-| `tool`            | `<name> [jsonArgs]` | When called with only `<name>`, prints the tool description and JSON Schema. When called with `[jsonArgs]`, executes the tool headlessly and prints the result. Accepts JSON arguments or plain text from stdin (auto-mapped to tool schema).   |
-| `skill`           | `<name>`            | Executes a skill's declarative tool pipeline (`execution.type: "tools"`) or runs the skill body as an LLM prompt.                                                                                                                               |
-| `import`          | `<url>`             | Imports tools, skills, and companion scripts from a remote RFC v0.2.0 discovery endpoint into the agent workspace. Verifies SHA-256 integrity and auto-enables imported declarative tools by default.                                           |
+| Subcommand        | Arguments           | Description                                                                                                                                                                                                                                                                                     |
+| :---------------- | :------------------ | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `init`            | `[dir]`             | Initializes workspace directory with `.agents/skills`, `.agents/tools`, `database/`, and default `shadow-claw.config.json`. In interactive TTY environments, prompts for default model and offers immediate prewarm downloading (`--download`).                                                 |
+| `model`, `models` | `[action] [id]`     | Inspects, queries, downloads, or configures local models (`list`, `remote`, `download`, `set`). Defaults to `list`.                                                                                                                                                                             |
+| `run`             | `<prompt>`          | Executes a one-shot agent invocation. Persists messages to SQLite, formats conversation history, runs tool loop, streams output to stdout, and exits. Accepts `-` to read the prompt from stdin, or combines `<prompt>` with piped stdin data.                                                  |
+| `clear`           | none                | Deletes all stored messages for the `--group` conversation (default `server:main`).                                                                                                                                                                                                             |
+| `skills`          | `[action] [args]`   | Also available as top-level `shadow-claw skills`. Lists skills in `.agents/skills/` (flat and `main/`) with `skills-lock.json` provenance (`list`), or manages Open Agent Skills via `add <source>`, `remove <name>`, `find [query]`, `init [name]`, `sync`, `update`, `check`, and `restore`.  |
+| `tools`           | none                | Lists all registered tools (built-in and declarative) annotated with `[headless-safe]` or `[browser-only]` capability tags.                                                                                                                                                                     |
+| `tool`            | `<name> [jsonArgs]` | When called with only `<name>`, prints the tool description and JSON Schema. When called with `[jsonArgs]`, executes the tool headlessly and prints the result. Accepts JSON arguments or plain text from stdin (auto-mapped to tool schema).                                                   |
+| `skill`           | `<name>`            | Executes a skill's declarative tool pipeline (`execution.type: "tools"`) or runs the skill body as an LLM prompt.                                                                                                                                                                               |
+| `import`          | `<source>`          | Imports tools, skills (including multi-file companion `files` manifests), and companion scripts from a remote RFC v0.2.0 discovery endpoint, direct `SKILL.md` URL, GitHub `owner/repo` / `owner/repo@skill` shorthand (`npx skills` delegation with native HTTP fallback), or local directory. |
 
 #### Options
 
-| Option                               | Type    | Description                                                                          | Default                                   |
-| :----------------------------------- | :------ | :----------------------------------------------------------------------------------- | :---------------------------------------- |
-| `--workspace <dir>`                  | string  | Workspace directory for file I/O and configuration                                   | isolated sandbox in `tmpdir()`            |
-| `--database-dir <dir>`               | string  | Directory where SQLite databases (`shadow-claw.db`) are stored                       | `<workspace>/database`                    |
-| `--cache-dir <dir>`                  | string  | Custom cache directory for databases, models, and logs                               | `undefined`                               |
-| `--tmp, --temp`                      | boolean | Store cache, token, and databases in OS temporary directory (`tmpdir()`)             | `false`                                   |
-| `-y, --yes`                          | boolean | Skip interactive prompts and accept defaults                                         | `false`                                   |
-| `--group <groupId>`                  | string  | Conversation group identifier                                                        | `"server:main"`                           |
-| `--provider <provider>`              | string  | LLM provider ID (`transformers_js_local`, `openrouter`, `llamafile`, `gemini`, etc.) | auto-resolved (`"transformers_js_local"`) |
-| `--model <model>`                    | string  | Model identifier (e.g. `onnx-community/gemma-4-E2B-it-ONNX`)                         | auto-resolved (curated local default)     |
-| `--download`                         | boolean | Prewarm and download the model during agent init or before execution                 | `false`                                   |
-| `--api-key <key>`                    | string  | API key for cloud providers                                                          | auto-resolved from env                    |
-| `--stream` / `--no-stream`           | boolean | Stream response tokens to stdout as they arrive                                      | `true`                                    |
-| `--no-history`                       | boolean | Do not load prior conversation history for `agent run`                               | history loaded                            |
-| `--progress` / `--no-progress`       | boolean | Show terminal progress bar during model downloads                                    | `true`                                    |
-| `--system-prompt <text>`             | string  | Override system prompt with inline text (pass `""` or `"none"` to disable)           | `undefined`                               |
-| `--no-system-prompt`                 | boolean | Disable system prompt completely for pure text completion                            | `false`                                   |
-| `--system-prompt-file <file>`        | string  | Load system prompt from a text or markdown file                                      | `undefined`                               |
-| `--tools <tools>`                    | string  | Comma-separated list of tools to enable or import (e.g. `bash,read_file`)            | `undefined`                               |
-| `--no-tools`                         | boolean | Disable all tools for pure text completion / zero tool-call overhead                 | `false`                                   |
-| `--skills <skills>`                  | string  | Comma-separated list of skills to filter or import                                   | `undefined`                               |
-| `--scripts <scripts>`                | string  | Comma-separated list of companion scripts to import                                  | `undefined`                               |
-| `--all`                              | boolean | Import all tools, skills, and scripts from discovery manifest                        | `false`                                   |
-| `--overwrite`                        | boolean | Overwrite existing skills, tools, or scripts during import                           | `false`                                   |
-| `--auto-enable` / `--no-auto-enable` | boolean | Automatically enable imported declarative tools in database                          | `true`                                    |
-| `--tools-profile <name>`             | string  | Tools profile to activate (e.g. `__builtin_default`)                                 | `undefined`                               |
-| `-r, --remote`, `--hf`               | boolean | List or search available models from Hugging Face `onnx-community` repository        | `false`                                   |
-| `--query <query>`                    | string  | Filter remote or local models by search query                                        | `undefined`                               |
-| `-v, --verbose`                      | boolean | Enable verbose tool activity and diagnostic logging                                  | `false`                                   |
-| `-o, --output <file>`                | string  | Write command output to a file instead of stdout                                     | `undefined`                               |
-| `-f, --file <path>`                  | string  | Attach a local file to `agent run`                                                   | `undefined`                               |
-| `-q, --quiet`                        | boolean | Suppress all non-error output                                                        | `false`                                   |
+| Option                               | Type    | Description                                                                           | Default                                   |
+| :----------------------------------- | :------ | :------------------------------------------------------------------------------------ | :---------------------------------------- |
+| `--workspace <dir>`                  | string  | Workspace directory for file I/O and configuration                                    | isolated sandbox in `tmpdir()`            |
+| `--database-dir <dir>`               | string  | Directory where SQLite databases (`shadow-claw.db`) are stored                        | `<workspace>/database`                    |
+| `--cache-dir <dir>`                  | string  | Custom cache directory for databases, models, and logs                                | `undefined`                               |
+| `--tmp, --temp`                      | boolean | Store cache, token, and databases in OS temporary directory (`tmpdir()`)              | `false`                                   |
+| `-y, --yes`                          | boolean | Skip interactive prompts and accept defaults                                          | `false`                                   |
+| `--group <groupId>`                  | string  | Conversation group identifier for chat history isolation (`agent run`, `clear`, etc.) | `"server:main"`                           |
+| `--provider <provider>`              | string  | LLM provider ID (`transformers_js_local`, `openrouter`, `llamafile`, `gemini`, etc.)  | auto-resolved (`"transformers_js_local"`) |
+| `--model <model>`                    | string  | Model identifier (e.g. `onnx-community/gemma-4-E2B-it-ONNX`)                          | auto-resolved (curated local default)     |
+| `--download`                         | boolean | Prewarm and download the model during agent init or before execution                  | `false`                                   |
+| `--api-key <key>`                    | string  | API key for cloud providers                                                           | auto-resolved from env                    |
+| `--stream` / `--no-stream`           | boolean | Stream response tokens to stdout as they arrive                                       | `true`                                    |
+| `--no-history`                       | boolean | Do not load prior conversation history for `agent run`                                | history loaded                            |
+| `--progress` / `--no-progress`       | boolean | Show terminal progress bar during model downloads                                     | `true`                                    |
+| `--system-prompt <text>`             | string  | Override system prompt with inline text (pass `""` or `"none"` to disable)            | `undefined`                               |
+| `--no-system-prompt`                 | boolean | Disable system prompt completely for pure text completion                             | `false`                                   |
+| `--system-prompt-file <file>`        | string  | Load system prompt from a text or markdown file                                       | `undefined`                               |
+| `--tools <tools>`                    | string  | Comma-separated list of tools to enable or import (e.g. `bash,read_file`)             | `undefined`                               |
+| `--no-tools`                         | boolean | Disable all tools for pure text completion / zero tool-call overhead                  | `false`                                   |
+| `--skills <skills>`                  | string  | Comma-separated list of skills to filter or import                                    | `undefined`                               |
+| `--scripts <scripts>`                | string  | Comma-separated list of companion scripts to import                                   | `undefined`                               |
+| `--all`                              | boolean | Import all tools, skills, and scripts from discovery manifest                         | `false`                                   |
+| `--overwrite`                        | boolean | Overwrite existing skills, tools, or scripts during import                            | `false`                                   |
+| `--auto-enable` / `--no-auto-enable` | boolean | Automatically enable imported declarative tools in database                           | `true`                                    |
+| `--tools-profile <name>`             | string  | Tools profile to activate (e.g. `__builtin_default`)                                  | `undefined`                               |
+| `-r, --remote`, `--hf`               | boolean | List or search available models from Hugging Face `onnx-community` repository         | `false`                                   |
+| `--query <query>`                    | string  | Filter remote or local models by search query                                         | `undefined`                               |
+| `-v, --verbose`                      | boolean | Enable verbose tool activity and diagnostic logging                                   | `false`                                   |
+| `-o, --output <file>`                | string  | Write command output to a file instead of stdout                                      | `undefined`                               |
+| `-f, --file <path>`                  | string  | Attach a local file to `agent run`                                                    | `undefined`                               |
+| `-q, --quiet`                        | boolean | Suppress all non-error output                                                         | `false`                                   |
 
 > **First-Run Cache Directory Wizard:** When running the agent without an explicit `--workspace`, `--cache-dir`, or `--tmp` in a directory where no `.cache` or database exists, ShadowClaw prompts interactively (identical to `dev` and `serve`) to let you choose between the current directory (`.cache`), system temporary storage (`tmpdir()`), or a custom path. Pass `-y`, `--yes`, `--tmp`, or `--workspace <dir>` to skip the prompt.
 
@@ -698,11 +707,52 @@ When running an autonomous agent (`shadow-claw agent run`), agents can discover 
 
 3. **`prompt_peer`**: Follow up with queries or instructions to the remote peer.
 
-### `shadow-claw skills:index [dir]` (alias `agent-skills`)
+### `shadow-claw skills [action] [args...]`
+
+Manage Agent Skills via the Open Agent Skills ecosystem ([skills.sh](https://skills.sh) / `npx skills`) or ShadowClaw workspace.
+
+Supports subcommands: `list` (or `ls`), `add <source>`, `remove <name>`, `find [query]`, `init [name]`, `sync`, `update`, `check`, and `restore`.
+
+Skills operate on the host workspace filesystem (`<workspace>/.agents/skills/`) and are shared across all conversations in the workspace. Because skills are workspace-scoped rather than conversation-scoped, the `skills` command does not take or require a `--group` flag.
+
+```bash
+# List discovered skills with provenance from skills-lock.json
+npx shadow-claw skills list
+
+# Search for community skills across the skills.sh registry (queries https://skills.sh/api/search)
+npx shadow-claw skills find react
+
+# Add a skill from skills.sh or GitHub (delegates cross-platform to npx skills with graceful native fallback)
+npx shadow-claw skills add vercel-labs/agent-skills@web-design-guidelines
+
+# Scaffold a new skill in .agents/skills/<name>/SKILL.md
+npx shadow-claw skills init my-new-skill
+
+# Sync and verify workspace skills (migrates legacy layout to canonical flat)
+npx shadow-claw skills sync
+
+# Remove a skill from .agents/skills/ and skills-lock.json
+npx shadow-claw skills remove my-new-skill
+
+# Re-install locked skills from skills-lock.json
+npx shadow-claw skills restore
+```
+
+#### Options
+
+| Option              | Type    | Description                                     | Default         |
+| :------------------ | :------ | :---------------------------------------------- | :-------------- |
+| `--workspace <dir>` | string  | Workspace directory containing `.agents/skills` | `process.cwd()` |
+| `--skills <skills>` | string  | Comma-separated list of skill names to filter   | `undefined`     |
+| `--overwrite`       | boolean | Overwrite existing skills during import/sync    | `false`         |
+| `-y, --yes`         | boolean | Skip interactive confirmation prompts           | `false`         |
+| `-q, --quiet`       | boolean | Suppress non-error output                       | `false`         |
+
+### `shadow-claw skills:index [dir]`
 
 Generates or updates the Agent Skills Discovery index (`.well-known/agent-skills/index.json`) adhering to the **[Agent Skills Discovery RFC (v0.2.0)](https://schemas.agentskills.io/discovery/0.2.0/schema.json)**.
 
-Scans `.agents/skills/**/SKILL.md`, `.agents/tools/main/*.json`, and `.agents/scripts/main/*`, computes SHA-256 digests (`sha256:...`) and RFC 3986 relative URLs, and links skill tool execution and script dependencies.
+Scans `.agents/skills/**/SKILL.md` (across both `.agents/skills/<name>` and legacy `.agents/skills/main/<name>`, following symlinked skill directories and deduplicating flat vs. `main/` overrides), `.agents/tools/*.json` (and legacy `.agents/tools/main/*.json`), and `.agents/scripts/*`, computes SHA-256 digests (`sha256:...`) and RFC 3986 relative URLs, emits a `files: ["SKILL.md", ...]` companion manifest array for multi-file skill directories, and links skill tool execution and script dependencies.
 
 ```bash
 # Generate discovery index for current repository/content root

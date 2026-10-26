@@ -11,6 +11,7 @@ import {
   mkdir,
   readdir,
   readFile,
+  realpath,
   stat,
   writeFile,
 } from "node:fs/promises";
@@ -74,17 +75,37 @@ async function findFilesRecursively(
 ): Promise<string[]> {
   const results: string[] = [];
   if (!(await pathExists(dir))) return results;
+  const visitedRealDirs = new Set<string>();
 
   async function walk(currentDir: string): Promise<void> {
+    try {
+      const real = await realpath(currentDir);
+      if (visitedRealDirs.has(real)) return;
+      visitedRealDirs.add(real);
+    } catch {
+      return;
+    }
+
     const entries = await readdir(currentDir, { withFileTypes: true });
     for (const entry of entries) {
       const fullPath = path.join(currentDir, entry.name);
-      if (entry.isDirectory()) {
+      let isDir = entry.isDirectory();
+      let isFile = entry.isFile();
+      if (entry.isSymbolicLink()) {
+        try {
+          const st = await stat(fullPath);
+          isDir = st.isDirectory();
+          isFile = st.isFile();
+        } catch {
+          continue;
+        }
+      }
+      if (isDir) {
         if (!isTestFileOrDir(entry.name, fullPath)) {
           await walk(fullPath);
         }
       } else if (
-        entry.isFile() &&
+        isFile &&
         !isTestFileOrDir(entry.name, fullPath) &&
         (!filterFn || filterFn(entry.name, fullPath))
       ) {
@@ -203,6 +224,13 @@ export async function generateSkillsIndex(
       "Agent skills and tools collection, powered by ShadowClaw.";
   }
 
+  // 1b. Migrate any legacy workspace layout (.agents/skills/main/* -> .agents/skills/*)
+  try {
+    const { migrateLegacyWorkspaceLayout } =
+      await import("../utils/migrate-skills.js");
+    await migrateLegacyWorkspaceLayout(resolvedRoot);
+  } catch {}
+
   // 2. Discover Tools (.agents/tools/**/*.json)
   const toolsDir = path.join(resolvedRoot, ".agents", "tools");
   const toolFiles = await findFilesRecursively(toolsDir, (name) =>
@@ -285,11 +313,21 @@ export async function generateSkillsIndex(
 
   // 4. Discover Skills (.agents/skills/**/SKILL.md)
   const skillsDir = path.join(resolvedRoot, ".agents", "skills");
-  const skillFiles = await findFilesRecursively(
+  const rawSkillFiles = await findFilesRecursively(
     skillsDir,
     (name) => name === "SKILL.md",
   );
+  // Prefer flat canonical .agents/skills/<name>/SKILL.md over legacy .agents/skills/main/<name>/SKILL.md when deduplicating
+  const skillFiles = rawSkillFiles.sort((a, b) => {
+    const relA = path.relative(skillsDir, a).split(path.sep).join("/");
+    const relB = path.relative(skillsDir, b).split(path.sep).join("/");
+    const aIsFlat = !relA.startsWith("main/");
+    const bIsFlat = !relB.startsWith("main/");
+    if (aIsFlat !== bIsFlat) return aIsFlat ? -1 : 1;
+    return relA.localeCompare(relB);
+  });
   const discoveredSkills: any[] = [];
+  const seenSkillNames = new Set<string>();
 
   for (const fullSkillPath of skillFiles) {
     const relFromRoot = path.relative(resolvedRoot, fullSkillPath);
@@ -308,9 +346,24 @@ export async function generateSkillsIndex(
       frontmatter = parsed.data || {};
     } catch {}
 
-    const parentDirName = path.basename(path.dirname(fullSkillPath));
+    const skillDirPath = path.dirname(fullSkillPath);
+    const parentDirName = path.basename(skillDirPath);
     const skillName = frontmatter.name || parentDirName;
     const skillDesc = frontmatter.description || "";
+
+    if (seenSkillNames.has(skillName)) {
+      continue;
+    }
+    seenSkillNames.add(skillName);
+
+    // Discover companion files inside this skill directory (for npx skills WellKnownProvider compatibility)
+    const allFilesInSkillDir = await findFilesRecursively(skillDirPath);
+    const companionFiles = allFilesInSkillDir
+      .map((f) =>
+        path.relative(skillDirPath, f).split(path.sep).join(path.posix.sep),
+      )
+      .filter((rel) => rel !== "SKILL.md" && !rel.endsWith("/SKILL.md"))
+      .sort();
 
     // Identify associated tools
     const associatedToolNames = new Set<string>();
@@ -371,6 +424,9 @@ export async function generateSkillsIndex(
       description: skillDesc,
       url: relUrl,
       digest,
+      ...(companionFiles.length > 0
+        ? { files: ["SKILL.md", ...companionFiles] }
+        : {}),
       ...(matchingTools.length ? { tools: matchingTools } : {}),
       ...(matchingScripts.length ? { scripts: matchingScripts } : {}),
     });

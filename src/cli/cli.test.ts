@@ -865,4 +865,33 @@ slug: "custom-test"
       await new Promise<void>((resolve) => server.close(() => resolve()));
     }
   }, 20_000);
+
+  it("outputs skills command help without --group option", async () => {
+    const { stdout } = await execFileAsync(process.execPath, [
+      cliPath,
+      "skills",
+      "--help",
+    ]);
+
+    expect(stdout).toContain("Usage: shadow-claw skills [options] [action]");
+    expect(stdout).toContain("--workspace <dir>");
+    expect(stdout).toContain("--skills <skills>");
+    expect(stdout).toContain("--overwrite");
+    expect(stdout).toContain("-y, --yes");
+    expect(stdout).toContain("-q, --quiet");
+    // Verify that conversation --group option is not exposed on workspace-scoped skills CLI
+    expect(stdout).not.toContain("--group");
+  });
+
+  it("executes skills list on an initialized workspace without requiring group", async () => {
+    const { stdout } = await execFileAsync(process.execPath, [
+      cliPath,
+      "skills",
+      "list",
+      "--workspace",
+      tempDir,
+      "-q",
+    ]);
+    expect(stdout).toBeDefined();
+  });
 });

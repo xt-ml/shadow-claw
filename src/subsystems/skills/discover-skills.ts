@@ -1,4 +1,5 @@
 import { DEFAULT_GROUP_ID } from "../../config/config.js";
+import { isHeadlessMode } from "../../config/headless.js";
 import { getGroupDir } from "../../storage/get-group-dir.js";
 import { readGroupFile } from "../../storage/read-group-file.js";
 
@@ -21,8 +22,8 @@ export async function discoverSkills(
   const diagnostics: SkillDiagnostic[] = [];
 
   const groupIdsToScan =
-    groupId === DEFAULT_GROUP_ID
-      ? [DEFAULT_GROUP_ID]
+    isHeadlessMode() || groupId === DEFAULT_GROUP_ID
+      ? [groupId]
       : [groupId, DEFAULT_GROUP_ID];
 
   for (const targetGroupId of groupIdsToScan) {
@@ -65,14 +66,34 @@ export async function discoverSkills(
         continue;
       }
 
-      for (const path of skillPaths.sort()) {
+      const orderedSkillPaths = skillPaths.sort((a, b) => {
+        const aIsFlat = !a.startsWith(".agents/skills/main/");
+        const bIsFlat = !b.startsWith(".agents/skills/main/");
+        if (aIsFlat !== bIsFlat) {
+          return aIsFlat ? -1 : 1;
+        }
+        return a.localeCompare(b);
+      });
+
+      for (const path of orderedSkillPaths) {
         try {
           const skill = parseSkill(
             path,
             await readGroupFile(db, targetGroupId, path),
           );
-          if (skills.some((candidate) => candidate.name === skill.name)) {
-            if (targetGroupId === groupId) {
+          const existing = skills.find(
+            (candidate) => candidate.name === skill.name,
+          );
+          if (existing) {
+            const isCanonicalMirror =
+              existing.groupId === targetGroupId &&
+              (existing.path.replace(
+                /^\.agents\/skills\/main\//,
+                ".agents/skills/",
+              ) === path ||
+                path.replace(/^\.agents\/skills\/main\//, ".agents/skills/") ===
+                  existing.path);
+            if (targetGroupId === groupId && !isCanonicalMirror) {
               diagnostics.push({
                 path,
                 message: `Duplicate skill name: ${skill.name}`,

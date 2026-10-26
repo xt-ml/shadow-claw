@@ -3,10 +3,371 @@
  * Headless CLI agent participant supporting init, skills, tools, skill, and run.
  */
 
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
+import {
+  migrateLegacySkills,
+  migrateLegacyWorkspaceLayout,
+} from "../utils/migrate-skills.js";
+import { parseSkill } from "../../subsystems/skills/parse-skill.js";
+
+async function readSkillsLock(workspaceDir: string): Promise<any> {
+  try {
+    const lockPath = path.join(path.resolve(workspaceDir), "skills-lock.json");
+    const raw = await readFile(lockPath, "utf8");
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+async function removeFromSkillsLock(
+  workspaceDir: string,
+  skillName: string,
+): Promise<boolean> {
+  try {
+    const lockPath = path.join(path.resolve(workspaceDir), "skills-lock.json");
+    const raw = await readFile(lockPath, "utf8");
+    const parsed = JSON.parse(raw);
+    if (parsed?.skills?.[skillName]) {
+      delete parsed.skills[skillName];
+      await writeFile(lockPath, JSON.stringify(parsed, null, 2) + "\n", "utf8");
+      return true;
+    }
+  } catch {}
+  return false;
+}
+
+async function initSkillTemplate(
+  workspaceDir: string,
+  skillName: string,
+  options: { description?: string; flat?: boolean } = {},
+): Promise<{ name: string; path: string }> {
+  const cleanName = skillName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-_]/g, "-");
+  if (!cleanName) {
+    throw new Error("Skill name is required");
+  }
+  const relSkillDir =
+    options.flat === false
+      ? path.join(".agents", "skills", "main", cleanName)
+      : path.join(".agents", "skills", cleanName);
+  const fullSkillDir = path.join(path.resolve(workspaceDir), relSkillDir);
+  const fullSkillMd = path.join(fullSkillDir, "SKILL.md");
+
+  await mkdir(fullSkillDir, { recursive: true });
+  const description =
+    options.description ||
+    `Instructions and workflow for the ${cleanName} skill.`;
+  const template = `---\nname: ${cleanName}\ndescription: ${description}\n---\n\n# ${cleanName}\n\nProvide step-by-step instructions for the agent when this skill is activated.\n`;
+  await writeFile(fullSkillMd, template, "utf8");
+  return {
+    name: cleanName,
+    path: path.posix.join(...relSkillDir.split(path.sep), "SKILL.md"),
+  };
+}
+
+export function resolveNpxCommand(): { command: string; shell: boolean } {
+  const isWindows = process.platform === "win32";
+  const binaryName = isWindows ? "npx.cmd" : "npx";
+
+  try {
+    const candidatePath = path.join(path.dirname(process.execPath), binaryName);
+    if (existsSync(candidatePath)) {
+      return { command: candidatePath, shell: isWindows };
+    }
+  } catch {}
+
+  return { command: binaryName, shell: isWindows };
+}
+
+export function runNpxSkillsCommand(
+  args: string[],
+  options: { workspaceDir?: string; execFn?: any; timeoutMs?: number } = {},
+): Promise<{
+  success: boolean;
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+  error?: string;
+}> {
+  const cwd = path.resolve(options.workspaceDir || process.cwd());
+  const { command, shell } = resolveNpxCommand();
+  const fullArgs = ["--yes", "skills", ...args];
+  if (options.execFn) {
+    return options
+      .execFn(command, fullArgs, {
+        cwd,
+        env: process.env,
+        timeoutMs: options.timeoutMs,
+        shell,
+      })
+      .then((res: any) => ({
+        success: res.exitCode === 0,
+        exitCode: res.exitCode ?? 0,
+        stdout: res.stdout || "",
+        stderr: res.stderr || "",
+      }))
+      .catch((err: any) => ({
+        success: false,
+        exitCode: 1,
+        stdout: "",
+        stderr: String(err),
+        error: String(err),
+      }));
+  }
+  return new Promise((resolve) => {
+    const child = spawn(command, ["--yes", "skills", ...args], {
+      cwd,
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+      shell,
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout?.on("data", (c) => (stdout += String(c)));
+    child.stderr?.on("data", (c) => (stderr += String(c)));
+    child.on("error", (err) => {
+      resolve({
+        success: false,
+        exitCode: 1,
+        stdout,
+        stderr,
+        error: err.message,
+      });
+    });
+    child.on("close", (code) => {
+      resolve({
+        success: code === 0,
+        exitCode: code ?? 1,
+        stdout,
+        stderr,
+        ...(code !== 0
+          ? { error: stderr || `Process exited with code ${code}` }
+          : {}),
+      });
+    });
+  });
+}
+
+async function findSkillMdFiles(
+  dir: string,
+  results: string[] = [],
+): Promise<string[]> {
+  try {
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name === "node_modules" || entry.name === ".git") continue;
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await findSkillMdFiles(fullPath, results);
+      } else if (entry.name.toLowerCase() === "skill.md") {
+        results.push(fullPath);
+      }
+    }
+  } catch {}
+  return results;
+}
+
+async function importLocalSkillsDirectory(
+  sourceDir: string,
+  workspaceDir: string,
+  options: {
+    skillNames?: string[];
+    overwrite?: boolean;
+    targetSubdir?: string;
+  } = {},
+): Promise<{ imported: string[]; skipped: string[]; failed: any[] }> {
+  const resolvedSrc = path.resolve(sourceDir.replace(/^file:\/\//, ""));
+  const resolvedWorkspace = path.resolve(workspaceDir);
+  const imported: string[] = [];
+  const skipped: string[] = [];
+  const failed: any[] = [];
+
+  const filterSet =
+    options.skillNames && options.skillNames.length > 0
+      ? new Set(options.skillNames)
+      : null;
+
+  const baseTargetSkillsDir = options.targetSubdir
+    ? path.join(resolvedWorkspace, ".agents", "skills", options.targetSubdir)
+    : path.join(resolvedWorkspace, ".agents", "skills");
+
+  try {
+    const skillMdFiles = await findSkillMdFiles(resolvedSrc);
+    if (skillMdFiles.length === 0) {
+      const directSkillMd = path.join(resolvedSrc, "SKILL.md");
+      try {
+        await stat(directSkillMd);
+        skillMdFiles.push(directSkillMd);
+      } catch {}
+    }
+
+    for (const skillMdPath of skillMdFiles.sort()) {
+      const skillDir = path.dirname(skillMdPath);
+      try {
+        const raw = await readFile(skillMdPath, "utf8");
+        const parsed = parseSkill(skillMdPath, raw);
+        if (filterSet && !filterSet.has(parsed.name)) {
+          continue;
+        }
+
+        const destSkillDir = path.join(baseTargetSkillsDir, parsed.name);
+        const destSkillMd = path.join(destSkillDir, "SKILL.md");
+
+        let exists = false;
+        try {
+          await stat(destSkillMd);
+          exists = true;
+        } catch {}
+
+        if (exists && !options.overwrite) {
+          skipped.push(parsed.name);
+          continue;
+        }
+
+        await mkdir(destSkillDir, { recursive: true });
+        await cp(skillDir, destSkillDir, { recursive: true, force: true });
+        imported.push(parsed.name);
+      } catch (err: any) {
+        failed.push({
+          name: path.basename(skillDir),
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+  } catch (err: any) {
+    failed.push({
+      name: path.basename(resolvedSrc),
+      error: err?.message || String(err),
+    });
+  }
+
+  return { imported, skipped, failed };
+}
+
+async function findFilesByExt(
+  dir: string,
+  exts: string[],
+  results: string[] = [],
+): Promise<string[]> {
+  try {
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name === "node_modules" || entry.name === ".git") continue;
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await findFilesByExt(fullPath, exts, results);
+      } else if (exts.includes(path.extname(entry.name).toLowerCase())) {
+        results.push(fullPath);
+      }
+    }
+  } catch {}
+  return results;
+}
+
+// Imports declarative tools (.json) or scripts (.js/.mjs) into the flat layout;
+// legacy `main/` subfolders in the source are scanned recursively.
+async function importLocalFlatArtifacts(
+  kind: "tools" | "scripts",
+  sourceDir: string,
+  workspaceDir: string,
+  options: {
+    names?: string[];
+    overwrite?: boolean;
+    targetSubdir?: string;
+  } = {},
+): Promise<{ imported: string[]; skipped: string[]; failed: any[] }> {
+  const resolvedSrc = path.resolve(sourceDir.replace(/^file:\/\//, ""));
+  const roots = [
+    path.join(resolvedSrc, ".agents", kind),
+    path.join(resolvedSrc, kind),
+  ];
+  if (path.basename(resolvedSrc) === kind) roots.push(resolvedSrc);
+
+  const exts = kind === "tools" ? [".json"] : [".js", ".mjs"];
+  const filterSet =
+    options.names && options.names.length > 0 ? new Set(options.names) : null;
+  const destDir = options.targetSubdir
+    ? path.join(
+        path.resolve(workspaceDir),
+        ".agents",
+        kind,
+        options.targetSubdir,
+      )
+    : path.join(path.resolve(workspaceDir), ".agents", kind);
+
+  const imported: string[] = [];
+  const skipped: string[] = [];
+  const failed: any[] = [];
+  const seen = new Set<string>();
+
+  for (const root of roots) {
+    for (const file of (await findFilesByExt(root, exts)).sort()) {
+      const base = path.basename(file);
+      const name = base.replace(/\.[^.]+$/, "");
+      if (seen.has(base)) continue;
+      seen.add(base);
+      if (filterSet && !filterSet.has(name) && !filterSet.has(base)) continue;
+      try {
+        if (kind === "tools" && !/^[a-z][a-z0-9_]{0,63}$/.test(name)) {
+          throw new Error(`Invalid tool name: ${name}`);
+        }
+        const dest = path.join(destDir, base);
+        let exists = false;
+        try {
+          await stat(dest);
+          exists = true;
+        } catch {}
+        if (exists && !options.overwrite) {
+          skipped.push(name);
+          continue;
+        }
+        await mkdir(destDir, { recursive: true });
+        await cp(file, dest, { force: true });
+        imported.push(name);
+      } catch (err: any) {
+        failed.push({ name, error: err?.message || String(err) });
+      }
+    }
+  }
+
+  return { imported, skipped, failed };
+}
+
+function isNpxSkillsPackageSource(input: string): boolean {
+  const trimmed = (input || "").trim();
+  if (!trimmed) return false;
+  if (/^(?:\.\/|\.\.\/|\/|[a-zA-Z]:[\\/]|file:\/\/)/.test(trimmed))
+    return false;
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    return /github\.com|gitlab\.com/i.test(trimmed);
+  }
+  return /^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+(?:@[a-zA-Z0-9_.-]+)?$/.test(trimmed);
+}
+
+export async function syncWorkspaceSkills(
+  workspaceDir: string,
+  options: { overwrite?: boolean } = {},
+): Promise<{ syncedToFlat: string[]; syncedToMain: string[] }> {
+  const mig = await migrateLegacySkills(workspaceDir, options);
+  return { syncedToFlat: mig.migratedSkills, syncedToMain: [] };
+}
 import type {
   AgentInitOptions,
   AgentInitResult,
@@ -178,6 +539,9 @@ export async function runAgentInit(
   // Initialize SQLite database
   await bootstrapHeadlessAgent({ workspace, quiet: true });
 
+  // Migrate any legacy workspace layout (.agents/skills/main/* -> .agents/skills/*)
+  await migrateLegacyWorkspaceLayout(workspace);
+
   return { success: true, workspace };
 }
 
@@ -188,15 +552,417 @@ export async function runAgentInit(
 export async function runAgentSkills(
   options: AgentSkillsOptions & Record<string, any> = {},
 ): Promise<any> {
-  const { db, core } = await bootstrapHeadlessAgent(options);
+  const workspace = options.workspace || process.cwd();
+  const { db, workspaceDir, core } = await bootstrapHeadlessAgent({
+    ...options,
+    workspace,
+  });
   const groupId =
     options.group || core.DEFAULT_SERVER_GROUP_ID || DEFAULT_SERVER_GROUP_ID;
+  await migrateLegacyWorkspaceLayout(workspaceDir);
   const discovery = await core.discoverSkills(db, groupId);
+  const lock = await readSkillsLock(workspaceDir);
+
+  const skills = discovery.skills.map((skill: any) => {
+    const lockEntry = lock?.skills?.[skill.name];
+    return lockEntry
+      ? {
+          ...skill,
+          lockSource: lockEntry.source,
+          lockSourceType: lockEntry.sourceType,
+          lockHash: lockEntry.computedHash,
+        }
+      : skill;
+  });
 
   return {
-    skills: discovery.skills,
+    skills,
     diagnostics: discovery.diagnostics,
+    ...(lock ? { lockfile: lock } : {}),
   };
+}
+
+/**
+ * Manage workspace skills via `npx skills` with graceful fallback to ShadowClaw's
+ * built-in skill management and discovery pipeline.
+ */
+export async function runAgentSkillsManage(
+  subaction: string = "list",
+  subargs: string[] = [],
+  options: Record<string, any> = {},
+): Promise<any> {
+  const workspace = options.workspace || process.cwd();
+  const action = (subaction || "list").trim().toLowerCase();
+
+  if (action === "list" || action === "ls") {
+    const result = await runAgentSkills({ ...options, workspace });
+    if (!options.quiet) {
+      if (result.skills.length === 0) {
+        console.log("No skills found in workspace (.agents/skills/).");
+      } else {
+        console.log(`Available skills (${result.skills.length}):\n`);
+        for (const skill of result.skills) {
+          const sourceBadge = skill.lockSource
+            ? ` [source: ${skill.lockSource}]`
+            : "";
+          console.log(
+            `  - ${skill.name}${sourceBadge}: ${skill.description || "No description"}`,
+          );
+        }
+      }
+    }
+    return { success: true, ...result };
+  }
+
+  const { workspaceDir } = await bootstrapHeadlessAgent({
+    ...options,
+    workspace,
+    quiet: true,
+  });
+
+  if (
+    action === "add" ||
+    action === "install" ||
+    action === "i" ||
+    action === "a"
+  ) {
+    const pkg = subargs[0];
+    if (!pkg) {
+      const errorMsg =
+        "Error: Package or skill source required. Usage: shadow-claw agent skills add <package-or-url>";
+      if (!options.quiet) console.error(errorMsg);
+      process.exitCode = 1;
+      return { success: false, error: errorMsg };
+    }
+
+    const extraArgs = subargs.slice(1);
+    const shouldTryNpx =
+      options.useNpxSkills !== false &&
+      (Boolean(options.npxSkillsExecFn) || !options.fetchFn);
+
+    if (shouldTryNpx) {
+      const npxArgs = ["add", pkg, "-a", "universal"];
+      if (options.yes !== false || options.quiet || !process.stdin.isTTY) {
+        if (!extraArgs.includes("-y") && !extraArgs.includes("--yes")) {
+          npxArgs.push("-y");
+        }
+      }
+      if (options.skills) {
+        const skillFilters = Array.isArray(options.skills)
+          ? options.skills
+          : String(options.skills)
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean);
+        if (skillFilters.length > 0) {
+          npxArgs.push("--skill", ...skillFilters);
+        }
+      }
+      npxArgs.push(...extraArgs);
+
+      const npxRes = await runNpxSkillsCommand(npxArgs, {
+        workspaceDir,
+        execFn: options.npxSkillsExecFn,
+      });
+
+      if (npxRes.success) {
+        if (!options.quiet && npxRes.stdout.trim()) {
+          console.log(npxRes.stdout.trim());
+        }
+        const updated = await runAgentSkills({
+          ...options,
+          workspace: workspaceDir,
+          quiet: true,
+        });
+        return {
+          success: true,
+          delegatedToNpxSkills: true,
+          skills: updated.skills,
+          stdout: npxRes.stdout,
+        };
+      }
+    }
+
+    // Graceful degradation: fall back to ShadowClaw's built-in importer
+    const fallbackRes = await runAgentImport(pkg, {
+      ...options,
+      workspace: workspaceDir,
+      useNpxSkills: false,
+    });
+    const updated = await runAgentSkills({
+      ...options,
+      workspace: workspaceDir,
+      quiet: true,
+    });
+    return {
+      success: fallbackRes.success,
+      delegatedToNpxSkills: false,
+      fallbackUsed: true,
+      skills: updated.skills,
+      importResult: fallbackRes,
+      ...(fallbackRes.error ? { error: fallbackRes.error } : {}),
+    };
+  }
+
+  if (
+    action === "remove" ||
+    action === "rm" ||
+    action === "r" ||
+    action === "uninstall"
+  ) {
+    const names = subargs.filter((arg) => !arg.startsWith("-"));
+    if (names.length === 0) {
+      const errorMsg =
+        "Error: Skill name(s) required. Usage: shadow-claw agent skills remove <name...>";
+      if (!options.quiet) console.error(errorMsg);
+      process.exitCode = 1;
+      return { success: false, error: errorMsg };
+    }
+
+    if (options.useNpxSkills !== false) {
+      await runNpxSkillsCommand(["remove", ...names, "-y"], {
+        workspaceDir,
+        execFn: options.npxSkillsExecFn,
+      });
+    }
+
+    const removed: string[] = [];
+    for (const name of names) {
+      const candidates = [
+        path.join(workspaceDir, ".agents", "skills", name),
+        path.join(workspaceDir, ".agents", "skills", "main", name),
+      ];
+      let didRemove = false;
+      for (const dir of candidates) {
+        try {
+          const st = await stat(dir);
+          if (st.isDirectory()) {
+            await rm(dir, { recursive: true, force: true });
+            didRemove = true;
+          }
+        } catch {}
+      }
+      const removedLock = await removeFromSkillsLock(workspaceDir, name);
+      if (didRemove || removedLock) {
+        removed.push(name);
+      }
+    }
+
+    if (!options.quiet) {
+      if (removed.length > 0) {
+        console.log(`Removed skill(s): ${removed.join(", ")}`);
+      } else {
+        console.log(`No matching skills found to remove.`);
+      }
+    }
+
+    return {
+      success: true,
+      removed,
+    };
+  }
+
+  if (action === "init") {
+    const skillName = subargs[0] || "my-skill";
+    if (options.useNpxSkills === true && options.npxSkillsExecFn) {
+      const npxRes = await runNpxSkillsCommand(["init", skillName], {
+        workspaceDir,
+        execFn: options.npxSkillsExecFn,
+      });
+      if (npxRes.success) {
+        return {
+          success: true,
+          name: skillName,
+          delegatedToNpxSkills: true,
+        };
+      }
+    }
+
+    try {
+      const created = await initSkillTemplate(workspaceDir, skillName, {
+        description: options.description,
+        flat: options.flat !== false,
+      });
+      if (!options.quiet) {
+        console.log(`Initialized skill "${created.name}" at ${created.path}`);
+      }
+      return {
+        success: true,
+        ...created,
+      };
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      if (!options.quiet) console.error(`Error: ${errorMsg}`);
+      process.exitCode = 1;
+      return { success: false, error: errorMsg };
+    }
+  }
+
+  if (action === "sync") {
+    if (options.useNpxSkills !== false && options.npxSkillsExecFn) {
+      await runNpxSkillsCommand(["experimental_sync", "-y"], {
+        workspaceDir,
+        execFn: options.npxSkillsExecFn,
+      });
+    }
+    const migRes = await migrateLegacySkills(workspaceDir, {
+      overwrite: Boolean(options.overwrite),
+    });
+    if (!options.quiet) {
+      console.log(`Synced skills (migrated: ${migRes.migratedSkills.length}).`);
+    }
+    return {
+      success: true,
+      ...migRes,
+      syncedToFlat: migRes.migratedSkills,
+      syncedToMain: [],
+    };
+  }
+
+  if (
+    action === "find" ||
+    action === "search" ||
+    action === "f" ||
+    action === "s"
+  ) {
+    const query = subargs.join(" ").trim() || options.query || "";
+    const shouldTryNpx =
+      options.useNpxSkills !== false &&
+      (Boolean(options.npxSkillsExecFn) || !options.fetchFn);
+
+    if (shouldTryNpx && query) {
+      const npxRes = await runNpxSkillsCommand(["find", query], {
+        workspaceDir,
+        execFn: options.npxSkillsExecFn,
+      });
+      if (npxRes.success) {
+        if (!options.quiet && npxRes.stdout.trim()) {
+          console.log(npxRes.stdout.trim());
+        }
+        return {
+          success: true,
+          delegatedToNpxSkills: true,
+          stdout: npxRes.stdout,
+          results: [],
+        };
+      }
+    }
+
+    // Graceful degradation: search skills.sh HTTP API directly
+    const fetchFn = options.fetchFn || globalThis.fetch;
+    try {
+      const searchUrl = `https://skills.sh/api/search?q=${encodeURIComponent(query)}&limit=10`;
+      const res = await fetchFn(searchUrl);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const data = (await res.json()) as {
+        skills?: Array<{
+          id: string;
+          name: string;
+          source: string;
+          installs?: number;
+        }>;
+      };
+      const results = (data.skills || []).map((s) => ({
+        name: s.name,
+        package: `${s.source || s.id}@${s.name}`,
+        source: s.source || s.id,
+        installs: s.installs || 0,
+      }));
+      if (!options.quiet) {
+        if (results.length === 0) {
+          console.log(`No skills found for "${query}".`);
+        } else {
+          console.log(`Found ${results.length} skill(s):\n`);
+          for (const item of results) {
+            console.log(`  - ${item.package} (${item.installs} installs)`);
+          }
+        }
+      }
+      return {
+        success: true,
+        delegatedToNpxSkills: false,
+        results,
+      };
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      if (!options.quiet) console.error(`Error searching skills: ${errorMsg}`);
+      return { success: false, error: errorMsg, results: [] };
+    }
+  }
+
+  if (
+    action === "update" ||
+    action === "up" ||
+    action === "check" ||
+    action === "restore" ||
+    action === "experimental_install"
+  ) {
+    const npxSub =
+      action === "restore"
+        ? "experimental_install"
+        : action === "up"
+          ? "update"
+          : action;
+    const npxRes = await runNpxSkillsCommand([npxSub, ...subargs], {
+      workspaceDir,
+      execFn: options.npxSkillsExecFn,
+    });
+    if (npxRes.success) {
+      if (!options.quiet && npxRes.stdout.trim()) {
+        console.log(npxRes.stdout.trim());
+      }
+      return {
+        success: true,
+        delegatedToNpxSkills: true,
+        stdout: npxRes.stdout,
+      };
+    }
+
+    // Fallback for restore using skills-lock.json
+    if (action === "restore" || action === "experimental_install") {
+      const lock = await readSkillsLock(workspaceDir);
+      if (lock && Object.keys(lock.skills).length > 0) {
+        let importedCount = 0;
+        for (const [skillName, rawEntry] of Object.entries(lock.skills)) {
+          const entry = rawEntry as {
+            sourceType?: string;
+            source?: string;
+            sourceUrl?: string;
+          };
+          const sourceSpec =
+            entry?.sourceType === "github"
+              ? `${entry.source}@${skillName}`
+              : entry?.sourceUrl || entry?.source;
+          if (!sourceSpec) continue;
+          const imp = await runAgentImport(sourceSpec, {
+            ...options,
+            workspace: workspaceDir,
+            useNpxSkills: false,
+            quiet: true,
+          });
+          if (imp.success) importedCount += imp.importedCount || 0;
+        }
+        return {
+          success: true,
+          delegatedToNpxSkills: false,
+          fallbackUsed: true,
+          importedCount,
+        };
+      }
+    }
+
+    return {
+      success: false,
+      error: npxRes.error || `Failed to run npx skills ${npxSub}`,
+    };
+  }
+
+  const errorMsg = `Unknown skills subcommand "${subaction}". Available: list, add, remove, find, init, sync, update, check, restore`;
+  if (!options.quiet) console.error(errorMsg);
+  process.exitCode = 1;
+  return { success: false, error: errorMsg };
 }
 
 /**
@@ -1857,9 +2623,175 @@ export async function runAgentImport(
     return { success: false, error: errorMsg };
   }
 
-  const { db, core } = await bootstrapHeadlessAgent(options);
+  const workspace = options.workspace || process.cwd();
+  const { db, workspaceDir, core } = await bootstrapHeadlessAgent({
+    ...options,
+    workspace,
+  });
   const groupId =
     options.group || core.DEFAULT_SERVER_GROUP_ID || DEFAULT_SERVER_GROUP_ID;
+
+  const parseList = (val: any): string[] => {
+    if (!val) return [];
+    if (Array.isArray(val))
+      return val.map((v) => String(v).trim()).filter(Boolean);
+    return String(val)
+      .split(",")
+      .map((v) => v.trim())
+      .filter(Boolean);
+  };
+
+  // 1. Handle local filesystem path directly or via npx skills
+  const isLocalPath =
+    trimmedUrl.startsWith("./") ||
+    trimmedUrl.startsWith("../") ||
+    trimmedUrl.startsWith("/") ||
+    trimmedUrl.startsWith("file://") ||
+    /^[a-zA-Z]:[\\/]/.test(trimmedUrl);
+
+  if (isLocalPath) {
+    const hasFilter = Boolean(
+      options.tools || options.skills || options.scripts,
+    );
+    const filtered = hasFilter && !options.all;
+    const localOpts = {
+      overwrite: Boolean(options.overwrite),
+      targetSubdir: options.targetSubdir,
+    };
+    const empty: { imported: string[]; skipped: string[]; failed: any[] } = {
+      imported: [],
+      skipped: [],
+      failed: [],
+    };
+    const localRes =
+      filtered && !options.skills
+        ? empty
+        : await importLocalSkillsDirectory(trimmedUrl, workspaceDir, {
+            ...localOpts,
+            skillNames: options.skills ? parseList(options.skills) : undefined,
+          });
+    const toolsRes =
+      filtered && !options.tools
+        ? empty
+        : await importLocalFlatArtifacts("tools", trimmedUrl, workspaceDir, {
+            ...localOpts,
+            names: parseList(options.tools),
+          });
+    const scriptsRes =
+      filtered && !options.scripts
+        ? empty
+        : await importLocalFlatArtifacts("scripts", trimmedUrl, workspaceDir, {
+            ...localOpts,
+            names: parseList(options.scripts),
+          });
+    const toStatuses = (
+      res: typeof empty,
+      dir: string,
+      suffix: (n: string) => string,
+    ) => [
+      ...res.imported.map((name: string) => ({
+        name,
+        path: `.agents/${dir}/${suffix(name)}`,
+        status: "imported" as const,
+      })),
+      ...res.skipped.map((name: string) => ({
+        name,
+        path: `.agents/${dir}/${suffix(name)}`,
+        status: "skipped" as const,
+      })),
+      ...res.failed.map((f: any) => ({
+        name: f.name,
+        path: "",
+        status: "failed" as const,
+        error: f.error,
+      })),
+    ];
+    const importedCount =
+      localRes.imported.length +
+      toolsRes.imported.length +
+      scriptsRes.imported.length;
+    const skippedCount =
+      localRes.skipped.length +
+      toolsRes.skipped.length +
+      scriptsRes.skipped.length;
+    const allFailed = [
+      ...localRes.failed.map((f: any) => ({ ...f, kind: "Skill" })),
+      ...toolsRes.failed.map((f: any) => ({ ...f, kind: "Tool" })),
+      ...scriptsRes.failed.map((f: any) => ({ ...f, kind: "Script" })),
+    ];
+    const failedCount = allFailed.length;
+    const success = failedCount === 0 || importedCount > 0;
+    if (!success) {
+      process.exitCode = 1;
+    }
+    return {
+      success,
+      siteUrl: trimmedUrl,
+      manifestUrl: trimmedUrl,
+      result: {
+        tools: toStatuses(toolsRes, "tools", (n) => `${n}.json`),
+        scripts: toStatuses(scriptsRes, "scripts", (n) => `${n}.js`),
+        skills: toStatuses(localRes, "skills", (n) => `${n}/SKILL.md`),
+        diagnostics: allFailed.map((f) => `${f.kind} ${f.name}: ${f.error}`),
+      },
+      importedCount,
+      skippedCount,
+      failedCount,
+      ...(failedCount > 0 && importedCount === 0
+        ? { error: allFailed[0]?.error }
+        : {}),
+    };
+  }
+
+  // 2. For npx skills package sources (owner/repo, owner/repo@skill, GitHub URLs),
+  // attempt npx skills delegation first when enabled, with graceful fallback to fetchDiscoveryManifest
+  const shouldTryNpx =
+    isNpxSkillsPackageSource(trimmedUrl) &&
+    options.useNpxSkills !== false &&
+    (Boolean(options.npxSkillsExecFn) || !options.fetchFn);
+
+  if (shouldTryNpx) {
+    const beforeDiscovery = await core.discoverSkills(db, groupId);
+    const beforeNames = new Set(beforeDiscovery.skills.map((s: any) => s.name));
+    const npxArgs = ["add", trimmedUrl, "-a", "universal", "-y"];
+    if (options.skills) {
+      const skillFilters = parseList(options.skills);
+      if (skillFilters.length > 0) {
+        npxArgs.push("--skill", ...skillFilters);
+      }
+    }
+    const npxRes = await runNpxSkillsCommand(npxArgs, {
+      workspaceDir,
+      execFn: options.npxSkillsExecFn,
+    });
+    if (npxRes.success) {
+      const afterDiscovery = await core.discoverSkills(db, groupId);
+      const newlyAdded = afterDiscovery.skills.filter(
+        (s: any) => !beforeNames.has(s.name),
+      );
+      const importedSkills =
+        newlyAdded.length > 0 ? newlyAdded : afterDiscovery.skills;
+      return {
+        success: true,
+        siteUrl: trimmedUrl,
+        manifestUrl: trimmedUrl,
+        result: {
+          tools: [],
+          scripts: [],
+          skills: importedSkills.map((s: any) => ({
+            name: s.name,
+            path: s.path,
+            status: "imported",
+          })),
+          diagnostics: [],
+        },
+        importedCount: importedSkills.length,
+        skippedCount: 0,
+        failedCount: 0,
+      };
+    }
+    // If npx skills failed, fall through gracefully to fetchDiscoveryManifest!
+  }
 
   const fetchDiscoveryManifest =
     core.fetchDiscoveryManifest ||
@@ -2094,14 +3026,29 @@ export async function runAgentCommand(
     }
 
     case "skills": {
-      const result = await runAgentSkills(actualOptions);
+      const subaction = actualArgs[0];
+      const optsWithWorkspace = {
+        ...actualOptions,
+        workspace: actualOptions.workspace || process.cwd(),
+      };
+      if (subaction) {
+        return await runAgentSkillsManage(
+          subaction,
+          actualArgs.slice(1),
+          optsWithWorkspace,
+        );
+      }
+      const result = await runAgentSkills(optsWithWorkspace);
       if (result.skills.length === 0) {
         console.log("No skills found in workspace (.agents/skills/).");
       } else {
         console.log(`Available skills (${result.skills.length}):\n`);
         for (const skill of result.skills) {
+          const sourceBadge = skill.lockSource
+            ? ` [source: ${skill.lockSource}]`
+            : "";
           console.log(
-            `  - ${skill.name}: ${skill.description || "No description"}`,
+            `  - ${skill.name}${sourceBadge}: ${skill.description || "No description"}`,
           );
         }
       }
@@ -2177,7 +3124,10 @@ export async function runAgentCommand(
             "Discovery URL or site URL required. Usage: shadow-claw agent import <url> [options]",
         };
       }
-      return await runAgentImport(url, actualOptions);
+      return await runAgentImport(url, {
+        ...actualOptions,
+        workspace: actualOptions.workspace || process.cwd(),
+      });
     }
 
     case "listen": {

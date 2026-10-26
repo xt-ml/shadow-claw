@@ -9,8 +9,8 @@ slug: "agent-memory"
 
 ### Workspace Layout & Skills Conventions
 
-- **Skills**: `.agents/skills/main/<skill-name>/SKILL.md`
-- **Declarative Tools**: `.agents/tools/main/<tool-name>.json`
+- **Skills**: `.agents/skills/<skill-name>/SKILL.md` (canonical flat layout; legacy `.agents/skills/main/` supported for backward-compatible reads)
+- **Declarative Tools**: `.agents/tools/<tool-name>.json` (canonical flat layout; legacy `.agents/tools/main/` supported for backward-compatible reads)
 - **Skill Format**: Markdown file with YAML frontmatter AND a Markdown body (frontmatter is metadata only; always include a `# <Skill Title>` heading and human-readable description in the Markdown body so it renders in document previews):
 
   ```yaml
@@ -34,4 +34,5 @@ slug: "agent-memory"
   ```
 
 - **Declarative Tool Format**: JSON with `"name"`, `"description"`, `"executor": "javascript"`, `"inputSchema"`, and `"code"`.
+- **Open Agent Skills & Discovery**: Install community skills from [skills.sh](https://skills.sh) via `npx shadow-claw skills add <owner/repo>` (or `npx skills add`), search via `npx shadow-claw skills find <term>`, and publish RFC v0.2.0 discovery indexes via `npx shadow-claw skills:index` (`.well-known/agent-skills/index.json`).
 - **Authoring**: Use `create_directory` before writing new directories, then `write_file`.

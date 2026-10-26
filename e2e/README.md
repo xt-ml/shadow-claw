@@ -280,13 +280,13 @@ The `<shadow-claw-tools>` component includes interactive controls for managing t
 
 - **Internet Access Toggle** (`.tools__internet-access-toggle` / `#toolsInternetAccessOptIn`): A checkbox to toggle the shared full public internet access setting (`vm_bash_full_internet_access`) for both `bash` and `javascript` tools.
 - **Web Search Proxy Toggle & Settings**: Checkbox (`.tools__web-search-proxy-toggle`), custom CORS proxy endpoint input (`.tools__web-search-proxy-input`), and custom search URL template input (`.tools__web-search-template-input`) to configure search routing for `web_search`.
-- **Declarative Tool Toggles & Badges**: Checkboxes (`.tools__declarative-tool-toggle`) and `"declarative"` badges allowing independent enablement/disablement of declarative tools discovered in `.agents/tools/main/`.
+- **Declarative Tool Toggles & Badges**: Checkboxes (`.tools__declarative-tool-toggle`) and `"declarative"` badges allowing independent enablement/disablement of declarative tools discovered in `.agents/tools/` (and backward-compatible `.agents/tools/main/`).
 - **Remote Tool & Skill Importer (`.tools__import-btn` / `#toolsImportBtn`)**:
   - Launches the Remote Tool Import modal (`.tools-import-modal`).
   - Source URL input (`.tools-import-input`) and quick-pick presets selector (`.tools-import-preset-select`) targeting RFC v0.2.0 manifests (`/.well-known/agent-skills/index.json`).
   - Discovery catalog inspection with category tabs (tools, skills, scripts), item cards, checkbox selections, and expandable schema/code preview drawers (`.tools-import-detail-dialog`).
   - Options for automatic enablement of imported tools (`#toolsImportAutoEnable`) and destination overwrite toggle (`#toolsImportOverwrite`).
-  - Executes batch downloading, SHA-256 integrity verification, and OPFS persistence to `.agents/tools/main/`, `.agents/skills/main/`, and `.agents/scripts/main/`.
+  - Executes batch downloading, SHA-256 integrity verification, and OPFS persistence to `.agents/tools/`, `.agents/skills/`, and `.agents/scripts/` (with backward-compatible `main/` reads).
   - Testing considerations: mock remote manifest endpoints via Playwright route interception (`page.route('**/.well-known/agent-skills/index.json', ...)`) and verify OPFS persistence via the `__SHADOWCLAW_E2E__` bridge.
 - **WebMCP Toggle** (`.tools__webmcp-toggle`): Toggles integration with browser's Model Context Protocol.
 - **WebMCP Mode selector** (`.tools__webmcp-mode`): Selects the WebMCP execution mode.
@@ -472,7 +472,7 @@ npm run e2e -- --reporter=html
 
 The build, CLI, prerender, and headless agent test suites live under `src/cli/` and `src/` and run through the project Jest configuration. Coverage includes:
 
-- **CLI Commands & Utilities**: `build`, `dev`, `run`, `serve`, `server`, `init`, `clients`, `send` (`src/cli/commands/send.test.ts` covering prompts, file attachments, and remote replies), `send-file` (`src/cli/commands/send-file.test.ts` covering direct P2P transfers and prompt execution), `backup`, `tasks`, `mcp`, `skills:index`, `webrtc` / `webrtc listen` (`src/cli/commands/webrtc-listen.test.ts` covering orchestration loop dispatch, transfer handling, and ping), `peer-id`, `--version`, `agent` (`src/cli/commands/agent.test.ts` covering init, models, tools, skills, tool execution, system prompt overrides and disabling (`--no-system-prompt`, `--system-prompt none`), uncached model download confirmation guards, remote RFC v0.2.0 imports, SIGINT signal handling, and `agent listen`), `agent model` (`src/cli/commands/agent-models.test.ts`), and native AI tasks (`src/cli/commands/native-ai-task-handler.test.ts`).
+- **CLI Commands & Utilities**: `build`, `dev`, `run`, `serve`, `server`, `init`, `clients`, `send` (`src/cli/commands/send.test.ts` covering prompts, file attachments, and remote replies), `send-file` (`src/cli/commands/send-file.test.ts` covering direct P2P transfers and prompt execution), `backup`, `tasks`, `mcp`, `skills` / `agent skills` (`src/cli/utils/migrate-skills.test.ts` and `src/cli/commands/agent.test.ts` covering Open Agent Skills `npx skills` delegation, `skills.sh` registry searching, `skills-lock.json` provenance, local skill imports, `sync`, `init`, `remove`, and graceful native fallback), `skills:index` (`src/cli/commands/skills-index.test.ts` covering RFC v0.2.0 manifest generation, symlinked skill traversal, dual-layout deduplication, and companion `files` arrays), `webrtc` / `webrtc listen` (`src/cli/commands/webrtc-listen.test.ts` covering orchestration loop dispatch, transfer handling, and ping), `peer-id`, `--version`, `agent` (`src/cli/commands/agent.test.ts` covering init, models, tools, skills, tool execution, system prompt overrides and disabling (`--no-system-prompt`, `--system-prompt none`), uncached model download confirmation guards, remote RFC v0.2.0 / GitHub shorthand / local directory imports, SIGINT signal handling, and `agent listen`), `agent model` (`src/cli/commands/agent-models.test.ts`), and native AI tasks (`src/cli/commands/native-ai-task-handler.test.ts`).
 - **Agent File Attachments (`agent run -f`)**: Repeatable `-f, --file` loading and MIME inference (`src/cli/utils/load-cli-attachments.test.ts`), missing-file errors (`src/cli/commands/agent.test.ts`), and attachment persistence on the saved user message (`src/cli/commands/agent-file-attachments.test.ts`).
 - **Model Download, Browsing & Progress Bar Utilities**: Hugging Face ONNX and Llamafile model querying, interactive paginated and searchable model browsing with in-memory session caching, downloading, write stream lifecycle cleanup, and recursive local caching inspection with partial download detection (`src/cli/utils/local-models.test.ts`), terminal progress bar (`src/cli/utils/progress-bar.test.ts`), and cache directory resolution (`src/cli/utils/resolve-cache-dir.test.ts`).
 - **Headless Agent Subsystems**: SQLite database implementation (`src/db/sqlite/*.test.ts`), Node.js filesystem directory handle polyfill (`src/storage/node-fs-handle.test.ts`), custom element security guards (`src/security/custom-element-guard.test.ts`), headless tool execution, guards, and capability matrix (`src/worker/utils/execute-tool.headless.test.ts`, `src/worker/utils/declarative-tool-executor.test.ts`, `src/worker/utils/guards.test.ts`, `src/worker/tools/builtin-ai/builtin-ai.headless.test.ts`), peer collaboration tools (`src/worker/tools/peer/prompt-peer.test.ts`, `src/worker/tools/workspace/send-file.test.ts`), shared cross-cutting utilities (`src/utils/*.test.ts` including `src/utils/seo.test.ts`), and default provider/model configuration (`src/config/headless.test.ts`).
@@ -485,6 +485,7 @@ NODE_OPTIONS="--no-warnings --experimental-vm-modules" \
   src/cli/commands/agent-models.test.ts \
   src/cli/commands/agent-file-attachments.test.ts \
   src/cli/utils/load-cli-attachments.test.ts \
+  src/cli/utils/migrate-skills.test.ts \
   src/cli/commands/native-ai-task-handler.test.ts \
   src/cli/commands/send.test.ts \
   src/cli/commands/send-file.test.ts \
@@ -496,6 +497,9 @@ NODE_OPTIONS="--no-warnings --experimental-vm-modules" \
   src/server/mcp/tools/built-in-tool-definitions.test.ts \
   src/server/mcp/tools/client-tool-names.test.ts \
   src/cli/commands/skills-index.test.ts \
+  src/subsystems/skills/discover-skills.test.ts \
+  src/subsystems/tools/remote/discovery.test.ts \
+  src/subsystems/tools/remote/import-artifacts.test.ts \
   src/cli/utils/control-client.test.ts \
   src/cli/utils/webrtc-control-client.test.ts \
   src/cli/build/build.test.ts \

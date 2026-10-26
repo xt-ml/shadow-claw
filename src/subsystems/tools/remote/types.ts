@@ -20,6 +20,7 @@ export interface RemoteSkillItem {
   description?: string;
   url: string;
   digest?: string;
+  files?: string[];
   tools?: Array<{ name: string; url?: string; digest?: string }>;
   scripts?: Array<{ name: string; url?: string; digest?: string }>;
 }

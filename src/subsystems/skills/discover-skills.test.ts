@@ -122,6 +122,42 @@ Body
     );
   });
 
+  it("deduplicates canonical flat (.agents/skills/<name>) and group (.agents/skills/main/<name>) skill layouts without duplicate diagnostics", async () => {
+    const flatSkill = createMockDirectoryHandle("shared-skill", {
+      "SKILL.md": createMockFileHandle("SKILL.md"),
+    });
+    const mainSkill = createMockDirectoryHandle("shared-skill", {
+      "SKILL.md": createMockFileHandle("SKILL.md"),
+    });
+    const mainDir = createMockDirectoryHandle("main", {
+      "shared-skill": mainSkill,
+    });
+    const skillsDir = createMockDirectoryHandle("skills", {
+      "shared-skill": flatSkill,
+      main: mainDir,
+    });
+    const agentsDir = createMockDirectoryHandle(".agents", {
+      skills: skillsDir,
+    });
+    const root = createMockDirectoryHandle("root", {
+      ".agents": agentsDir,
+    });
+
+    mockGetGroupDir.mockResolvedValue(root);
+    mockReadGroupFile.mockResolvedValue(`---
+name: shared-skill
+description: Skill present in both flat npx skills and main group layouts
+---
+Body
+`);
+
+    const result = await discoverSkills({} as any, DEFAULT_GROUP_ID);
+    expect(result.skills).toHaveLength(1);
+    expect(result.skills[0].name).toBe("shared-skill");
+    expect(result.skills[0].path).toBe(".agents/skills/shared-skill/SKILL.md");
+    expect(result.diagnostics).toEqual([]);
+  });
+
   it("records diagnostic when skill parsing fails (invalid frontmatter)", async () => {
     const brokenSkill = createMockDirectoryHandle("broken", {
       "SKILL.md": createMockFileHandle("SKILL.md"),
@@ -315,6 +351,43 @@ Body
       expect(result.skills).toHaveLength(1);
       expect(result.skills[0].groupId).toBe("custom-group");
       expect(result.diagnostics).toHaveLength(0);
+    });
+
+    it("scans only once without redundant fallback group scan when in headless mode", async () => {
+      const { setHeadlessMode } = await import("../../config/headless.js");
+      setHeadlessMode(true);
+      try {
+        const skill = createMockDirectoryHandle("cli-skill", {
+          "SKILL.md": createMockFileHandle("SKILL.md"),
+        });
+        const root = createMockDirectoryHandle("root", {
+          ".agents": createMockDirectoryHandle(".agents", {
+            skills: createMockDirectoryHandle("skills", {
+              "cli-skill": skill,
+            }),
+          }),
+        });
+
+        mockGetGroupDir.mockResolvedValue(root);
+        mockReadGroupFile.mockResolvedValue(`---
+name: cli-skill
+description: Headless CLI skill
+---
+# Content
+`);
+
+        const result = await discoverSkills({} as any, "server:main");
+        expect(result.skills).toHaveLength(1);
+        expect(result.skills[0].name).toBe("cli-skill");
+        // getGroupDir should be called exactly once for server:main in headless mode
+        expect(mockGetGroupDir).toHaveBeenCalledTimes(1);
+        expect(mockGetGroupDir).toHaveBeenCalledWith(
+          expect.anything(),
+          "server:main",
+        );
+      } finally {
+        setHeadlessMode(false);
+      }
     });
   });
 });

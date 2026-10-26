@@ -75,8 +75,17 @@ cat doc.txt | npx shadow-claw agent run "Summarize this" -o summary.txt
 npx shadow-claw agent tools
 npx shadow-claw agent skills
 
-# Discover and import remote skills, declarative tools, and companion scripts
+# Search and manage skills from the Open Agent Skills (skills.sh / npx skills) ecosystem
+npx shadow-claw skills find "react"
+npx shadow-claw skills add vercel-labs/agent-skills
+npx shadow-claw skills sync
+
+# Generate or update the Agent Skills Discovery index (.well-known/agent-skills/index.json)
+npx shadow-claw skills:index
+
+# Discover and import remote skills, declarative tools, and companion scripts (RFC v0.2.0, GitHub shorthand, or local paths)
 npx shadow-claw agent import https://xt-ml.github.io/shadow-claw-agent-cli-weather/
+npx shadow-claw agent import vercel-labs/agent-skills --skills react-best-practices
 ```
 
 ### 3. Scaffold a Project or Knowledge Hub
@@ -120,12 +129,12 @@ npm install && npm run dev  # Dev server → http://localhost:8888
 
 - **Client-Side Worker Orchestration:** The frontend agent decision loop, system prompt building, and tool execution run off the main thread in a dedicated Web Worker to keep the UI smooth and responsive.
 - **In-Browser Inference by Default:** Uses Transformers.js by default in the browser client (`DEFAULT_PROVIDER = "transformers_js_browser"`) with guided onboarding. Prompt API (`window.LanguageModel`) and integrated polyfills (`prompt-api-polyfill` and `built-in-ai-task-apis-polyfills`) remain fully supported when manually selected.
-- **Headless Server-Side Agent Client:** Execute the same tool-use loop, prompt assembly, and declarative skill tool chains directly from the terminal or CI/CD pipelines via `shadow-claw agent` (`init`, `model`, `skills`, `tools`, `tool`, `skill`, `import`, `run`), with native host OS shell access (`node:child_process`), SQLite persistence (`node:sqlite`), real filesystem access (`NodeFsDirectoryHandle`), and in-process offline model execution via Transformers.js ONNX and Llamafile (featuring visual download progress bars and streaming) or cloud providers.
+- **Headless Server-Side Agent Client:** Execute the same tool-use loop, prompt assembly, and declarative skill tool chains directly from the terminal or CI/CD pipelines via `shadow-claw agent` (`init`, `model`, `skills`, `tools`, `tool`, `skill`, `import`, `run`) and `shadow-claw skills` (`list`, `add`, `remove`, `find`, `init`, `sync`, `update`, `check`, `restore`), with Open Agent Skills (`npx skills` / `skills-lock.json`) ecosystem compatibility, native host OS shell access (`node:child_process`), SQLite persistence (`node:sqlite`), real filesystem access (`NodeFsDirectoryHandle`), and in-process offline model execution via Transformers.js ONNX and Llamafile (featuring visual download progress bars and streaming) or cloud providers.
 - **Configurable Multi-Model Routing:** Route queries to Cloud providers (OpenRouter, Anthropic, Gemini, OpenAI, AWS Bedrock), local engines (Ollama, Llamafile, Transformers.js with on-demand Hugging Face model downloading and disk caching), or in-browser WebGPU models (LiteRT-LM).
 - **Dual-Dispatch Sandboxing & Storage:** Client-side compute via sandboxed JavaScript and `just-bash` (or WebVM Alpine Linux) backed by Origin Private File System (OPFS) and IndexedDB; paired with host-native Node filesystem handles and SQLite database persistence on the server side.
 - **PWA & Electron Desktop Parity:** Deployable as a progressive web app with Service Worker and Web Push, or as a native desktop application with full feature parity.
 - **Modular Package Library Exports & Standardized Utilities:** Exposes modular ESM exports declared in `package.json` under `.`, `./cli`, `./cli/*`, `./components`, `./components/*`, `./utils`, and `./utils/*`, compiled via Rolldown with dynamic entry point discovery for reusable components and standardized cross-cutting utilities (`base64`, `coerce`, `delay`, `filename`, `is-binary`, `mime`, `normalize-string-list`, `normalize-workspace-path`, `parse-boolean-config`, `parse-stored-string-list`, `seo`, `ulid`).
-- **Static Publishing, Theming, SEO & Performance:** Publish documentation portals and knowledge hubs with Declarative Shadow DOM (DSD) SSR, root and sub-route pretty paths, configurable sandboxed iframe vs. direct shadow DOM page rendering (`pages.iframe`, frontmatter `iframe: false` / `render: "shadow"`), companion inline module and autoload custom element initialization (`hasInit: true`), root-relative script source normalization (`normalizeCustomElementScriptSrc`), automated Yoast-style SEO metadata synchronization (page titles, descriptions, canonical URLs, and Open Graph/Twitter social cards), syndication feed generation (RSS 2.0, Atom 1.0, and RDF 1.0 feeds with autodiscovery `<link rel="alternate">` tags), in-place DSD HTML hydration eliminating layout shifts (CLS < 0.02) and FOUC transitions, automated build-time image dimension and resource hint injection (`optimizeImgTags`), production Brotli/Gzip asset pre-compression (`.br` and `.gz`), theme stylesheet shadow root injection for DSD and CSR, smooth anchor navigation, offline Service Worker navigation caching with query-parameter matching, custom stylesheets (`theme.stylesheet`), CSS custom property layout/shell tokens, approved custom element script descriptors (`customElements.scripts`) with page-level frontmatter dependency resolution (`dependencies:` / `scripts:`) and automatic content tag scanning, customizable slotted navigation (`sidebar-nav`, `sidebar`, `sidebar-content`, `sidebar-footer`), and declarative sections. See [Theming Subsystem](docs/subsystems/theming.md) and [Pages System](docs/subsystems/pages.md).
+- **Static Publishing, Theming, SEO & Performance:** Publish documentation portals and knowledge hubs with Declarative Shadow DOM (DSD) SSR, root and sub-route pretty paths, resolved `<base href>` propagation across `index.html` and pre-rendered pretty paths (`resolveSiteBasePath`, `patchBaseHref`), configurable sandboxed iframe vs. direct shadow DOM page rendering (`pages.iframe`, frontmatter `iframe: false` / `render: "shadow"`), companion inline module and autoload custom element initialization (`hasInit: true`), root-relative script source normalization (`normalizeCustomElementScriptSrc`), automated Yoast-style SEO metadata synchronization (page titles, descriptions, canonical URLs, and Open Graph/Twitter social cards), syndication feed generation (RSS 2.0, Atom 1.0, and RDF 1.0 feeds with autodiscovery `<link rel="alternate">` tags), in-place DSD HTML hydration eliminating layout shifts (CLS < 0.02) and FOUC transitions, automated build-time image dimension and resource hint injection (`optimizeImgTags`), production Brotli/Gzip asset pre-compression (`.br` and `.gz`), theme stylesheet shadow root injection for DSD and CSR, smooth anchor navigation, offline Service Worker navigation caching with query-parameter matching, custom stylesheets (`theme.stylesheet`), CSS custom property layout/shell tokens, approved custom element script descriptors (`customElements.scripts`) with page-level frontmatter dependency resolution (`dependencies:` / `scripts:`) and automatic content tag scanning, customizable slotted navigation (`sidebar-nav`, `sidebar`, `sidebar-content`, `sidebar-footer`), and declarative sections. See [Theming Subsystem](docs/subsystems/theming.md) and [Pages System](docs/subsystems/pages.md).
 - **Control Plane, CLI & Native MCP Server:** Backed by a Node.js service layer and CLI (`shadow-claw`) that provides background cron scheduling, remote backups, direct WebRTC DataChannel connectivity, and a Stateless MCP server featuring both native server management tools and dynamic browser tool relaying to external agent hosts (Claude Desktop, Cursor, Goose).
 
 ---
@@ -274,8 +283,9 @@ When running in browsers supporting the Model Context Protocol (or via `@mcp-b/w
 
 ### Declarative Tools, Skills & Remote Importer
 
-- **Declarative Tools & Skills**: Extend assistant capabilities by placing JSON tool definitions in `.agents/tools/main/*.json` and markdown skill descriptors in `.agents/skills/**/SKILL.md`.
-- **Remote Artifact Importer**: Accessible via the "Import" action in Tool Configuration (`<shadow-claw-tools>`). Discovers tools, companion scripts, and skills over HTTP conforming to the Agent Skills Discovery RFC v0.2.0 (`/.well-known/agent-skills/index.json`), verifies SHA-256 digests, and persists them directly into the workspace.
+- **Declarative Tools & Skills**: Extend assistant capabilities by placing JSON tool definitions in `.agents/tools/*.json` (or backward-compatible `.agents/tools/main/*.json`) and markdown skill descriptors in canonical flat layout `.agents/skills/<name>/SKILL.md` (with legacy `.agents/skills/main/<name>/SKILL.md` supported for backward-compatible reads).
+- **Open Agent Skills (`npx skills` / `skills.sh`) Ecosystem**: Search, install, sync, and manage skills from the [skills.sh](https://skills.sh) registry and GitHub repositories via `npx shadow-claw skills <find|add|list|remove|init|sync|update|check|restore>` (or `npx skills add <owner/repo>`) with `skills-lock.json` provenance tracking, symlinked directory traversal, and discovery index generation (`npx shadow-claw skills:index`).
+- **Remote Artifact Importer**: Accessible via the "Import" action in Tool Configuration (`<shadow-claw-tools>`) or `npx shadow-claw agent import <source>`. Discovers tools, companion scripts, and multi-file skills over HTTP conforming to the Agent Skills Discovery RFC v0.2.0 (`/.well-known/agent-skills/index.json`), direct `SKILL.md` URLs, GitHub `owner/repo` / `owner/repo@skill` shorthands, and local directories, verifies SHA-256 digests, and persists them directly into the workspace with graceful fallback when `npx` is unavailable.
 - **Security Boundaries**: Stored tools and companion scripts execute headless logic immediately. Custom element UI components (e.g. `<block-garden>`, `<x-pwgen>`) and external domain origins are strictly guarded and must be declared in `shadow-claw.config.json` under `customElements` and `security.connectSrc`.
 
 **Full reference:** [docs/subsystems/tools.md](docs/subsystems/tools.md) | [docs/subsystems/skills.md](docs/subsystems/skills.md) | [docs/subsystems/webmcp.md](docs/subsystems/webmcp.md)
@@ -340,45 +350,56 @@ npm run electron:build:mac   # Build Electron for macOS
 The `shadow-claw` CLI provides runtime driving, server services, and the headless agent participant:
 
 ```bash
-# Headless Server-Side Agent Participant
+# Agent Prompts & Pipeline Execution
+npx shadow-claw agent run "prompt"                     # Run agent prompt (retains multi-turn history by default)
+npx shadow-claw agent run "prompt" --no-history        # Run isolated one-shot prompt without prior history
+npx shadow-claw agent run "prompt" --tools none        # Strip all tool schemas for pure text completion (or --no-tools)
+npx shadow-claw agent run "prompt" --no-system-prompt  # Strip system prompt for direct text completion
+cat doc.txt | npx shadow-claw agent run -o sum.txt     # Pipe document into agent prompt and write to file
+npx shadow-claw agent run "Describe" -f a.png -f b.pdf # Attach one or more local files (repeatable)
+npx shadow-claw agent clear                            # Reset conversation history for the group (default server:main)
+
+# Model Management & Setup
 npx shadow-claw agent init [dir]                       # Initialize workspace with interactive model selection (supports HF browsing, paging, search)
 npx shadow-claw agent model list                       # List local cached ONNX and GGUF models
 npx shadow-claw agent model download [modelId]         # Download model from Hugging Face with progress bar
 npx shadow-claw agent model set [modelId]              # Configure default headless agent model
 npx shadow-claw agent model remote --query <search>    # Search Hugging Face onnx-community repository
-npx shadow-claw agent run "prompt"                     # Run agent prompt (retains multi-turn history by default)
-npx shadow-claw agent run "prompt" --no-history        # Run isolated one-shot prompt without prior history
-npx shadow-claw agent run "prompt" --tools none        # Strip all tool schemas for pure text completion (or --no-tools)
-npx shadow-claw agent run "prompt" --no-system-prompt  # Strip system prompt for direct text completion
-npx shadow-claw agent clear                            # Reset conversation history for the group (default server:main)
-cat doc.txt | npx shadow-claw agent run -o sum.txt     # Pipe document into agent prompt and write to file
-npx shadow-claw agent run "Describe" -f a.png -f b.pdf # Attach one or more local files (repeatable)
-npx shadow-claw agent skills                           # List discovered workspace skills
+
+# Direct Tool & Declarative Skill Execution (No LLM Inference)
 npx shadow-claw agent tools                            # List tools with capability matrix
 npx shadow-claw agent tool <name> [jsonArgs]           # Inspect tool schema or execute directly
 echo "hello" | npx shadow-claw agent tool <name>       # Pipe text directly into tool (schema auto-mapping)
-npx shadow-claw agent skill <name>                     # Execute a declarative skill tool chain
-npx shadow-claw agent import <url> [options]           # Discover and import remote RFC v0.2.0 skills and tools
-npx shadow-claw agent listen                           # Start headless agent WebRTC listener with orchestration loop
+npx shadow-claw agent skill <name>                     # Execute a declarative skill tool chain directly
 
-# Browser & Client Interactivity
+# Decentralized Skills & Tools Discovery (RFC v0.2.0)
+npx shadow-claw agent import <source> [options]        # Discover and import remote RFC v0.2.0, GitHub shorthand, or local skills/tools
+npx shadow-claw skills:index                           # Generate or update .well-known/agent-skills/index.json
+
+# Open Agent Skills Ecosystem (skills.sh)
+npx shadow-claw skills find <query>                    # Search skills on the skills.sh registry
+npx shadow-claw skills add <owner/repo>                # Install skills from skills.sh or GitHub via npx skills
+npx shadow-claw skills list                            # List discovered workspace skills with lockfile provenance
+npx shadow-claw skills <remove|init|sync|restore>      # Manage Open Agent Skills and sync to workspace
+
+# Peer Collaboration & WebRTC
+npx shadow-claw agent listen                           # Start headless agent WebRTC listener with orchestration loop
 npx shadow-claw clients                                # List connected browser/Electron clients
 npx shadow-claw send "your prompt" --client <id>       # Send a prompt to a connected client or peer agent (supports -f, --file)
 npx shadow-claw send-file <file> --client <peerId>     # Transfer a file to a peer over WebRTC with optional --prompt
-npx shadow-claw tasks --client <id>                    # List scheduled tasks on a client
-npx shadow-claw backup                                 # Trigger OPFS workspace backup
-npx shadow-claw backup list                            # List available backup snapshots
-npx shadow-claw backup delete --backup-id <id>         # Delete a backup snapshot
+npx shadow-claw peer-id                                # Get or generate persistent CLI Peer ID
+npx shadow-claw webrtc listen                          # Start headless WebRTC DataChannel daemon
 
-# Server Services & Daemon
+# Services, MCP & Workspace Storage
 npx shadow-claw mcp                                    # Run Stateless MCP server (STDIO, isolated tmpdir sandbox)
 npx shadow-claw mcp --workspace .                      # Run Stateless MCP server exposing tools for current workspace
 npx shadow-claw mcp --tool-prefix none                 # Expose unprefixed tools (read_file, bash) for Cursor/Claude
 npx shadow-claw server --tmp                           # Run services with temporary directory cache (/tmp/shadow-claw)
 npx shadow-claw server --cache-dir <dir>               # Run services with custom cache directory
-npx shadow-claw webrtc listen                          # Start headless WebRTC DataChannel daemon
-npx shadow-claw peer-id                                # Get or generate persistent CLI Peer ID
-npx shadow-claw skills:index                           # Generate or update .well-known/agent-skills/index.json
+npx shadow-claw tasks --client <id>                    # List scheduled tasks on a client
+npx shadow-claw backup                                 # Trigger OPFS workspace backup
+npx shadow-claw backup list                            # List available backup snapshots
+npx shadow-claw backup delete --backup-id <id>         # Delete a backup snapshot
 ```
 
 When launching `dev`, `run`, `serve`, or `server` without an existing cache, ShadowClaw prompts interactively to select between `.cache`, `tmpdir()`, or a custom path (skip prompting via `--tmp`, `-y`, `--cache-dir <dir>`, or `SHADOWCLAW_CACHE_DIR`).

@@ -2883,20 +2883,20 @@ describe("agent import", () => {
           name: "weather-briefing",
           type: "skill-md",
           description: "Daily weather briefing",
-          url: "../../.agents/skills/main/weather-briefing/SKILL.md",
+          url: "../../.agents/skills/weather-briefing/SKILL.md",
         },
       ],
       tools: [
         {
           name: "get_current_weather",
           description: "Fetch real-time weather",
-          url: "../../.agents/tools/main/get_current_weather.json",
+          url: "../../.agents/tools/get_current_weather.json",
         },
       ],
       scripts: [
         {
           name: "weather_helper",
-          url: "../../.agents/scripts/main/weather_helper.js",
+          url: "../../.agents/scripts/weather_helper.js",
         },
       ],
     };
@@ -2983,16 +2983,13 @@ Fetch today's weather.
     // Verify files were written to disk in workspace
     const toolFile = path.join(
       tmpDir,
-      ".agents/tools/main/get_current_weather.json",
+      ".agents/tools/get_current_weather.json",
     );
     const skillFile = path.join(
       tmpDir,
-      ".agents/skills/main/weather-briefing/SKILL.md",
+      ".agents/skills/weather-briefing/SKILL.md",
     );
-    const scriptFile = path.join(
-      tmpDir,
-      ".agents/scripts/main/weather_helper.js",
-    );
+    const scriptFile = path.join(tmpDir, ".agents/scripts/weather_helper.js");
 
     expect(JSON.parse(await readFile(toolFile, "utf8"))).toEqual(
       JSON.parse(toolContent),
@@ -3030,12 +3027,12 @@ Fetch today's weather.
         {
           name: "tool_alpha",
           description: "Tool Alpha",
-          url: "../../.agents/tools/main/tool_alpha.json",
+          url: "../../.agents/tools/tool_alpha.json",
         },
         {
           name: "tool_beta",
           description: "Tool Beta",
-          url: "../../.agents/tools/main/tool_beta.json",
+          url: "../../.agents/tools/tool_beta.json",
         },
       ],
     };
@@ -3093,15 +3090,12 @@ Fetch today's weather.
     // tool_alpha exists, tool_beta does not
     await expect(
       access(
-        path.join(tmpDir, ".agents/tools/main/tool_alpha.json"),
+        path.join(tmpDir, ".agents/tools/tool_alpha.json"),
         constants.F_OK,
       ),
     ).resolves.toBeUndefined();
     await expect(
-      access(
-        path.join(tmpDir, ".agents/tools/main/tool_beta.json"),
-        constants.F_OK,
-      ),
+      access(path.join(tmpDir, ".agents/tools/tool_beta.json"), constants.F_OK),
     ).rejects.toThrow();
   });
 
@@ -3114,7 +3108,7 @@ Fetch today's weather.
         {
           name: "tool_target",
           description: "Target tool",
-          url: "../../.agents/tools/main/tool_target.json",
+          url: "../../.agents/tools/tool_target.json",
         },
       ],
     };
@@ -3166,7 +3160,7 @@ Fetch today's weather.
     expect(res2.importedCount).toBe(0);
     const contentUnchanged = JSON.parse(
       await readFile(
-        path.join(tmpDir, ".agents/tools/main/tool_target.json"),
+        path.join(tmpDir, ".agents/tools/tool_target.json"),
         "utf8",
       ),
     );
@@ -3182,7 +3176,7 @@ Fetch today's weather.
     expect(res3.importedCount).toBe(1);
     const contentUpdated = JSON.parse(
       await readFile(
-        path.join(tmpDir, ".agents/tools/main/tool_target.json"),
+        path.join(tmpDir, ".agents/tools/tool_target.json"),
         "utf8",
       ),
     );
@@ -3215,7 +3209,7 @@ Fetch today's weather.
         {
           name: "dispatch_tool",
           description: "Dispatch tool",
-          url: "../../.agents/tools/main/dispatch_tool.json",
+          url: "../../.agents/tools/dispatch_tool.json",
         },
       ],
     };
@@ -3403,5 +3397,379 @@ Fetch today's weather.
 
     logSpy.mockRestore();
     errSpy.mockRestore();
+  });
+
+  it("supports importing skills from a local directory path and GitHub shorthand with graceful fallback", async () => {
+    const { runAgentImport, runAgentSkills } = await import("./agent.js");
+
+    // 1. Local directory import
+    const localRepo = path.join(tmpDir, "external-local-repo");
+    const localSkillDir = path.join(localRepo, "skills", "local-helper");
+    await mkdir(localSkillDir, { recursive: true });
+    await writeFile(
+      path.join(localSkillDir, "SKILL.md"),
+      "---\nname: local-helper\ndescription: Local helper skill\n---\n# Local Helper\n",
+      "utf8",
+    );
+
+    const workspaceDir = path.join(tmpDir, "workspace-local");
+    await mkdir(workspaceDir, { recursive: true });
+
+    const localRes = await runAgentImport(localRepo, {
+      workspace: workspaceDir,
+      useNpxSkills: false,
+      quiet: true,
+    });
+    expect(localRes.success).toBe(true);
+    expect(localRes.importedCount).toBe(1);
+
+    const discoveredLocal = await runAgentSkills({
+      workspace: workspaceDir,
+      quiet: true,
+    });
+    expect(
+      discoveredLocal.skills.some((s: any) => s.name === "local-helper"),
+    ).toBe(true);
+
+    // 2. GitHub shorthand import when npx skills fails (graceful degradation to fetchFn)
+    const failingNpx = jest.fn<any>().mockRejectedValue(new Error("ENOENT"));
+    const mockFetch = jest.fn<any>().mockImplementation(async (url: string) => {
+      if (
+        url ===
+        "https://raw.githubusercontent.com/vercel-labs/agent-skills/HEAD/skills/web-design/SKILL.md"
+      ) {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            "---\nname: web-design\ndescription: Web design rules\n---\n# Rules\n",
+        };
+      }
+      return { ok: false, status: 404, statusText: "Not Found" };
+    });
+
+    const ghRes = await runAgentImport("vercel-labs/agent-skills@web-design", {
+      workspace: workspaceDir,
+      npxSkillsExecFn: failingNpx,
+      fetchFn: mockFetch as any,
+      quiet: true,
+    });
+    expect(ghRes.success).toBe(true);
+    expect(ghRes.importedCount).toBe(1);
+    expect(failingNpx).toHaveBeenCalled();
+  });
+
+  it("imports local tools and scripts (flat and legacy main/) into the flat layout", async () => {
+    const { runAgentImport } = await import("./agent.js");
+
+    const repo = path.join(tmpDir, "local-artifacts-repo");
+    await mkdir(path.join(repo, ".agents/tools/main"), { recursive: true });
+    await mkdir(path.join(repo, ".agents/scripts"), { recursive: true });
+    await writeFile(path.join(repo, ".agents/tools/main/old_tool.json"), "{}");
+    await writeFile(path.join(repo, ".agents/tools/new_tool.json"), "{}");
+    await writeFile(path.join(repo, ".agents/scripts/helper.js"), "// x");
+
+    const workspaceDir = path.join(tmpDir, "workspace-local-artifacts");
+    await mkdir(workspaceDir, { recursive: true });
+
+    const res = await runAgentImport(repo, {
+      workspace: workspaceDir,
+      useNpxSkills: false,
+      quiet: true,
+    });
+    expect(res.success).toBe(true);
+    expect(res.importedCount).toBe(3);
+    for (const f of [
+      ".agents/tools/old_tool.json",
+      ".agents/tools/new_tool.json",
+      ".agents/scripts/helper.js",
+    ]) {
+      await expect(
+        access(path.join(workspaceDir, f), constants.F_OK),
+      ).resolves.toBeUndefined();
+    }
+
+    const filtered = await runAgentImport(repo, {
+      workspace: path.join(tmpDir, "workspace-local-filtered"),
+      useNpxSkills: false,
+      tools: "new_tool",
+      quiet: true,
+    });
+    expect(filtered.importedCount).toBe(1);
+  });
+
+  it("supports agent skills subcommands (list with lockfile, add, remove, init, sync, find) with npx skills delegation and fallback", async () => {
+    const { runAgentCommand, runAgentSkills } = await import("./agent.js");
+
+    // 1. init subcommand creates a new skill template
+    const initSkillRes = await runAgentCommand(
+      "skills",
+      ["init", "my-new-skill"],
+      {
+        workspace: tmpDir,
+        useNpxSkills: false,
+        quiet: true,
+      },
+    );
+    expect(initSkillRes.success).toBe(true);
+    expect(initSkillRes.name).toBe("my-new-skill");
+
+    // 2. Write a skills-lock.json and verify runAgentSkills enriches skill metadata
+    await writeFile(
+      path.join(tmpDir, "skills-lock.json"),
+      JSON.stringify({
+        version: 1,
+        skills: {
+          "my-new-skill": {
+            source: "my-org/my-skills",
+            sourceType: "github",
+            computedHash: "hash123",
+          },
+        },
+      }),
+      "utf8",
+    );
+
+    const listRes = await runAgentSkills({ workspace: tmpDir, quiet: true });
+    const enriched = listRes.skills.find((s: any) => s.name === "my-new-skill");
+    expect(enriched).toBeDefined();
+    expect(enriched.lockSource).toBe("my-org/my-skills");
+
+    // 3. add subcommand delegates to npx skills when available
+    const mockNpxAdd = jest
+      .fn<any>()
+      .mockImplementation(async (_bin: string, _args: string[], opts: any) => {
+        const addedDir = path.join(
+          opts.cwd,
+          ".agents",
+          "skills",
+          "delegated-skill",
+        );
+        await mkdir(addedDir, { recursive: true });
+        await writeFile(
+          path.join(addedDir, "SKILL.md"),
+          "---\nname: delegated-skill\ndescription: Installed via npx skills\n---\n# Delegated\n",
+          "utf8",
+        );
+        return { exitCode: 0, stdout: "Installed delegated-skill", stderr: "" };
+      });
+
+    const addRes = await runAgentCommand(
+      "skills",
+      ["add", "owner/repo@delegated-skill"],
+      {
+        workspace: tmpDir,
+        npxSkillsExecFn: mockNpxAdd,
+        quiet: true,
+      },
+    );
+    expect(addRes.success).toBe(true);
+    expect(addRes.delegatedToNpxSkills).toBe(true);
+    expect(addRes.skills.some((s: any) => s.name === "delegated-skill")).toBe(
+      true,
+    );
+
+    // 4. sync subcommand migrates legacy skills into canonical flat layout
+    const syncRes = await runAgentCommand("skills", ["sync"], {
+      workspace: tmpDir,
+      quiet: true,
+    });
+    expect(syncRes.success).toBe(true);
+
+    // 5. find subcommand falls back to skills.sh API when npx skills fails
+    const failingNpx = jest.fn<any>().mockRejectedValue(new Error("ENOENT"));
+    const mockSearchFetch = jest.fn<any>().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        skills: [
+          {
+            id: "vercel-labs/agent-skills/react-best-practices",
+            name: "react-best-practices",
+            source: "vercel-labs/agent-skills",
+            installs: 1200,
+          },
+        ],
+      }),
+    });
+    const findRes = await runAgentCommand("skills", ["find", "react"], {
+      workspace: tmpDir,
+      npxSkillsExecFn: failingNpx,
+      fetchFn: mockSearchFetch as any,
+      quiet: true,
+    });
+    expect(findRes.success).toBe(true);
+    expect(findRes.results).toHaveLength(1);
+    expect(findRes.results[0].name).toBe("react-best-practices");
+
+    // 6. remove subcommand removes skill from both flat and main layouts and lockfile
+    const rmRes = await runAgentCommand("skills", ["remove", "my-new-skill"], {
+      workspace: tmpDir,
+      npxSkillsExecFn: failingNpx,
+      quiet: true,
+    });
+    expect(rmRes.success).toBe(true);
+    expect(rmRes.removed).toContain("my-new-skill");
+
+    const afterRm = await runAgentSkills({ workspace: tmpDir, quiet: true });
+    expect(afterRm.skills.some((s: any) => s.name === "my-new-skill")).toBe(
+      false,
+    );
+  });
+
+  it("migrates existing template skills, tools, and scripts from legacy main/ into universal flat layout", async () => {
+    const { runAgentSkills, runAgentTools } = await import("./agent.js");
+    const legacyTemplateDir = await mkdtemp(
+      path.join(tmpdir(), "sc-legacy-template-"),
+    );
+
+    try {
+      // 1. Setup legacy template layout with main/ folders
+      const legacySkillDir = path.join(
+        legacyTemplateDir,
+        ".agents",
+        "skills",
+        "main",
+        "starter-pack",
+      );
+      await mkdir(path.join(legacySkillDir, "references"), { recursive: true });
+      await writeFile(
+        path.join(legacySkillDir, "SKILL.md"),
+        "---\nname: starter-pack\ndescription: Starter pack from legacy template\n---\n# Starter Pack\n",
+        "utf8",
+      );
+      await writeFile(
+        path.join(legacySkillDir, "references", "guide.md"),
+        "# Guide\n",
+        "utf8",
+      );
+
+      const legacyToolDir = path.join(
+        legacyTemplateDir,
+        ".agents",
+        "tools",
+        "main",
+      );
+      await mkdir(legacyToolDir, { recursive: true });
+      await writeFile(
+        path.join(legacyToolDir, "custom_calc.json"),
+        JSON.stringify({
+          name: "custom_calc",
+          description: "Custom calculator tool",
+          parameters: { type: "object", properties: {} },
+          execution: { type: "javascript", code: "return 1;" },
+        }),
+        "utf8",
+      );
+
+      const legacyScriptDir = path.join(
+        legacyTemplateDir,
+        ".agents",
+        "scripts",
+        "main",
+      );
+      await mkdir(legacyScriptDir, { recursive: true });
+      await writeFile(
+        path.join(legacyScriptDir, "custom_helper.js"),
+        "export function helper() { return 42; }\n",
+        "utf8",
+      );
+
+      // 2. Invoke CLI agent skills on the legacy workspace
+      const result = await runAgentSkills({
+        workspace: legacyTemplateDir,
+        quiet: true,
+      });
+
+      // 3. Verify skills result
+      expect(result.skills.some((s: any) => s.name === "starter-pack")).toBe(
+        true,
+      );
+
+      // 4. Verify physical files were migrated to flat layout
+      const flatSkillMd = path.join(
+        legacyTemplateDir,
+        ".agents",
+        "skills",
+        "starter-pack",
+        "SKILL.md",
+      );
+      const flatRefMd = path.join(
+        legacyTemplateDir,
+        ".agents",
+        "skills",
+        "starter-pack",
+        "references",
+        "guide.md",
+      );
+      const flatToolJson = path.join(
+        legacyTemplateDir,
+        ".agents",
+        "tools",
+        "custom_calc.json",
+      );
+      const flatScriptJs = path.join(
+        legacyTemplateDir,
+        ".agents",
+        "scripts",
+        "custom_helper.js",
+      );
+
+      await expect(
+        access(flatSkillMd, constants.F_OK),
+      ).resolves.toBeUndefined();
+      await expect(access(flatRefMd, constants.F_OK)).resolves.toBeUndefined();
+      await expect(
+        access(flatToolJson, constants.F_OK),
+      ).resolves.toBeUndefined();
+      await expect(
+        access(flatScriptJs, constants.F_OK),
+      ).resolves.toBeUndefined();
+
+      // 5. Verify legacy main/ directories were cleaned up
+      await expect(
+        access(
+          path.join(legacyTemplateDir, ".agents", "skills", "main"),
+          constants.F_OK,
+        ),
+      ).rejects.toThrow();
+      await expect(
+        access(
+          path.join(legacyTemplateDir, ".agents", "tools", "main"),
+          constants.F_OK,
+        ),
+      ).rejects.toThrow();
+      await expect(
+        access(
+          path.join(legacyTemplateDir, ".agents", "scripts", "main"),
+          constants.F_OK,
+        ),
+      ).rejects.toThrow();
+
+      // 6. Verify tools result
+      const toolsResult = await runAgentTools({
+        workspace: legacyTemplateDir,
+        quiet: true,
+      });
+      expect(toolsResult.tools.some((t: any) => t.name === "custom_calc")).toBe(
+        true,
+      );
+    } finally {
+      await rm(legacyTemplateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("resolves cross-platform npx command and shell option", async () => {
+    const { resolveNpxCommand } = await import("./agent.js");
+    const { command, shell } = resolveNpxCommand();
+
+    expect(typeof command).toBe("string");
+    expect(command.length).toBeGreaterThan(0);
+    if (process.platform === "win32") {
+      expect(command.endsWith("npx.cmd") || command === "npx.cmd").toBe(true);
+      expect(shell).toBe(true);
+    } else {
+      expect(command.endsWith("npx") || command === "npx").toBe(true);
+      expect(shell).toBe(false);
+    }
   });
 });

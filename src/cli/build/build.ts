@@ -163,6 +163,12 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
     } catch {}
 
     try {
+      const { migrateLegacyWorkspaceLayout } =
+        await import("../utils/migrate-skills.js");
+      await migrateLegacyWorkspaceLayout(process.cwd());
+    } catch {}
+
+    try {
       await cp(".agents/skills", "dist/public/.agents/skills", {
         recursive: true,
         ...(noTestFilter ? { filter: noTestFilter } : {}),
@@ -537,7 +543,21 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
     });
   }
 
-  // 6. Copy .agents from contentRoot and toolchainRoot
+  // 6. Migrate & Copy .agents from contentRoot and toolchainRoot
+  try {
+    const { migrateLegacyWorkspaceLayout } =
+      await import("../utils/migrate-skills.js");
+    if (await pathExists(join(contentRoot, ".agents"))) {
+      await migrateLegacyWorkspaceLayout(contentRoot);
+    }
+    if (
+      contentRoot !== toolchainRoot &&
+      (await pathExists(join(toolchainRoot, ".agents")))
+    ) {
+      await migrateLegacyWorkspaceLayout(toolchainRoot);
+    }
+  } catch {}
+
   const contentSkills = join(contentRoot, ".agents/skills");
   if (await pathExists(contentSkills)) {
     await cp(contentSkills, join(distPublicDir, ".agents/skills"), {

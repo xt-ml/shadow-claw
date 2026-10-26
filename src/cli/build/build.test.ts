@@ -209,7 +209,7 @@ describe("build without and with pages", () => {
         fs.existsSync(
           path.join(
             consumerDistPublic,
-            ".agents/skills/main/skill-creator/SKILL.md",
+            ".agents/skills/skill-creator/SKILL.md",
           ),
         ),
       ).toBe(true);
@@ -313,7 +313,6 @@ describe("build without and with pages", () => {
         tempConsumerRoot,
         ".agents",
         "skills",
-        "main",
         "skill-creator",
         "SKILL.md",
       );

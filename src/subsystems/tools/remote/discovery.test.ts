@@ -299,5 +299,111 @@ describe("discovery", () => {
         "Failed to fetch discovery manifest: HTTP 404 Not Found",
       );
     });
+
+    it("resolves a direct SKILL.md URL or GitHub blob SKILL.md URL into a single-skill manifest", async () => {
+      const skillMd = `---
+name: direct-skill
+description: Skill fetched directly from SKILL.md URL
+---
+# Direct Skill Instructions
+`;
+      const mockFetch = jest.fn<any>().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () => skillMd,
+      } as any) as unknown as typeof fetch;
+
+      const resDirect = await fetchDiscoveryManifest(
+        "https://example.com/skills/direct-skill/SKILL.md",
+        mockFetch,
+      );
+      expect(resDirect.manifest.skills).toHaveLength(1);
+      expect(resDirect.manifest.skills?.[0]).toEqual({
+        name: "direct-skill",
+        type: "skill-md",
+        description: "Skill fetched directly from SKILL.md URL",
+        url: "https://example.com/skills/direct-skill/SKILL.md",
+      });
+
+      const resBlob = await fetchDiscoveryManifest(
+        "https://github.com/vercel-labs/agent-skills/blob/main/skills/direct-skill/SKILL.md",
+        mockFetch,
+      );
+      expect(resBlob.manifest.skills?.[0].url).toBe(
+        "https://raw.githubusercontent.com/vercel-labs/agent-skills/main/skills/direct-skill/SKILL.md",
+      );
+    });
+
+    it("resolves GitHub shorthand owner/repo@skill and owner/repo via raw/trees fallback", async () => {
+      const skillMd = `---
+name: web-design-guidelines
+description: Review UI code for Web Interface Guidelines
+---
+# Web Design Guidelines
+`;
+      const mockFetch = jest
+        .fn<any>()
+        .mockImplementation(async (url: string) => {
+          if (
+            url ===
+            "https://raw.githubusercontent.com/vercel-labs/agent-skills/HEAD/skills/web-design-guidelines/SKILL.md"
+          ) {
+            return {
+              ok: true,
+              status: 200,
+              text: async () => skillMd,
+            };
+          }
+          if (
+            url ===
+            "https://api.github.com/repos/vercel-labs/agent-skills/git/trees/HEAD?recursive=1"
+          ) {
+            return {
+              ok: true,
+              status: 200,
+              json: async () => ({
+                tree: [
+                  {
+                    path: "skills/web-design-guidelines/SKILL.md",
+                    type: "blob",
+                  },
+                  {
+                    path: "skills/web-design-guidelines/references/rules.md",
+                    type: "blob",
+                  },
+                ],
+              }),
+            };
+          }
+          return {
+            ok: false,
+            status: 404,
+            statusText: "Not Found",
+          };
+        }) as unknown as typeof fetch;
+
+      const resAtSkill = await fetchDiscoveryManifest(
+        "vercel-labs/agent-skills@web-design-guidelines",
+        mockFetch,
+      );
+      expect(resAtSkill.manifest.skills).toHaveLength(1);
+      expect(resAtSkill.manifest.skills?.[0].name).toBe(
+        "web-design-guidelines",
+      );
+      expect(resAtSkill.manifest.skills?.[0].url).toBe(
+        "https://raw.githubusercontent.com/vercel-labs/agent-skills/HEAD/skills/web-design-guidelines/SKILL.md",
+      );
+
+      const resRepo = await fetchDiscoveryManifest(
+        "vercel-labs/agent-skills",
+        mockFetch,
+      );
+      expect(resRepo.manifest.skills).toHaveLength(1);
+      expect(resRepo.manifest.skills?.[0].name).toBe("web-design-guidelines");
+      expect(resRepo.manifest.skills?.[0].files).toEqual([
+        "SKILL.md",
+        "references/rules.md",
+      ]);
+    });
   });
 });

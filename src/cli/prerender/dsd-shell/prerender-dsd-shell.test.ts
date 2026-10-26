@@ -573,6 +573,127 @@ describe("prerenderDsdShell purge flag pages", () => {
     expect(manifestJson.preRenderedStaticPages["br-main"]).toBeDefined();
   });
 
+  it("collects and bundles npx skills flat layout (.agents/skills/<name>) and symlinked skills alongside .agents/skills/main/<name>", async () => {
+    const { symlink } = await import("node:fs/promises");
+    const publicDir = path.join(tmpDir, "dist/public");
+    const indexPath = path.join(publicDir, "index.html");
+    const sourcePath = path.join(tmpDir, "pages/main");
+
+    await mkdir(path.join(publicDir, "components/shadow-claw"), {
+      recursive: true,
+    });
+    await mkdir(path.join(publicDir, "components/shadow-claw-pages"), {
+      recursive: true,
+    });
+    await mkdir(path.join(publicDir, "components/shadow-claw-page-header"), {
+      recursive: true,
+    });
+    await mkdir(sourcePath, { recursive: true });
+
+    await writeFile(
+      indexPath,
+      '<!doctype html><html><head><base href="/"><title>ShadowClaw</title></head><body><shadow-claw></shadow-claw></body></html>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(publicDir, "components/shadow-claw/shadow-claw.html"),
+      '<template><div class="app"><shadow-claw-pages></shadow-claw-pages></div></template>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(
+        publicDir,
+        "components/shadow-claw-pages/shadow-claw-pages.html",
+      ),
+      '<template><div class="pages__list" data-pages-list role="list"></div><div class="pages__rendered" data-pages-rendered hidden></div><div class="pages__empty" data-pages-empty></div><shadow-claw-page-header title="Pages"></shadow-claw-page-header></template>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(
+        publicDir,
+        "components/shadow-claw-page-header/shadow-claw-page-header.html",
+      ),
+      '<template><header class="header"><h2 class="header__title"></h2><details class="header__actions-disclosure"></details><div class="header__actions" id="header-actions-panel"></div></header></template>',
+      "utf8",
+    );
+    await writeFile(path.join(sourcePath, "post.md"), "# Hello", "utf8");
+
+    // 1. Standard ShadowClaw skill in .agents/skills/main/main-skill
+    const mainSkillDir = path.join(
+      tmpDir,
+      ".agents",
+      "skills",
+      "main",
+      "main-skill",
+    );
+    await mkdir(mainSkillDir, { recursive: true });
+    await writeFile(
+      path.join(mainSkillDir, "SKILL.md"),
+      "---\nname: main-skill\ndescription: Main skill\n---\nMain body",
+      "utf8",
+    );
+
+    // 2. Flat npx skills skill in .agents/skills/npx-skill with companion file
+    const npxSkillDir = path.join(tmpDir, ".agents", "skills", "npx-skill");
+    await mkdir(path.join(npxSkillDir, "references"), { recursive: true });
+    await writeFile(
+      path.join(npxSkillDir, "SKILL.md"),
+      "---\nname: npx-skill\ndescription: Installed via npx skills\n---\nNPX body",
+      "utf8",
+    );
+    await writeFile(
+      path.join(npxSkillDir, "references", "doc.md"),
+      "# Companion Doc",
+      "utf8",
+    );
+
+    // 3. Symlinked skill in .agents/skills/linked-skill
+    const externalDir = path.join(tmpDir, "external-pkg", "linked-skill");
+    await mkdir(externalDir, { recursive: true });
+    await writeFile(
+      path.join(externalDir, "SKILL.md"),
+      "---\nname: linked-skill\ndescription: Symlinked skill\n---\nLinked body",
+      "utf8",
+    );
+    await symlink(
+      externalDir,
+      path.join(tmpDir, ".agents", "skills", "linked-skill"),
+      "dir",
+    );
+
+    await prerenderDsdShell({
+      indexPath,
+      sourcePath,
+      publicDir,
+      prerenderPages: 1,
+      silent: true,
+    });
+
+    const manifestPath = path.join(publicDir, "static-main-manifest.json");
+    const manifestJson = JSON.parse(await readFile(manifestPath, "utf8"));
+    const skillDisplayPaths = (manifestJson.skills || []).map(
+      (s: any) => s.displayPath,
+    );
+    expect(skillDisplayPaths).toEqual([
+      "linked-skill/SKILL.md",
+      "main-skill/SKILL.md",
+      "npx-skill/references/doc.md",
+      "npx-skill/SKILL.md",
+    ]);
+
+    // Verify files were also written to dist/public/skills/main/
+    const bundledNpxSkill = await readFile(
+      path.join(publicDir, "skills/main/npx-skill/SKILL.md"),
+      "utf8",
+    );
+    expect(bundledNpxSkill).toContain("name: npx-skill");
+    const bundledLinkedSkill = await readFile(
+      path.join(publicDir, "skills/main/linked-skill/SKILL.md"),
+      "utf8",
+    );
+    expect(bundledLinkedSkill).toContain("name: linked-skill");
+  });
+
   describe("prerender helper functions", () => {
     it("splits frontmatter with gray-matter", () => {
       const src = "---\ntitle: Hello\n---\n# Content";

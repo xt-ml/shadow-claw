@@ -3,6 +3,7 @@ import {
   mkdir,
   readFile,
   readdir,
+  realpath,
   stat,
   writeFile,
 } from "node:fs/promises";
@@ -326,29 +327,47 @@ export async function collectPageSources(
 export async function collectSkillSources(
   sourcePath: string,
 ): Promise<SkillSource[]> {
-  try {
-    const sourceStats = await stat(sourcePath);
-    if (!sourceStats.isDirectory()) {
-      return [];
-    }
-  } catch (error: any) {
-    if (error?.code === "ENOENT") {
-      return [];
-    }
-    throw error;
-  }
-
   const files: SkillSource[] = [];
-  async function visit(currentDir: string): Promise<void> {
+  const seenDisplayPaths = new Set<string>();
+  const visitedRealDirs = new Set<string>();
+
+  async function visit(currentDir: string, baseRootDir: string): Promise<void> {
+    try {
+      const real = await realpath(currentDir);
+      if (visitedRealDirs.has(real)) return;
+      visitedRealDirs.add(real);
+    } catch {
+      return;
+    }
+
     const entries = await readdir(currentDir, { withFileTypes: true });
     for (const entry of entries) {
       const absolutePath = path.join(currentDir, entry.name);
-      if (entry.isDirectory()) {
-        await visit(absolutePath);
-      } else if (entry.isFile()) {
+      let isDir = entry.isDirectory();
+      let isFile = entry.isFile();
+      if (entry.isSymbolicLink()) {
+        try {
+          const st = await stat(absolutePath);
+          isDir = st.isDirectory();
+          isFile = st.isFile();
+        } catch {
+          continue;
+        }
+      }
+      if (isDir) {
+        await visit(absolutePath, baseRootDir);
+      } else if (isFile) {
+        const displayPath = toPosixPath(
+          path.relative(baseRootDir, absolutePath),
+        );
+        if (seenDisplayPaths.has(displayPath)) {
+          continue;
+        }
+        seenDisplayPaths.add(displayPath);
+
         const file: SkillSource = {
           absolutePath,
-          displayPath: toPosixPath(path.relative(sourcePath, absolutePath)),
+          displayPath,
         };
         if (path.extname(entry.name).toLowerCase() === ".md") {
           try {
@@ -368,7 +387,53 @@ export async function collectSkillSources(
     }
   }
 
-  await visit(sourcePath);
+  // 1. Collect from primary skillsSourcePath (typically .agents/skills/main)
+  try {
+    const sourceStats = await stat(sourcePath);
+    if (sourceStats.isDirectory()) {
+      await visit(sourcePath, sourcePath);
+    }
+  } catch (error: any) {
+    if (error?.code !== "ENOENT") {
+      throw error;
+    }
+  }
+
+  // 2. When sourcePath is .agents/skills/main, also collect npx skills flat layout (.agents/skills/<name>)
+  if (
+    path.basename(sourcePath) === "main" &&
+    path.basename(path.dirname(sourcePath)) === "skills"
+  ) {
+    const parentSkillsDir = path.dirname(sourcePath);
+    try {
+      const parentStats = await stat(parentSkillsDir);
+      if (parentStats.isDirectory()) {
+        const entries = await readdir(parentSkillsDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.name === "main") continue;
+          const entryPath = path.join(parentSkillsDir, entry.name);
+          let isDir = entry.isDirectory();
+          if (entry.isSymbolicLink()) {
+            try {
+              const st = await stat(entryPath);
+              isDir = st.isDirectory();
+            } catch {
+              continue;
+            }
+          }
+          if (isDir) {
+            visitedRealDirs.clear();
+            await visit(entryPath, parentSkillsDir);
+          }
+        }
+      }
+    } catch (error: any) {
+      if (error?.code !== "ENOENT") {
+        throw error;
+      }
+    }
+  }
+
   return files.sort((left, right) =>
     left.displayPath.localeCompare(right.displayPath),
   );
@@ -384,6 +449,13 @@ export async function collectToolSources(
     }
   } catch (error: any) {
     if (error?.code === "ENOENT") {
+      // If sourcePath ended with "main", also check parent directory (.agents/tools)
+      if (
+        path.basename(sourcePath) === "main" &&
+        path.basename(path.dirname(sourcePath)) === "tools"
+      ) {
+        return collectToolSources(path.dirname(sourcePath));
+      }
       return [];
     }
     throw error;
@@ -397,9 +469,11 @@ export async function collectToolSources(
       if (entry.isDirectory()) {
         await visit(absolutePath);
       } else if (entry.isFile() && entry.name.endsWith(".json")) {
+        const rel = toPosixPath(path.relative(sourcePath, absolutePath));
+        const displayPath = rel.startsWith("main/") ? rel.slice(5) : rel;
         files.push({
           absolutePath,
-          displayPath: toPosixPath(path.relative(sourcePath, absolutePath)),
+          displayPath,
         });
       }
     }
@@ -1261,6 +1335,15 @@ export async function prerenderDsdShell(
       });
     }
   } catch {}
+
+  for (const skill of skillSources) {
+    if (skill.isPurgeMarker) continue;
+    try {
+      const destPath = path.join(publicDir, "skills/main", skill.displayPath);
+      await mkdir(path.dirname(destPath), { recursive: true });
+      await cp(skill.absolutePath, destPath, { force: true });
+    } catch {}
+  }
 
   const shadowClawTemplateContent = extractTemplateContent(
     shadowClawTemplateSource,

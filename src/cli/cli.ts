@@ -1183,8 +1183,31 @@ slug: "home"
   });
 
 program
+  .command("skills [action] [args...]")
+  .description(
+    "Manage Agent Skills via npx skills or ShadowClaw workspace (list | add | remove | find | init | sync | update | check | restore)",
+  )
+  .option(
+    "--workspace <dir>",
+    "Workspace directory (default: current working directory)",
+    process.cwd(),
+  )
+  .option("--skills <skills>", "Comma-separated list of skill names to filter")
+  .option("--overwrite", "Overwrite existing skills during import/sync", false)
+  .option("-y, --yes", "Skip interactive confirmation prompts", false)
+  .option("-q, --quiet", "Suppress non-error output", false)
+  .action(async (action, args, options) => {
+    const subargs = action ? [action, ...(args || [])] : [];
+    await runAgentCommand("skills", subargs, {
+      ...options,
+      workspace: options.workspace || process.cwd(),
+    });
+  });
+
+program
   .command("skills:index [dir]")
   .alias("agent-skills")
+  .alias("agent:skills")
   .description(
     "Generate or update .well-known/agent-skills/index.json per the Agent Skills Discovery RFC",
   )

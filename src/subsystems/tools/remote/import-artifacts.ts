@@ -21,14 +21,18 @@ import type {
 const BUILTIN_TOOL_NAMES = new Set(TOOL_DEFINITIONS.map((t) => t.name));
 const TOOL_NAME_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
 
-function getSubdir(options?: ImportOptions): string {
+function getBaseDir(
+  kind: "tools" | "scripts" | "skills",
+  options?: ImportOptions,
+): string {
   if (options?.targetSubdir) {
-    return options.targetSubdir;
+    return `.agents/${kind}/${options.targetSubdir}`;
   }
   if (options?.siteSlug) {
-    return `imported/${options.siteSlug}`;
+    return `.agents/${kind}/imported/${options.siteSlug}`;
   }
-  return "main";
+  // Canonical flat layout; legacy `main/` is still read by discovery.
+  return `.agents/${kind}`;
 }
 
 /**
@@ -60,8 +64,7 @@ export async function importRemoteTool(
     };
   }
 
-  const subdir = getSubdir(options);
-  const targetPath = `.agents/tools/${subdir}/${name}.json`;
+  const targetPath = `${getBaseDir("tools", options)}/${name}.json`;
 
   try {
     const exists = await groupFileExists(db, groupId, targetPath);
@@ -159,10 +162,9 @@ export async function importRemoteScript(
   options?: ImportOptions,
 ): Promise<ImportArtifactStatus> {
   const name = (scriptItem.name || "").trim();
-  const subdir = getSubdir(options);
   const filename =
     name.endsWith(".js") || name.endsWith(".mjs") ? name : `${name}.js`;
-  const targetPath = `.agents/scripts/${subdir}/${filename}`;
+  const targetPath = `${getBaseDir("scripts", options)}/${filename}`;
 
   try {
     const exists = await groupFileExists(db, groupId, targetPath);
@@ -226,8 +228,8 @@ export async function importRemoteSkill(
   options?: ImportOptions,
 ): Promise<ImportArtifactStatus> {
   const name = (skillItem.name || "").trim();
-  const subdir = getSubdir(options);
-  const targetPath = `.agents/skills/${subdir}/${name}/SKILL.md`;
+  const skillBase = `${getBaseDir("skills", options)}/${name}`;
+  const targetPath = `${skillBase}/SKILL.md`;
 
   try {
     const exists = await groupFileExists(db, groupId, targetPath);
@@ -268,6 +270,35 @@ export async function importRemoteSkill(
     parseSkill(targetPath, text);
 
     await writeGroupFile(db, groupId, targetPath, text);
+
+    if (Array.isArray(skillItem.files) && skillItem.files.length > 0) {
+      const baseUrl = skillItem.url.replace(/\/skill\.md$/i, "/");
+      for (const relFile of skillItem.files) {
+        if (typeof relFile !== "string") continue;
+        const cleanRel = relFile.replace(/^\/+/, "").replace(/\\/g, "/");
+        if (
+          !cleanRel ||
+          cleanRel.toLowerCase() === "skill.md" ||
+          cleanRel.split("/").some((seg) => seg === ".." || seg === ".")
+        ) {
+          continue;
+        }
+        try {
+          const companionUrl = new URL(
+            cleanRel,
+            baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`,
+          ).href;
+          const companionRes = await fetcher(companionUrl);
+          if (companionRes.ok) {
+            const companionText = await companionRes.text();
+            const companionTarget = `${skillBase}/${cleanRel}`;
+            await writeGroupFile(db, groupId, companionTarget, companionText);
+          }
+        } catch {
+          // Non-fatal companion file download error
+        }
+      }
+    }
 
     return {
       name,

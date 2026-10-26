@@ -1,3 +1,5 @@
+import { applyBasePath } from "../core/app-routes.js";
+
 /**
  * Prefixes whose contents are flattened into the distribution root.
  */
@@ -67,11 +69,14 @@ export function getIframeThemeStylesheetLink(siteConfig?: unknown): string {
     return `<link rel="stylesheet" href="${stylesheet}">`;
   }
 
+  // Runtime links must be site-root absolute (with the deployment base path):
+  // srcdoc preview iframes set `<base href="/<base>/files/<group>/...">`, so a
+  // relative href would resolve under the file route and 404.
   const resolvedHref = resolveThemeStylesheetHref(stylesheet).replace(
     /^\/+/,
     "",
   );
-  return `<link rel="stylesheet" href="${resolvedHref}">`;
+  return `<link rel="stylesheet" href="${applyBasePath(`/${resolvedHref}`)}">`;
 }
 
 /**

@@ -4,6 +4,7 @@ import {
   getIframeThemeStylesheetLink,
   resolveThemeStylesheetHref,
 } from "./iframe-theme.js";
+import { resetAppBasePathCache } from "../core/app-routes.js";
 
 describe("iframe-theme utility", () => {
   afterEach(() => {
@@ -12,6 +13,10 @@ describe("iframe-theme utility", () => {
     if (existing) {
       existing.remove();
     }
+    document
+      .querySelectorAll("base[data-test-base]")
+      .forEach((b) => b.remove());
+    resetAppBasePathCache();
   });
 
   it("returns light-mode class and styles by default when dark-mode is absent", () => {
@@ -72,14 +77,33 @@ describe("iframe-theme utility", () => {
       const link = getIframeThemeStylesheetLink({
         theme: { stylesheet: "pages/main/theme.css" },
       });
-      expect(link).toBe('<link rel="stylesheet" href="pages/main/theme.css">');
+      expect(link).toBe('<link rel="stylesheet" href="/pages/main/theme.css">');
     });
 
     it("returns link element for flattened stylesheet path pages/resources/theme.css", () => {
       const link = getIframeThemeStylesheetLink({
         theme: { stylesheet: "pages/resources/theme.css" },
       });
-      expect(link).toBe('<link rel="stylesheet" href="theme.css">');
+      expect(link).toBe('<link rel="stylesheet" href="/theme.css">');
+    });
+
+    it("prefixes the deployment base path so srcdoc iframes (based at /files/<group>/) resolve the stylesheet from the site root", () => {
+      const base = document.createElement("base");
+      base.setAttribute("href", "/repo/");
+      base.setAttribute("data-test-base", "");
+      document.head.appendChild(base);
+      resetAppBasePathCache();
+
+      expect(
+        getIframeThemeStylesheetLink({
+          theme: { stylesheet: "/pages/main/theme.css" },
+        }),
+      ).toBe('<link rel="stylesheet" href="/repo/pages/main/theme.css">');
+      expect(
+        getIframeThemeStylesheetLink({
+          theme: { stylesheet: "pages/main/theme.css" },
+        }),
+      ).toBe('<link rel="stylesheet" href="/repo/pages/main/theme.css">');
     });
 
     it("returns link element for external URL as-is", () => {
@@ -101,7 +125,7 @@ describe("iframe-theme utility", () => {
       document.head.appendChild(script);
 
       expect(getIframeThemeStylesheetLink()).toBe(
-        '<link rel="stylesheet" href="pages/main/theme.css">',
+        '<link rel="stylesheet" href="/pages/main/theme.css">',
       );
     });
   });

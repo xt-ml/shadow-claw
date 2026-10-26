@@ -25,7 +25,7 @@ describe("buildHtmlPageSrcdoc", () => {
     expect(html).toContain("iframe-storage-bridge.js");
     expect(html).toContain("file-viewer-preview-bridge.js");
     expect(html).toContain("foo=bar");
-    expect(html).not.toContain('<link rel="stylesheet" href="theme.css">');
+    expect(html).not.toContain('<link rel="stylesheet" href="/theme.css">');
     expect(html).toMatch(/<body class="(light|dark)-mode">/);
   });
 
@@ -60,7 +60,7 @@ describe("buildHtmlPageSrcdoc", () => {
     });
 
     expect(html).toContain(
-      '<link rel="stylesheet" href="pages/main/theme.css">',
+      '<link rel="stylesheet" href="/pages/main/theme.css">',
     );
   });
 

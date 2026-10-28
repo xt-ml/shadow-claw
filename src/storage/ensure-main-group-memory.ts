@@ -63,6 +63,28 @@ export async function ensureMainGroupMemory(
       DEFAULT_MAIN_GROUP_MEMORY_PATH,
     );
     if (exists) {
+      if (groupId === DEFAULT_GROUP_ID) {
+        try {
+          const { readGroupFile } = await import("./read-group-file.js");
+          const existingText = await readGroupFile(
+            db,
+            groupId,
+            DEFAULT_MAIN_GROUP_MEMORY_PATH,
+          );
+          if (
+            typeof existingText === "string" &&
+            (existingText.includes("<shadow-claw") ||
+              existingText.includes("data-shadow-claw-dsd"))
+          ) {
+            await writeGroupFile(
+              db,
+              groupId,
+              DEFAULT_MAIN_GROUP_MEMORY_PATH,
+              customContent ?? DEFAULT_MAIN_GROUP_MEMORY_CONTENT,
+            );
+          }
+        } catch {}
+      }
       return true;
     }
 
@@ -78,7 +100,13 @@ export async function ensureMainGroupMemory(
       try {
         const res = await fetch(resolveStaticMainGroupMemoryUrl());
         if (res.ok) {
-          content = await res.text();
+          const text = await res.text();
+          if (
+            !text.includes("<shadow-claw") &&
+            !text.includes("data-shadow-claw-dsd")
+          ) {
+            content = text;
+          }
         }
       } catch {
         // Fetch failed or unavailable, fallback to default

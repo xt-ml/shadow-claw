@@ -65,15 +65,18 @@ graph TD
 
 Builds a static site bundle into `./dist/public`.
 
-| Option                     | Type    | Description                                                                     | Default           |
-| :------------------------- | :------ | :------------------------------------------------------------------------------ | :---------------- |
-| `--prod, --production`     | boolean | Build in production mode (minification, base path rewriting, revision stamping) | `false`           |
-| `--origin <url>`           | string  | Canonical site origin URL (overrides `PAGES_ORIGIN`)                            | `""`              |
-| `--base-path <path>`       | string  | Base path prefix (e.g. `/my-site/`, overrides `PAGES_BASE_PATH`)                | `"/shadow-claw/"` |
-| `--out-dir <dir>`          | string  | Output directory relative to content root                                       | `"dist/public"`   |
-| `--content-root <dir>`     | string  | Working directory containing site content                                       | `process.cwd()`   |
-| `--prerender-pages <mode>` | string  | Prerender mode: `all`, `auto`, `none`                                           | `"auto"`          |
-| `--copy-all-assets`        | boolean | Copy entire `assets/` directory into output                                     | `false`           |
+| Option                     | Type    | Description                                                                              | Default           |
+| :------------------------- | :------ | :--------------------------------------------------------------------------------------- | :---------------- |
+| `--prod, --production`     | boolean | Build in production mode (minification, base path rewriting, revision stamping)          | `false`           |
+| `--origin <url>`           | string  | Canonical site origin URL (overrides `PAGES_ORIGIN`)                                     | `""`              |
+| `--base-path <path>`       | string  | Base path prefix (e.g. `/my-site/`, overrides `PAGES_BASE_PATH`)                         | `"/shadow-claw/"` |
+| `--out-dir <dir>`          | string  | Output directory relative to content root                                                | `"dist/public"`   |
+| `--content-root <dir>`     | string  | Working directory containing site content                                                | `process.cwd()`   |
+| `--prerender-pages <mode>` | string  | Prerender mode: `all`, `auto`, `none`                                                    | `"auto"`          |
+| `--copy-all-assets`        | boolean | Copy entire `assets/` directory into output                                              | `false`           |
+| `--single-file`            | boolean | Bundle static pages, configuration, and theme into a standalone single-file `index.html` | `false`           |
+
+When `--single-file` is specified, the build engine automatically bundles workspace pages (discovered from `pages/main/*.md`), theme styling (`pages/main/theme.css` or `theme.css`), and site configuration directly into `dist/public/index.html`. Markdown pages are injected as inline `<script type="text/markdown" data-shadow-claw-page="...">` elements and themes as `<style id="shadow-claw-theme">`, producing a completely self-contained, zero-shim single HTML file for embedding or simple static hosting.
 
 When pretty paths are prerendered (`--prerender-pages`), the build resolves the site `<base href="...">` via `resolveSiteBasePath` (from `--base-path` / `PAGES_BASE_PATH`, `--origin` / `PAGES_ORIGIN` pathname, or `branding.siteUrl` pathname) and patches it across `dist/public/index.html` and all generated pretty-path `index.html` files (`patchBaseHref`), alongside Yoast-style SEO metadata (page titles formatted via `formatSeoTitle`, meta descriptions via `extractMarkdownDescription`, canonical URLs via `resolveCanonicalUrl`, and Open Graph/Twitter tags via `patchHtmlHeadMetadata`). When the content project has no configured or existing sitemap, the build generates `sitemap.xml` from `routes.json` if a canonical origin is set with `--origin` / `PAGES_ORIGIN` or `branding.siteUrl`. The generated sitemap includes the site root and unique pretty paths. See [Pages System](pages.md#pre-rendered-content-routing--pretty-paths) for sitemap precedence, routing details, and SEO metadata configuration.
 

@@ -39,6 +39,8 @@ import {
 } from "../../ui/iframe-theme.js";
 import { isTruthyConfigValue } from "../../utils/parse-boolean-config.js";
 import { getImageMimeType } from "../../utils/mime.js";
+import { resolveRuntimeAsset } from "../../utils/runtime-assets.js";
+import { DEFAULT_FILE_VIEWER_HIGHLIGHT_CSS } from "./utils/highlight-theme.js";
 
 import "../shadow-claw-dialog/shadow-claw-dialog.js";
 import { IframeBroadcastProxy } from "../shadow-claw-pages/utils/iframe-broadcast-proxy.js";
@@ -176,10 +178,14 @@ export class ShadowClawFileViewer extends ShadowClawElement {
 
     // Apply highlight.js theme to markdown preview output in this shadow root.
     try {
-      const hjsCss = await fetch(highlightThemePath).then((r) => r.text());
+      const resolvedPath = resolveRuntimeAsset(highlightThemePath);
+      const hjsCss = await fetch(resolvedPath).then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.text();
+      });
       this.applyHighlightStyles(hjsCss);
-    } catch (err) {
-      console.warn("Failed to load highlight.js styles:", err);
+    } catch {
+      this.applyHighlightStyles(DEFAULT_FILE_VIEWER_HIGHLIGHT_CSS);
     }
   }
 
@@ -447,7 +453,7 @@ export class ShadowClawFileViewer extends ShadowClawElement {
   }
 
   getIframeBridgeScriptUrl() {
-    return applyBasePath("/assets/file-viewer-preview-bridge.js");
+    return resolveRuntimeAsset("/assets/file-viewer-preview-bridge.js");
   }
 
   getIframeSandboxPermissions(fileName: string) {
@@ -1411,7 +1417,7 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     // Nonce-gated CSP: only the bridge script and approved custom element scripts may run.
     const nonce = crypto.randomUUID().replace(/-/g, "");
     const bridgeScriptUrl = this.getIframeBridgeScriptUrl();
-    const storageBridgeScriptUrl = applyBasePath(
+    const storageBridgeScriptUrl = resolveRuntimeAsset(
       "/assets/iframe-storage-bridge.js",
     );
 

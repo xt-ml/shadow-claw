@@ -2,7 +2,7 @@ import { CONFIG_KEYS } from "../../config/config.js";
 import { sanitizeModelOutput } from "../../content/chat-template-sanitizer.js";
 import { ShadowClawDatabase } from "../../db/db.js";
 import { getConfig } from "../../db/get-config.js";
-import { toTrustedScriptUrl } from "../../security/trusted-types.js";
+import { createModuleWorker } from "../../utils/runtime-assets.js";
 import { createLogMessage } from "../../worker/utils/create-log-message.js";
 import { createToolActivityMessage } from "../../worker/utils/create-tool-activity-message.js";
 import { executeTool } from "../../worker/utils/execute-tool.js";
@@ -76,13 +76,8 @@ class TransformersJsManager {
 
   private getWorker() {
     if (!this.worker) {
-      this.worker = new Worker(
-        toTrustedScriptUrl(
-          new URL("./transformers-js.worker.js", import.meta.url).href,
-        ) as string,
-        {
-          type: "module",
-        },
+      this.worker = createModuleWorker(
+        new URL("./transformers-js.worker.js", import.meta.url).href,
       );
       this.worker.onmessage = (event) => {
         const { type, payload } = event.data;

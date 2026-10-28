@@ -28,6 +28,7 @@ import {
 } from "./custom-element-security.js";
 import { sanitizeHtml } from "../utils/utils.js";
 import { CONFIG_KEYS } from "../config/config.js";
+import { resetRuntimeAssetBaseCache } from "../utils/runtime-assets.js";
 
 describe("custom-element-security", () => {
   beforeEach(() => {
@@ -716,6 +717,22 @@ describe("custom-element-security", () => {
       expect(csp).toContain("'unsafe-inline'");
       expect(csp).toContain("https://cdn.custom.com");
       expect(csp).not.toContain("'nonce-test-nonce'");
+    });
+
+    it("includes cross-origin runtime asset base origin in getIframeCsp script-src", () => {
+      resetRuntimeAssetBaseCache();
+      const meta = document.createElement("meta");
+      meta.name = "shadow-claw-asset-base";
+      meta.content = "https://unpkg.com/shadow-claw@1.59.2/dist/public/";
+      document.head.appendChild(meta);
+
+      try {
+        const csp = getIframeCsp("test-nonce");
+        expect(csp).toContain("https://unpkg.com");
+      } finally {
+        meta.remove();
+        resetRuntimeAssetBaseCache();
+      }
     });
 
     it("reads approved script descriptors from embedded site config script element", () => {

@@ -83,6 +83,7 @@ import { applyJsonPatch } from "../utils/json-patch.js";
 import { isPagePathAllowed } from "../utils/is-page-path-allowed.js";
 import { normalizeStringList } from "../utils/normalize-string-list.js";
 import { parseStoredStringList } from "../utils/parse-stored-string-list.js";
+import { getSiteConfig } from "../utils/site-config.js";
 import { ulid } from "../utils/ulid.js";
 import { toolsStore } from "./tools.js";
 
@@ -2762,12 +2763,7 @@ export class OrchestratorStore {
     }
 
     try {
-      const scriptEl = document.getElementById("shadow-claw-site-config");
-      if (!scriptEl?.textContent) {
-        return;
-      }
-
-      const config = JSON.parse(scriptEl.textContent);
+      const config = getSiteConfig();
       if (!config || typeof config !== "object") {
         return;
       }
@@ -2821,22 +2817,23 @@ export class OrchestratorStore {
         }
       }
 
-      const isSeeded = await getConfig(db, CONFIG_KEYS.SITE_CONFIG_SEEDED);
-      if (isSeeded) {
-        return;
-      }
-
       const allowedElements =
         config.allowedCustomElements ||
         (typeof customElConfig === "object" && !Array.isArray(customElConfig)
           ? customElConfig.allowedElements
           : undefined);
       if (allowedElements !== undefined) {
-        await setConfig(
+        const curElements = await getConfig(
           db,
           CONFIG_KEYS.ALLOWED_CUSTOM_ELEMENTS,
-          JSON.stringify(allowedElements),
         );
+        if (curElements === undefined || curElements === null) {
+          await setConfig(
+            db,
+            CONFIG_KEYS.ALLOWED_CUSTOM_ELEMENTS,
+            JSON.stringify(allowedElements),
+          );
+        }
       }
 
       const allowedDomains =
@@ -2845,11 +2842,17 @@ export class OrchestratorStore {
           ? customElConfig.allowedDomains
           : undefined);
       if (allowedDomains !== undefined) {
-        await setConfig(
+        const curDomains = await getConfig(
           db,
           CONFIG_KEYS.ALLOWED_CUSTOM_ELEMENT_HOST_PATTERNS,
-          JSON.stringify(allowedDomains),
         );
+        if (curDomains === undefined || curDomains === null) {
+          await setConfig(
+            db,
+            CONFIG_KEYS.ALLOWED_CUSTOM_ELEMENT_HOST_PATTERNS,
+            JSON.stringify(allowedDomains),
+          );
+        }
       }
 
       if (config.sidebar && typeof config.sidebar === "object") {
@@ -2861,35 +2864,50 @@ export class OrchestratorStore {
           defaultPage,
         } = config.sidebar;
         if (pagesHidden !== undefined) {
-          await setConfig(
-            db,
-            CONFIG_KEYS.SIDEBAR_PAGES_HIDDEN,
-            String(Boolean(pagesHidden)),
-          );
+          const cur = await getConfig(db, CONFIG_KEYS.SIDEBAR_PAGES_HIDDEN);
+          if (cur === undefined || cur === null) {
+            await setConfig(
+              db,
+              CONFIG_KEYS.SIDEBAR_PAGES_HIDDEN,
+              String(Boolean(pagesHidden)),
+            );
+          }
         }
         if (chatHidden !== undefined) {
-          await setConfig(
-            db,
-            CONFIG_KEYS.SIDEBAR_CHAT_HIDDEN,
-            String(Boolean(chatHidden)),
-          );
+          const cur = await getConfig(db, CONFIG_KEYS.SIDEBAR_CHAT_HIDDEN);
+          if (cur === undefined || cur === null) {
+            await setConfig(
+              db,
+              CONFIG_KEYS.SIDEBAR_CHAT_HIDDEN,
+              String(Boolean(chatHidden)),
+            );
+          }
         }
         if (tasksHidden !== undefined) {
-          await setConfig(
-            db,
-            CONFIG_KEYS.SIDEBAR_TASKS_HIDDEN,
-            String(Boolean(tasksHidden)),
-          );
+          const cur = await getConfig(db, CONFIG_KEYS.SIDEBAR_TASKS_HIDDEN);
+          if (cur === undefined || cur === null) {
+            await setConfig(
+              db,
+              CONFIG_KEYS.SIDEBAR_TASKS_HIDDEN,
+              String(Boolean(tasksHidden)),
+            );
+          }
         }
         if (filesHidden !== undefined) {
-          await setConfig(
-            db,
-            CONFIG_KEYS.SIDEBAR_FILES_HIDDEN,
-            String(Boolean(filesHidden)),
-          );
+          const cur = await getConfig(db, CONFIG_KEYS.SIDEBAR_FILES_HIDDEN);
+          if (cur === undefined || cur === null) {
+            await setConfig(
+              db,
+              CONFIG_KEYS.SIDEBAR_FILES_HIDDEN,
+              String(Boolean(filesHidden)),
+            );
+          }
         }
         if (defaultPage && typeof defaultPage === "string") {
-          await setConfig(db, CONFIG_KEYS.SIDEBAR_DEFAULT_PAGE, defaultPage);
+          const cur = await getConfig(db, CONFIG_KEYS.SIDEBAR_DEFAULT_PAGE);
+          if (!cur) {
+            await setConfig(db, CONFIG_KEYS.SIDEBAR_DEFAULT_PAGE, defaultPage);
+          }
         }
       }
 
@@ -2902,7 +2920,10 @@ export class OrchestratorStore {
           model,
         } = config.settings;
         if (assistantName && typeof assistantName === "string") {
-          await setConfig(db, CONFIG_KEYS.ASSISTANT_NAME, assistantName);
+          const cur = await getConfig(db, CONFIG_KEYS.ASSISTANT_NAME);
+          if (!cur) {
+            await setConfig(db, CONFIG_KEYS.ASSISTANT_NAME, assistantName);
+          }
         }
 
         const configuredProvider = defaultProvider ?? provider;
@@ -2940,15 +2961,21 @@ export class OrchestratorStore {
           config.settings.fullInternetAccess ??
           config.internetAccess;
         if (typeof allowInternet === "boolean") {
-          await setConfig(
+          const cur = await getConfig(
             db,
             CONFIG_KEYS.VM_BASH_FULL_INTERNET_ACCESS,
-            String(allowInternet),
           );
-          if (this.orchestrator) {
-            this.orchestrator.vmBashFullInternetAccess = allowInternet;
+          if (cur === undefined || cur === null) {
+            await setConfig(
+              db,
+              CONFIG_KEYS.VM_BASH_FULL_INTERNET_ACCESS,
+              String(allowInternet),
+            );
+            if (this.orchestrator) {
+              this.orchestrator.vmBashFullInternetAccess = allowInternet;
+            }
+            this._vmBashFullInternetAccess.set(allowInternet);
           }
-          this._vmBashFullInternetAccess.set(allowInternet);
         }
       }
 
@@ -2960,21 +2987,24 @@ export class OrchestratorStore {
         typeof defaultToolsProfile === "string" &&
         defaultToolsProfile.trim().length > 0
       ) {
-        const profileValue = defaultToolsProfile.trim();
-        if (profileValue.toLowerCase() === "none") {
-          await toolsStore.deactivateProfile(db);
-        } else {
-          const matchedProfile = toolsStore.profiles.find(
-            (p) =>
-              p.id.toLowerCase() === profileValue.toLowerCase() ||
-              p.name.toLowerCase() === profileValue.toLowerCase(),
-          );
-          if (matchedProfile) {
-            await toolsStore.activateProfile(db, matchedProfile.id);
+        const curProfile = await getConfig(db, CONFIG_KEYS.ACTIVE_TOOL_PROFILE);
+        if (!curProfile) {
+          const profileValue = defaultToolsProfile.trim();
+          if (profileValue.toLowerCase() === "none") {
+            await toolsStore.deactivateProfile(db);
           } else {
-            console.warn(
-              `Default tools profile "${profileValue}" specified in site-config was not found.`,
+            const matchedProfile = toolsStore.profiles.find(
+              (p) =>
+                p.id.toLowerCase() === profileValue.toLowerCase() ||
+                p.name.toLowerCase() === profileValue.toLowerCase(),
             );
+            if (matchedProfile) {
+              await toolsStore.activateProfile(db, matchedProfile.id);
+            } else {
+              console.warn(
+                `Default tools profile "${profileValue}" specified in site-config was not found.`,
+              );
+            }
           }
         }
       }
@@ -2982,11 +3012,17 @@ export class OrchestratorStore {
       if (config.pages && typeof config.pages === "object") {
         const { defaultPinnedPage } = config.pages;
         if (defaultPinnedPage && typeof defaultPinnedPage === "string") {
-          await setConfig(
+          const curPinned = await getConfig(
             db,
             CONFIG_KEYS.DEFAULT_PINNED_PAGE,
-            defaultPinnedPage,
           );
+          if (!curPinned) {
+            await setConfig(
+              db,
+              CONFIG_KEYS.DEFAULT_PINNED_PAGE,
+              defaultPinnedPage,
+            );
+          }
         }
       }
 
@@ -3001,23 +3037,31 @@ export class OrchestratorStore {
         config.denyList ??
         config.denylist;
       if (Array.isArray(rawAllowList)) {
-        const allowList = normalizeStringList(rawAllowList.map(String));
-        this._pagesAllowList.set(allowList);
-        await setConfig(
-          db,
-          CONFIG_KEYS.PAGES_ALLOW_LIST,
-          JSON.stringify(allowList),
-        );
+        const curAllow = await getConfig(db, CONFIG_KEYS.PAGES_ALLOW_LIST);
+        if (curAllow === undefined || curAllow === null) {
+          const allowList = normalizeStringList(rawAllowList.map(String));
+          this._pagesAllowList.set(allowList);
+          await setConfig(
+            db,
+            CONFIG_KEYS.PAGES_ALLOW_LIST,
+            JSON.stringify(allowList),
+          );
+        }
       }
       if (Array.isArray(rawDenyList)) {
-        const denyList = normalizeStringList(rawDenyList.map(String));
-        this._pagesDenyList.set(denyList);
-        await setConfig(
-          db,
-          CONFIG_KEYS.PAGES_DENY_LIST,
-          JSON.stringify(denyList),
-        );
+        const curDeny = await getConfig(db, CONFIG_KEYS.PAGES_DENY_LIST);
+        if (curDeny === undefined || curDeny === null) {
+          const denyList = normalizeStringList(rawDenyList.map(String));
+          this._pagesDenyList.set(denyList);
+          await setConfig(
+            db,
+            CONFIG_KEYS.PAGES_DENY_LIST,
+            JSON.stringify(denyList),
+          );
+        }
       }
+
+      await setConfig(db, CONFIG_KEYS.SITE_CONFIG_SEEDED, "true");
 
       // Filter existing pages if any denied pages were previously saved
       const currentPages = this._pages.get();

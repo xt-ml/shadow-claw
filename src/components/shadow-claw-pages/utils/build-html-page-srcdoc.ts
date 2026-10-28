@@ -3,6 +3,7 @@ import {
   applyBasePath,
   getFileRouteDirPath,
 } from "../../../core/app-routes.js";
+import { resolveRuntimeAsset } from "../../../utils/runtime-assets.js";
 import { rewriteWorkspacePreviewHtml } from "./rewrite-workspace-preview-html.js";
 import { sanitizeSrcdocHtml } from "../../../security/trusted-types.js";
 import {
@@ -80,10 +81,10 @@ export async function buildHtmlPageSrcdoc({
 
   // Nonce-gated CSP: only the bridge script and approved custom element scripts may run.
   const nonce = crypto.randomUUID().replace(/-/g, "");
-  const bridgeScriptUrl = applyBasePath(
+  const bridgeScriptUrl = resolveRuntimeAsset(
     "/assets/file-viewer-preview-bridge.js",
   );
-  const storageBridgeScriptUrl = applyBasePath(
+  const storageBridgeScriptUrl = resolveRuntimeAsset(
     "/assets/iframe-storage-bridge.js",
   );
 

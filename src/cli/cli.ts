@@ -134,6 +134,11 @@ program
     "Copy entire assets/ directory into output",
     false,
   )
+  .option(
+    "--single-file",
+    "Bundle static pages, configuration, and theme into a standalone single-file index.html",
+    false,
+  )
   .optionsGroup("Path & Routing Options:")
   .option(
     "--origin <url>",
@@ -165,6 +170,7 @@ program
         basePath: options.basePath || process.env.PAGES_BASE_PATH,
         prerenderPages: options.prerenderPages,
         copyAllAssets: options.copyAllAssets,
+        singleFile: Boolean(options.singleFile),
       });
     } catch (err) {
       console.error("Build failed:", err);

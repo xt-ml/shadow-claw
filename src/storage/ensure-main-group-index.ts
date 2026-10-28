@@ -58,6 +58,24 @@ export async function ensureMainGroupIndex(
     const exists = await groupFileExists(db, groupId, "index.html");
 
     if (exists) {
+      if (groupId === DEFAULT_GROUP_ID) {
+        try {
+          const { readGroupFile } = await import("./read-group-file.js");
+          const existingText = await readGroupFile(db, groupId, "index.html");
+          if (
+            typeof existingText === "string" &&
+            (existingText.includes("<shadow-claw") ||
+              existingText.includes("data-shadow-claw-dsd"))
+          ) {
+            await writeGroupFile(
+              db,
+              groupId,
+              "index.html",
+              customContent ?? DEFAULT_MAIN_GROUP_INDEX_CONTENT,
+            );
+          }
+        } catch {}
+      }
       return true;
     }
 
@@ -73,7 +91,13 @@ export async function ensureMainGroupIndex(
       try {
         const res = await fetch(resolveStaticMainGroupIndexUrl());
         if (res.ok) {
-          content = await res.text();
+          const text = await res.text();
+          if (
+            !text.includes("<shadow-claw") &&
+            !text.includes("data-shadow-claw-dsd")
+          ) {
+            content = text;
+          }
         }
       } catch {
         // Fetch failed or unavailable, fallback to default

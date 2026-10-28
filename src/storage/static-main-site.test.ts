@@ -141,6 +141,7 @@ describe("staticMainSite", () => {
   it("fetches static main manifest via fetchStaticMainManifest", async () => {
     mockFetch.mockResolvedValue({
       ok: true,
+      headers: new Headers({ "content-type": "application/json" }),
       json: async () => ({
         pages: [{ displayPath: "posts/remote.md", content: "# Remote" }],
       }),
@@ -149,6 +150,91 @@ describe("staticMainSite", () => {
     const manifest = await fetchStaticMainManifest();
     expect(manifest?.pages).toHaveLength(1);
     expect(manifest?.pages[0].displayPath).toBe("posts/remote.md");
+  });
+
+  it("rejects SPA dev server fallback returning text/html in fetchStaticMainManifest", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ "content-type": "text/html; charset=utf-8" }),
+      json: async () => ({}),
+    });
+
+    const manifest = await fetchStaticMainManifest();
+    expect(manifest).toBeNull();
+  });
+
+  it("rejects SPA dev server fallback returning text/html in fetchStaticMainFile", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ "content-type": "text/html" }),
+      text: async () =>
+        "<!doctype html><html><body><shadow-claw></shadow-claw></body></html>",
+    });
+
+    const content = await fetchStaticMainFile("about.md");
+    expect(content).toBeNull();
+  });
+
+  it("rejects SPA outer app shell content in fetchStaticMainFile", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ "content-type": "text/plain" }),
+      text: async () =>
+        '<shadow-claw data-shadow-claw-dsd="true">...</shadow-claw>',
+    });
+
+    const content = await fetchStaticMainFile("about.md");
+    expect(content).toBeNull();
+  });
+
+  it("discovers inline markdown script tags in getStaticMainManifest", async () => {
+    const inlineScript = document.createElement("script");
+    inlineScript.type = "text/markdown";
+    inlineScript.setAttribute(
+      "data-shadow-claw-page",
+      "guides/getting-started.md",
+    );
+    inlineScript.textContent = "# Getting Started\nWelcome to ShadowClaw!";
+    document.body.appendChild(inlineScript);
+
+    try {
+      const manifest = await getStaticMainManifest();
+      const page = manifest.pages.find(
+        (p) => p.displayPath === "guides/getting-started.md",
+      );
+      expect(page).toBeDefined();
+      expect(page?.content).toBe("# Getting Started\nWelcome to ShadowClaw!");
+    } finally {
+      inlineScript.remove();
+    }
+  });
+
+  it("discovers sidecar pages and custom baseUrl from site-config", async () => {
+    const configScript = document.createElement("script");
+    configScript.id = "shadow-claw-site-config";
+    configScript.type = "application/json";
+    configScript.textContent = JSON.stringify({
+      pages: {
+        baseUrl: "docs/",
+        files: ["intro.md", "architecture.md"],
+      },
+    });
+    document.head.appendChild(configScript);
+
+    try {
+      const manifest = await getStaticMainManifest();
+      expect(manifest.pages.some((p) => p.displayPath === "intro.md")).toBe(
+        true,
+      );
+      expect(
+        manifest.pages.some((p) => p.displayPath === "architecture.md"),
+      ).toBe(true);
+
+      const url = resolveStaticMainFileUrl("intro.md");
+      expect(url).toContain("docs/intro.md");
+    } finally {
+      configScript.remove();
+    }
   });
 
   it("getStaticPageContent checks embedded script first, then static-main file, then remote manifest", async () => {

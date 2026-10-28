@@ -106,7 +106,25 @@ export function resolveStaticMainManifestUrl(): string {
 
 export function resolveStaticMainFileUrl(displayPath: string): string {
   const cleanPath = displayPath.replace(/^\/+/, "");
-  const targetPath = applyBasePath(`/${STATIC_MAIN_DIR}/${cleanPath}`);
+  let baseDir: string = STATIC_MAIN_DIR;
+
+  if (typeof document !== "undefined") {
+    try {
+      const scriptEl = document.getElementById("shadow-claw-site-config");
+      if (scriptEl?.textContent) {
+        const config = JSON.parse(scriptEl.textContent);
+        if (typeof config?.pages?.baseUrl === "string") {
+          baseDir = config.pages.baseUrl
+            .replace(/^\/+/, "")
+            .replace(/\/+$/, "");
+        }
+      }
+    } catch {}
+  }
+
+  const targetPath = baseDir
+    ? applyBasePath(`/${baseDir}/${cleanPath}`)
+    : applyBasePath(`/${cleanPath}`);
 
   if (typeof window !== "undefined" && window.location?.origin) {
     try {
@@ -128,6 +146,10 @@ export async function fetchStaticMainManifest(): Promise<StaticMainManifest | nu
     const url = resolveStaticMainManifestUrl();
     const res = await fetch(url);
     if (res.ok) {
+      const contentType = res.headers?.get?.("content-type") || "";
+      if (contentType.includes("text/html")) {
+        return null;
+      }
       const parsed = await res.json();
       if (parsed && Array.isArray(parsed.pages)) {
         return parsed as StaticMainManifest;
@@ -151,7 +173,23 @@ export async function fetchStaticMainFile(
     const url = resolveStaticMainFileUrl(displayPath);
     const res = await fetch(url);
     if (res.ok) {
-      return await res.text();
+      const contentType = res.headers?.get?.("content-type") || "";
+      if (
+        (displayPath.endsWith(".md") ||
+          displayPath.endsWith(".markdown") ||
+          displayPath.endsWith(".json")) &&
+        contentType.includes("text/html")
+      ) {
+        return null;
+      }
+      const text = await res.text();
+      if (
+        text.includes("<shadow-claw") ||
+        text.includes("data-shadow-claw-dsd")
+      ) {
+        return null;
+      }
+      return text;
     }
   } catch {
     // Fetch failed or unavailable
@@ -164,21 +202,67 @@ export async function getStaticMainManifest(
   options: { preferEmbedded?: boolean; fetchFallback?: boolean } = {},
 ): Promise<StaticMainManifest> {
   const parseEmbedded = (): StaticMainManifest | null => {
+    let manifest: StaticMainManifest | null = null;
     if (typeof document !== "undefined") {
       const scriptEl = document.getElementById("shadow-claw-static-manifest");
       if (scriptEl && scriptEl.textContent) {
         try {
           const parsed = JSON.parse(scriptEl.textContent);
           if (parsed && Array.isArray(parsed.pages)) {
-            return parsed as StaticMainManifest;
+            manifest = { ...parsed, pages: [...parsed.pages] };
           }
         } catch (err) {
           console.warn("Failed to parse embedded static main manifest:", err);
         }
       }
+
+      // Discover inline markdown pages: <script type="text/markdown" data-shadow-claw-page="...">
+      const inlinePageEls = document.querySelectorAll<HTMLScriptElement>(
+        'script[type="text/markdown"][data-shadow-claw-page]',
+      );
+      if (inlinePageEls.length > 0) {
+        if (!manifest) {
+          manifest = { pages: [] };
+        }
+        for (const el of Array.from(inlinePageEls)) {
+          const pagePath = el.getAttribute("data-shadow-claw-page")?.trim();
+          if (pagePath) {
+            const content = el.textContent || "";
+            const existingIndex = manifest.pages.findIndex(
+              (p) => p.displayPath === pagePath,
+            );
+            if (existingIndex >= 0) {
+              manifest.pages[existingIndex].content = content;
+            } else {
+              manifest.pages.push({ displayPath: pagePath, content });
+            }
+          }
+        }
+      }
+
+      // Discover sidecar directory pages configured via pages.files
+      const configScript = document.getElementById("shadow-claw-site-config");
+      if (configScript?.textContent) {
+        try {
+          const config = JSON.parse(configScript.textContent);
+          if (Array.isArray(config?.pages?.files)) {
+            if (!manifest) {
+              manifest = { pages: [] };
+            }
+            for (const file of config.pages.files) {
+              if (typeof file === "string" && file.trim()) {
+                const filePath = file.trim();
+                if (!manifest.pages.some((p) => p.displayPath === filePath)) {
+                  manifest.pages.push({ displayPath: filePath, content: "" });
+                }
+              }
+            }
+          }
+        } catch {}
+      }
     }
 
-    return null;
+    return manifest;
   };
   if (options.preferEmbedded !== false) {
     const embedded = parseEmbedded();

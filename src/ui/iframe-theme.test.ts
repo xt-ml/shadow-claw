@@ -5,6 +5,7 @@ import {
   resolveThemeStylesheetHref,
 } from "./iframe-theme.js";
 import { resetAppBasePathCache } from "../core/app-routes.js";
+import { resetSiteConfigCache } from "../utils/site-config.js";
 
 describe("iframe-theme utility", () => {
   afterEach(() => {
@@ -13,10 +14,18 @@ describe("iframe-theme utility", () => {
     if (existing) {
       existing.remove();
     }
+    const themeStyle = document.getElementById("shadow-claw-theme");
+    if (themeStyle) {
+      themeStyle.remove();
+    }
+    document
+      .querySelectorAll("style[data-shadow-claw-theme], #custom-theme")
+      .forEach((s) => s.remove());
     document
       .querySelectorAll("base[data-test-base]")
       .forEach((b) => b.remove());
     resetAppBasePathCache();
+    resetSiteConfigCache();
   });
 
   it("returns light-mode class and styles by default when dark-mode is absent", () => {
@@ -126,6 +135,45 @@ describe("iframe-theme utility", () => {
 
       expect(getIframeThemeStylesheetLink()).toBe(
         '<link rel="stylesheet" href="/pages/main/theme.css">',
+      );
+    });
+
+    it("returns inline style element when #shadow-claw-theme is present in document", () => {
+      const style = document.createElement("style");
+      style.id = "shadow-claw-theme";
+      style.textContent = ":root { --custom-accent: #ff00ff; }";
+      document.head.appendChild(style);
+
+      expect(getIframeThemeStylesheetLink()).toBe(
+        '<style data-theme-style="true">:root { --custom-accent: #ff00ff; }</style>',
+      );
+    });
+
+    it("reads custom inline theme style element when theme.styleElement is configured", () => {
+      const style = document.createElement("style");
+      style.id = "custom-theme";
+      style.textContent = ".custom { color: red; }";
+      document.head.appendChild(style);
+
+      expect(
+        getIframeThemeStylesheetLink({
+          theme: { styleElement: "custom-theme" },
+        }),
+      ).toBe('<style data-theme-style="true">.custom { color: red; }</style>');
+    });
+
+    it("returns both inline style and stylesheet link when both are present", () => {
+      const style = document.createElement("style");
+      style.id = "shadow-claw-theme";
+      style.textContent = ".inline { color: blue; }";
+      document.head.appendChild(style);
+
+      expect(
+        getIframeThemeStylesheetLink({
+          theme: { stylesheet: "pages/main/theme.css" },
+        }),
+      ).toBe(
+        '<style data-theme-style="true">.inline { color: blue; }</style><link rel="stylesheet" href="/pages/main/theme.css">',
       );
     });
   });

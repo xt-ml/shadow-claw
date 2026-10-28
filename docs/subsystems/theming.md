@@ -55,6 +55,15 @@ Setting `branding.logoSlotHtml` to `"none"`, `""`, or `null` strips the default 
   - Custom paths such as `pages/main/theme.css` retain their posix path relative to `<base href="/">`.
   - External stylesheets starting with `http://`, `https://`, or `//` are preserved verbatim.
 
+### Inline Theme Stylesheets (`<style id="shadow-claw-theme">`)
+
+For standalone single-file applications and embedded custom element deployments, custom theme styles and utility classes can be declared inline without requiring external `.css` files:
+
+- **Host Document Declaration**: Place a `<style id="shadow-claw-theme">` (or `<style data-shadow-claw-theme>`) block in the `<head>` of your document.
+- **Custom Style ID**: If using an alternate element ID, declare `"theme": { "styleElement": "my-custom-theme-id" }` in your site configuration.
+- **Shadow DOM Injection**: `<shadow-claw-pages>` automatically inspects the document for the theme style element and injects it as `<style data-theme-style="true">` into its shadow root.
+- **Preview Iframe Propagation**: `getIframeThemeStylesheetLink()` emits the inline theme styles directly into sandboxed preview iframe srcdocs (file viewer and HTML pages previews) so custom classes, typography, and dark/light color schemes remain synchronized without network requests.
+
 ---
 
 ## CSS Custom Properties (Theme Tokens)

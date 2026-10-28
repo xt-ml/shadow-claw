@@ -651,4 +651,56 @@ describe("build without and with pages", () => {
       await rm(tempConsumerRoot, { recursive: true, force: true });
     }
   });
+
+  it("builds a single-file bundle embedding pages and theme with singleFile: true", async () => {
+    const tempConsumerRoot = await mkdtemp(
+      path.join(os.tmpdir(), "shadow-claw-single-file-build-"),
+    );
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      await writeFile(
+        path.join(tempConsumerRoot, "shadow-claw.config.json"),
+        JSON.stringify({
+          site: { title: "Single File Hub" },
+        }),
+        "utf8",
+      );
+
+      const mainDir = path.join(tempConsumerRoot, "pages/main");
+      await mkdir(mainDir, { recursive: true });
+      await writeFile(
+        path.join(mainDir, "about.md"),
+        "# About Single File\n\nStandalone single-file markdown content.",
+        "utf8",
+      );
+      await writeFile(
+        path.join(mainDir, "theme.css"),
+        ":root { --single-file-accent: #00ff00; }",
+        "utf8",
+      );
+
+      await runConsumerBuild({
+        contentRoot: tempConsumerRoot,
+        toolchainRoot: tempProjectRoot,
+        isProduction: false,
+        quiet: true,
+        stdio: "pipe",
+        singleFile: true,
+      });
+
+      const indexHtml = await readFile(
+        path.join(tempConsumerRoot, "dist/public/index.html"),
+        "utf8",
+      );
+      expect(indexHtml).toContain("Single File Hub");
+      expect(indexHtml).toContain('id="shadow-claw-theme"');
+      expect(indexHtml).toContain("--single-file-accent: #00ff00;");
+      expect(indexHtml).toContain('data-shadow-claw-page="about.md"');
+      expect(indexHtml).toContain("Standalone single-file markdown content.");
+    } finally {
+      logSpy.mockRestore();
+      await rm(tempConsumerRoot, { recursive: true, force: true });
+    }
+  });
 });

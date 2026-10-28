@@ -1,0 +1,3 @@
+# Ignore precompressed assets in npm package
+**/*.gz
+**/*.br

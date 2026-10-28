@@ -13,6 +13,10 @@ import {
 
 import { getDOMPurify } from "./iframe-sanitizer.js";
 import { toTrustedScriptUrl } from "./trusted-types.js";
+import {
+  getRuntimeAssetBase,
+  isCrossOriginAsset,
+} from "../utils/runtime-assets.js";
 
 import type { Config } from "dompurify";
 import type { ShadowClawDatabase } from "../db/types.js";
@@ -83,6 +87,14 @@ export function getIframeCsp(nonce: string): string {
           : "http://localhost",
       );
       allowedScriptHosts.add(parsed.origin);
+    } catch {}
+  }
+
+  const assetBase = getRuntimeAssetBase();
+  if (isCrossOriginAsset(assetBase)) {
+    try {
+      const parsedBase = new URL(assetBase);
+      allowedScriptHosts.add(parsedBase.origin);
     } catch {}
   }
 

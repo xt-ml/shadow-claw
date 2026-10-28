@@ -55,6 +55,39 @@ During store initialization, `seedStaticMainSite()` seeds default pages from the
 4. **Suppression & Deletion Respect**: Ensures `index.html`, `MEMORY.md`, and default static workspace pages exist unless marked as suppressed. Subsequent reloads skip redundant re-seeding unless storage is cleared or a deployment purge is triggered via `purgeId`. Note that pages containing the `--purge-pages` flag are excluded from DSD pre-rendering and production static site manifests.
 5. **Allow & Deny List Filtering**: Pages and directories configured in `pages.allowList` or `pages.denyList` (or their root counterparts in `shadow-claw.config.json`) are filtered during build-time DSD pre-rendering and runtime static main site seeding. Files placed on `denyList` (such as `pages/main/sidebar.html`) continue to exist on disk and serve other roles (like custom slotted sidebars) while being excluded from the pages viewer, list, and swipe cycling.
 
+### Standalone & Single-File Pages Tiers
+
+To support zero-shim single-file applications and static hosting without directory-listing capabilities, ShadowClaw supports three authoring and publishing tiers:
+
+1. **Tier 1: Inline Markdown Scripts (True Single-File)**
+   - Markdown documents can be embedded directly in the HTML document using `<script type="text/markdown" data-shadow-claw-page="path/to/page.md">` tags.
+   - `getStaticMainManifest()` automatically discovers these script elements on initial load and inserts them into the runtime pages manifest without requiring separate files or JSON escaping.
+   - Example:
+     ```html
+     <script type="text/markdown" data-shadow-claw-page="guide.md">
+       # User Guide
+
+       Welcome to the standalone guide.
+     </script>
+     ```
+
+2. **Tier 2: Sidecar `pages/` Directory via Configuration**
+   - Static file hosts and object stores cannot list directory contents via HTTP. To deploy static sidecar markdown files alongside a single HTML file without pre-compiling an embedded manifest, declare the files in `shadow-claw-site-config`:
+     ```json
+     {
+       "pages": {
+         "baseUrl": "pages/",
+         "files": ["about.md", "guide/intro.md"]
+       }
+     }
+     ```
+   - `getStaticMainManifest()` seeds page references from `pages.files`, and `resolveStaticMainFileUrl()` lazy-fetches content using the configurable `pages.baseUrl`.
+
+3. **Tier 3: Folder Authoring with Single-File Compilation (`shadow-claw build --single-file`)**
+   - Author site content using standard folder structures (`pages/main/*.md`, `theme.css`, `shadow-claw.config.json`).
+   - Run `shadow-claw build --single-file` to compile all pages, theme stylesheets, and configuration into a single standalone `index.html`.
+   - The compiler automatically inlines markdown pages as `<script type="text/markdown" data-shadow-claw-page="...">` elements and theme stylesheets as `<style id="shadow-claw-theme">`.
+
 ### Page Suppression (`src/storage/suppressed-pages.ts`)
 
 To prevent deleted static pages from re-appearing on reload:

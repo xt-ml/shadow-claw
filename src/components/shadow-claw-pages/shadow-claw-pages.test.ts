@@ -221,6 +221,25 @@ describe("shadow-claw-pages", () => {
     expect(srcdoc).toContain("font-family: var(--shadow-claw-font-mono);");
   });
 
+  it("injects inline theme stylesheet from #shadow-claw-theme into shadowRoot", () => {
+    const style = document.createElement("style");
+    style.id = "shadow-claw-theme";
+    style.textContent = ":root { --theme-test: #123456; }";
+    document.head.appendChild(style);
+
+    const component = new ShadowClawPages();
+    document.body.appendChild(component);
+
+    const themeEl = component.shadowRoot?.querySelector(
+      "style[data-theme-style]",
+    );
+    expect(themeEl).not.toBeNull();
+    expect(themeEl?.textContent).toBe(":root { --theme-test: #123456; }");
+
+    component.remove();
+    style.remove();
+  });
+
   it("inlines workspace-route html image variants", async () => {
     const component = new ShadowClawPages();
 

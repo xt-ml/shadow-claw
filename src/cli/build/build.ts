@@ -12,8 +12,12 @@ import { getPublishCopyPlan } from "./utils/get-publish-copy-plan.js";
 import { getRoutesCandidates } from "./utils/get-routes-candidates.js";
 import { getSiteConfigCandidates } from "./utils/get-site-config-candidates.js";
 import { resolveBuildFlags } from "./utils/resolve-build-flags.js";
-import { prerenderDsdShell } from "../prerender/dsd-shell/prerender-dsd-shell.js";
+import {
+  collectPageSources,
+  prerenderDsdShell,
+} from "../prerender/dsd-shell/prerender-dsd-shell.js";
 import { prerenderPrettyPaths } from "../prerender/pretty-paths/prerender-pretty-paths.js";
+import { insertBeforeClosingHead } from "../prerender/utils/insert-before-closing-head.js";
 import {
   applySiteConfig,
   patchBaseHref,
@@ -47,6 +51,7 @@ export interface RunBuildOptions {
   outDir?: string;
   pagesOrigin?: string;
   basePath?: string;
+  singleFile?: boolean;
 }
 
 export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
@@ -869,6 +874,58 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
           err,
         );
       }
+    }
+  }
+
+  // 13. Single-file bundle post-processing
+  if (options.singleFile) {
+    if (!isQuiet) {
+      log("Embedding pages and theme for single-file distribution...");
+    }
+    const idxPath = join(distPublicDir, "index.html");
+    if (await pathExists(idxPath)) {
+      let idxHtml = await readFile(idxPath, "utf8");
+
+      // 1. Discover and embed theme CSS
+      const themeCssCandidate = await findFirstExistingPath([
+        join(mainSourcePath, "theme.css"),
+        join(contentRoot, "pages/main/theme.css"),
+        join(contentRoot, "pages/theme.css"),
+        join(contentRoot, "theme.css"),
+      ]);
+      if (themeCssCandidate) {
+        try {
+          const themeCss = await readFile(themeCssCandidate, "utf8");
+          if (themeCss.trim() && !idxHtml.includes('id="shadow-claw-theme"')) {
+            const styleTag = `<style id="shadow-claw-theme">\n${themeCss.trim()}\n</style>`;
+            idxHtml = insertBeforeClosingHead(idxHtml, `  ${styleTag}`);
+          }
+        } catch {}
+      }
+
+      // 2. Discover and embed markdown pages
+      if (await pathExists(mainSourcePath)) {
+        try {
+          const pageSources = await collectPageSources(mainSourcePath);
+          const scriptsToInject: string[] = [];
+          for (const page of pageSources) {
+            if (page.absolutePath && (await pathExists(page.absolutePath))) {
+              const content = await readFile(page.absolutePath, "utf8");
+              scriptsToInject.push(
+                `<script type="text/markdown" data-shadow-claw-page="${page.displayPath}">\n${content}\n</script>`,
+              );
+            }
+          }
+          if (scriptsToInject.length > 0) {
+            idxHtml = insertBeforeClosingHead(
+              idxHtml,
+              `  ${scriptsToInject.join("\n  ")}`,
+            );
+          }
+        } catch {}
+      }
+
+      await writeFile(idxPath, idxHtml, "utf8");
     }
   }
 

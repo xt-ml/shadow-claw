@@ -1,4 +1,5 @@
 import { applyBasePath } from "../core/app-routes.js";
+import { getSiteConfig } from "../utils/site-config.js";
 
 /**
  * Prefixes whose contents are flattened into the distribution root.
@@ -25,39 +26,52 @@ export function resolveThemeStylesheetHref(stylesheet: string): string {
 }
 
 /**
- * Generates an optional `<link rel="stylesheet">` tag for the preview iframe
- * only when a theme stylesheet is explicitly configured in site configuration.
- * When not configured, returns an empty string to avoid 404 requests.
+ * Generates an optional `<style>` or `<link rel="stylesheet">` tag for the preview iframe
+ * when an inline theme or theme stylesheet is configured.
+ * When neither is configured, returns an empty string to avoid 404 requests.
  */
 export function getIframeThemeStylesheetLink(siteConfig?: unknown): string {
-  let stylesheet: string | undefined;
+  let config = siteConfig;
+  if (!config && typeof document !== "undefined") {
+    config = getSiteConfig();
+  }
 
-  if (siteConfig && typeof siteConfig === "object") {
-    const rawTheme = (siteConfig as { theme?: { stylesheet?: unknown } }).theme;
+  let inlineThemeStyleText: string | undefined;
+  if (typeof document !== "undefined") {
+    let styleElementId = "shadow-claw-theme";
+    if (config && typeof config === "object") {
+      const customId = (config as { theme?: { styleElement?: unknown } }).theme
+        ?.styleElement;
+      if (typeof customId === "string" && customId.trim()) {
+        styleElementId = customId.trim();
+      }
+    }
+    const inlineStyle =
+      document.getElementById(styleElementId) ||
+      document.querySelector("style[data-shadow-claw-theme]");
+    if (inlineStyle?.textContent) {
+      inlineThemeStyleText = inlineStyle.textContent;
+    }
+  }
+
+  let stylesheet: string | undefined;
+  if (config && typeof config === "object") {
+    const rawTheme = (config as { theme?: { stylesheet?: unknown } }).theme;
     if (
       typeof rawTheme?.stylesheet === "string" &&
       rawTheme.stylesheet.trim()
     ) {
       stylesheet = rawTheme.stylesheet.trim();
     }
-  } else if (typeof document !== "undefined") {
-    const configScript = document.getElementById("shadow-claw-site-config");
-    if (configScript?.textContent) {
-      try {
-        const config = JSON.parse(configScript.textContent);
-        const rawTheme = config?.theme;
-        if (
-          typeof rawTheme?.stylesheet === "string" &&
-          rawTheme.stylesheet.trim()
-        ) {
-          stylesheet = rawTheme.stylesheet.trim();
-        }
-      } catch {}
-    }
+  }
+
+  let result = "";
+  if (inlineThemeStyleText) {
+    result += `<style data-theme-style="true">${inlineThemeStyleText}</style>`;
   }
 
   if (!stylesheet) {
-    return "";
+    return result;
   }
 
   const isExternal =
@@ -66,7 +80,7 @@ export function getIframeThemeStylesheetLink(siteConfig?: unknown): string {
     stylesheet.startsWith("//");
 
   if (isExternal) {
-    return `<link rel="stylesheet" href="${stylesheet}">`;
+    return `${result}<link rel="stylesheet" href="${stylesheet}">`;
   }
 
   // Runtime links must be site-root absolute (with the deployment base path):
@@ -76,7 +90,7 @@ export function getIframeThemeStylesheetLink(siteConfig?: unknown): string {
     /^\/+/,
     "",
   );
-  return `<link rel="stylesheet" href="${applyBasePath(`/${resolvedHref}`)}">`;
+  return `${result}<link rel="stylesheet" href="${applyBasePath(`/${resolvedHref}`)}">`;
 }
 
 /**

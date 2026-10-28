@@ -12,7 +12,7 @@ import { getConfig } from "../../../db/get-config.js";
 import { deleteRoom, getRoomMetadata, upsertRoom } from "../../../db/rooms.js";
 import { setConfig } from "../../../db/set-config.js";
 
-import { toTrustedScriptUrl } from "../../../security/trusted-types.js";
+import { createModuleWorker } from "../../../utils/runtime-assets.js";
 import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { RoomManager } from "../../../subsystems/channels/room-manager.js";
 import { setWebMcpMode as applyWebMcpMode } from "../../../subsystems/mcp/webmcp.js";
@@ -415,13 +415,8 @@ export async function initWorkerAndScheduler(
   orchestrator: Orchestrator,
   db: ShadowClawDatabase,
 ): Promise<void> {
-  orchestrator.agentWorker = new Worker(
-    toTrustedScriptUrl(
-      new URL("./agent.worker.js", import.meta.url).href,
-    ) as string,
-    {
-      type: "module",
-    },
+  orchestrator.agentWorker = createModuleWorker(
+    new URL("./agent.worker.js", import.meta.url).href,
   );
 
   orchestrator.agentWorker.onmessage = (event) =>

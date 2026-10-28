@@ -40,6 +40,7 @@ import { toolsStore } from "../../stores/tools.js";
 
 import { showError, showSuccess } from "../../ui/toast.js";
 import { getIframeThemeStylesheetLink } from "../../ui/iframe-theme.js";
+import { getSiteConfig } from "../../utils/site-config.js";
 
 import {
   getNamespacedItem,
@@ -1972,7 +1973,35 @@ export class ShadowClawPages extends ShadowClawElement {
 
   private ensureThemeStylesheet(): void {
     const root = this.shadowRoot;
-    if (!root || root.querySelector("link[data-theme-stylesheet]")) {
+    if (!root) {
+      return;
+    }
+
+    if (
+      !root.querySelector("style[data-theme-style]") &&
+      typeof document !== "undefined"
+    ) {
+      const config = getSiteConfig(this);
+      let styleElementId = "shadow-claw-theme";
+      if (config && typeof config === "object") {
+        const customId = (config as { theme?: { styleElement?: unknown } })
+          .theme?.styleElement;
+        if (typeof customId === "string" && customId.trim()) {
+          styleElementId = customId.trim();
+        }
+      }
+      const inlineStyle =
+        document.getElementById(styleElementId) ||
+        document.querySelector("style[data-shadow-claw-theme]");
+      if (inlineStyle?.textContent) {
+        const style = document.createElement("style");
+        style.setAttribute("data-theme-style", "true");
+        style.textContent = inlineStyle.textContent;
+        root.appendChild(style);
+      }
+    }
+
+    if (root.querySelector("link[data-theme-stylesheet]")) {
       return;
     }
 

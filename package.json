@@ -1,6 +1,6 @@
 {
   "name": "shadow-claw",
-  "version": "1.59.2",
+  "version": "1.59.3",
   "type": "module",
   "license": "AGPL-3.0",
   "description": "ShadowClaw - multi-runtime AI assistant.",
@@ -43,9 +43,10 @@
     ".well-known",
     "bin",
     "dist",
+    "!dist/**/*.gz",
+    "!dist/**/*.br",
     "assets",
     "share",
-    "src",
     "README.md",
     "LICENSE"
   ],

@@ -9,13 +9,56 @@ export interface PostFrontmatter {
 }
 
 /**
+ * Dedents text if it has uniform leading whitespace (e.g. when embedded in an indented HTML script tag).
+ */
+export function dedentLeadingWhitespace(text: string): string {
+  if (!text) {
+    return "";
+  }
+  const leadingMatch = text.match(/^\r?\n([ \t]+)/);
+  if (leadingMatch) {
+    const indent = leadingMatch[1];
+    const regex = new RegExp(`^[ \\t]{1,${indent.length}}`, "gm");
+    return text
+      .replace(/^\r?\n/, "")
+      .replace(regex, "")
+      .replace(/\r?\n[ \t]*$/, "\n");
+  }
+  if (/^(?:\r?\n)+[ \t]*---/.test(text)) {
+    return text.replace(/^(?:\r?\n)+/, "");
+  }
+  if (/^[ \t]+---/.test(text)) {
+    const indentMatch = text.match(/^[ \t]+/);
+    if (indentMatch) {
+      const indent = indentMatch[0];
+      const regex = new RegExp(`^[ \\t]{1,${indent.length}}`, "gm");
+      return text.replace(regex, "");
+    }
+  }
+  return text;
+}
+
+/**
  * Parse YAML frontmatter from markdown text.
  */
 export function splitFrontmatter(src: string): {
   data: PostFrontmatter;
   content: string;
 } {
-  const parsed = matter(src);
+  let parsed = matter(src);
+
+  // If gray-matter failed to parse frontmatter but the content starts with '---'
+  // (possibly indented or with leading newlines/whitespace), retry after dedenting/trimming.
+  if (
+    (!parsed.data || Object.keys(parsed.data).length === 0) &&
+    src.trimStart().startsWith("---")
+  ) {
+    const dedented = dedentLeadingWhitespace(src).trimStart();
+    const retry = matter(dedented);
+    if (retry.data && Object.keys(retry.data).length > 0) {
+      parsed = retry;
+    }
+  }
 
   const data =
     parsed.data && typeof parsed.data === "object"

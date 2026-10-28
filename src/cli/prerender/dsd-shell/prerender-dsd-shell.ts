@@ -105,6 +105,8 @@ export interface PrerenderDsdShellOptions {
   siteConfig?: any;
   sortOrder?: "asc" | "desc";
   silent?: boolean;
+  isProduction?: boolean;
+  singleFile?: boolean;
 }
 
 const SHADOW_CLAW_TEMPLATE_START =
@@ -983,11 +985,26 @@ export function markNoSeedPrerenderHost(indexHtml: string): string {
   );
 }
 
+export interface InlineCriticalAssetsOptions {
+  isProduction?: boolean;
+  singleFile?: boolean;
+}
+
 export async function inlineCriticalAssets(
   html: string,
   publicDir: string,
+  options?: InlineCriticalAssetsOptions,
 ): Promise<string> {
-  if (process.env.NODE_ENV !== "production") {
+  if (options?.singleFile) {
+    return html;
+  }
+
+  const isProduction =
+    options?.isProduction !== undefined
+      ? options.isProduction
+      : process.env.NODE_ENV === "production";
+
+  if (!isProduction) {
     return html;
   }
 
@@ -1130,6 +1147,11 @@ export async function prerenderDsdShell(
       path.join(path.dirname(sourcePath), "..", ".agents", "tools", "main"),
   );
   const publicDir = path.resolve(options.publicDir || path.dirname(indexPath));
+  const isProduction =
+    options.isProduction !== undefined
+      ? options.isProduction
+      : process.env.NODE_ENV === "production";
+  const singleFile = options.singleFile ?? false;
 
   const rawPagesOpt =
     options.prerenderPages !== undefined
@@ -1365,7 +1387,10 @@ export async function prerenderDsdShell(
     const emptyManifestJson = JSON.stringify({ pages: [], skills: [] });
     const nextHtml = injectStaticManifestScript(htmlWithDsd, emptyManifestJson);
     const minifiedHtml = minifyDsdTemplateHtml(nextHtml);
-    const finalHtml = await inlineCriticalAssets(minifiedHtml, publicDir);
+    const finalHtml = await inlineCriticalAssets(minifiedHtml, publicDir, {
+      isProduction,
+      singleFile,
+    });
     await writeFile(indexPath, finalHtml, "utf8");
     const isSilent = options.silent ?? process.env.NODE_ENV === "test";
     if (!isSilent) {
@@ -1505,7 +1530,10 @@ export async function prerenderDsdShell(
   }
 
   const minifiedHtml = minifyDsdTemplateHtml(htmlWithScripts);
-  const finalHtml = await inlineCriticalAssets(minifiedHtml, publicDir);
+  const finalHtml = await inlineCriticalAssets(minifiedHtml, publicDir, {
+    isProduction,
+    singleFile,
+  });
   await writeFile(indexPath, finalHtml, "utf8");
   const isSilent = options.silent ?? process.env.NODE_ENV === "test";
   if (!isSilent) {

@@ -1,6 +1,7 @@
 import {
   createFrontmatterDetailsElement,
   createFrontmatterElement,
+  dedentLeadingWhitespace,
   PostFrontmatter,
   renderFrontmatterMarkup,
   splitFrontmatter,
@@ -33,6 +34,60 @@ describe("frontmatter utilities", () => {
     const plainParsed = splitFrontmatter("Just plain markdown");
     expect(plainParsed.data).toEqual({});
     expect(plainParsed.content).toBe("Just plain markdown");
+  });
+
+  it("parses indented frontmatter when text is embedded inside formatted HTML script tags", () => {
+    const indentedHtml = `
+      ---
+      title: "Article"
+      created: "1970-01-01T00:00:00Z"
+      updated: "1970-01-01T00:00:00Z"
+      slug: "article"
+      ---
+
+      <article>
+        <h2>Big Buck Bunny</h2>
+      </article>
+    `;
+
+    const parsed = splitFrontmatter(indentedHtml);
+    expect(parsed.data).toEqual({
+      title: "Article",
+      created: "1970-01-01T00:00:00Z",
+      updated: "1970-01-01T00:00:00Z",
+      slug: "article",
+    });
+    expect(parsed.content).toContain("<article>");
+    expect(parsed.content).not.toContain('title: "Article"');
+  });
+
+  it("parses frontmatter with leading newline without indentation", () => {
+    const unindentedWithLeadingNewline =
+      '\n---\ntitle: "Article"\ncreated: "1970-01-01T00:00:00Z"\nslug: "article"\n---\n\n<article>\n  <h2>Big Buck Bunny</h2>\n</article>';
+
+    const parsed = splitFrontmatter(unindentedWithLeadingNewline);
+    expect(parsed.data).toEqual({
+      title: "Article",
+      created: "1970-01-01T00:00:00Z",
+      slug: "article",
+    });
+    expect(parsed.content).toContain("<article>");
+    expect(parsed.content).not.toContain('title: "Article"');
+  });
+
+  it("dedents leading whitespace correctly", () => {
+    const indented = "\n    line 1\n    line 2\n      line 3\n  ";
+    expect(dedentLeadingWhitespace(indented)).toBe(
+      "line 1\nline 2\n  line 3\n",
+    );
+    expect(dedentLeadingWhitespace("")).toBe("");
+    expect(dedentLeadingWhitespace("hello\nworld")).toBe("hello\nworld");
+    expect(dedentLeadingWhitespace("\n---\ntitle: Article\n---")).toBe(
+      "---\ntitle: Article\n---",
+    );
+    expect(dedentLeadingWhitespace("\r\n\r\n---\ntitle: Article\n---")).toBe(
+      "---\ntitle: Article\n---",
+    );
   });
 
   describe("createFrontmatterElement", () => {

@@ -139,6 +139,10 @@ program
     "Bundle static pages, configuration, and theme into a standalone single-file index.html",
     false,
   )
+  .option(
+    "--cdn <url>",
+    "Base CDN URL to load runtime assets from for single-file builds (default: https://cdn.jsdelivr.net/npm/shadow-claw@<version>)",
+  )
   .optionsGroup("Path & Routing Options:")
   .option(
     "--origin <url>",
@@ -171,6 +175,7 @@ program
         prerenderPages: options.prerenderPages,
         copyAllAssets: options.copyAllAssets,
         singleFile: Boolean(options.singleFile),
+        cdn: options.cdn || process.env.SHADOWCLAW_CDN,
       });
     } catch (err) {
       console.error("Build failed:", err);

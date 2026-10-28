@@ -64,6 +64,7 @@ export interface PrerenderPrettyPathsOptions {
   basePath?: string;
   pagesOrigin?: string;
   isProduction?: boolean;
+  singleFile?: boolean;
 }
 
 export interface PrerenderPrettyPathsResult {
@@ -295,6 +296,7 @@ export async function prerenderPrettyPaths(
   ]);
 
   const isProd = options.isProduction ?? process.env.NODE_ENV === "production";
+  const singleFile = options.singleFile ?? false;
   const effectiveBasePathOpt =
     options.basePath !== undefined
       ? options.basePath
@@ -353,6 +355,7 @@ export async function prerenderPrettyPaths(
   const updatedRootHtml = await inlineCriticalAssets(
     rootHtmlMinified,
     publicDir,
+    { isProduction: isProd, singleFile },
   );
 
   await writeFile(indexPath, updatedRootHtml, "utf8");
@@ -642,7 +645,10 @@ export async function prerenderPrettyPaths(
     const minifiedHtml = minifyDsdTemplateHtml(
       injectStaticRoutingScript(htmlWithScripts, embeddedRoutingJson),
     );
-    const finalHtml = await inlineCriticalAssets(minifiedHtml, publicDir);
+    const finalHtml = await inlineCriticalAssets(minifiedHtml, publicDir, {
+      isProduction: isProd,
+      singleFile,
+    });
 
     let targetRelativePath: string;
     if (cleanPrettyPath.endsWith(".html")) {

@@ -2,12 +2,17 @@ import { jest } from "@jest/globals";
 import { DEFAULT_MAIN_GROUP_INDEX_CONTENT } from "./default-index-content.mjs";
 
 const mockGroupFileExists = jest.fn() as any;
+const mockReadGroupFile = jest.fn() as any;
 const mockWriteGroupFile = jest.fn() as any;
 const mockGetConfig = jest.fn() as any;
 const mockSetConfig = jest.fn() as any;
 
 jest.unstable_mockModule("./group-file-exists.js", () => ({
   groupFileExists: mockGroupFileExists,
+}));
+
+jest.unstable_mockModule("./read-group-file.js", () => ({
+  readGroupFile: mockReadGroupFile,
 }));
 
 jest.unstable_mockModule("./write-group-file.js", () => ({
@@ -36,6 +41,7 @@ describe("ensureMainGroupIndex", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     (mockGroupFileExists as any).mockReset();
+    (mockReadGroupFile as any).mockReset();
     (mockWriteGroupFile as any).mockReset();
     (mockGetConfig as any).mockReset();
     (mockSetConfig as any).mockReset();
@@ -52,6 +58,23 @@ describe("ensureMainGroupIndex", () => {
     const res = await ensureMainGroupIndex({} as any, "group-1");
     expect(res).toBe(true);
     expect(mockWriteGroupFile).not.toHaveBeenCalled();
+  });
+
+  it("re-writes index.html if it contains legacy shadow-claw dsd markers", async () => {
+    mockGroupFileExists.mockResolvedValue(true);
+    mockReadGroupFile.mockResolvedValue(
+      '<html><body><div data-shadow-claw-dsd="">old</div></body></html>',
+    );
+    mockWriteGroupFile.mockResolvedValue(undefined);
+
+    const res = await ensureMainGroupIndex({} as any, DEFAULT_GROUP_ID);
+    expect(res).toBe(true);
+    expect(mockWriteGroupFile).toHaveBeenCalledWith(
+      {},
+      DEFAULT_GROUP_ID,
+      "index.html",
+      DEFAULT_MAIN_GROUP_INDEX_CONTENT,
+    );
   });
 
   it("returns false if index.html is suppressed for DEFAULT_GROUP_ID", async () => {

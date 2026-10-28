@@ -4,6 +4,7 @@ import { getConfig } from "../db/get-config.js";
 import { setConfig } from "../db/set-config.js";
 import { DEFAULT_MAIN_GROUP_INDEX_CONTENT } from "./default-index-content.mjs";
 import { groupFileExists } from "./group-file-exists.js";
+import { readGroupFile } from "./read-group-file.js";
 import { writeGroupFile } from "./write-group-file.js";
 
 import { applyBasePath } from "../core/app-routes.js";
@@ -60,7 +61,6 @@ export async function ensureMainGroupIndex(
     if (exists) {
       if (groupId === DEFAULT_GROUP_ID) {
         try {
-          const { readGroupFile } = await import("./read-group-file.js");
           const existingText = await readGroupFile(db, groupId, "index.html");
           if (
             typeof existingText === "string" &&

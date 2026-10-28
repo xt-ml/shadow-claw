@@ -692,6 +692,8 @@ describe("seedStaticMainSite – localStorage-gated purge", () => {
     mockDeleteAllGroupFiles.mockResolvedValue(undefined);
     mockDeleteGroupDirectory.mockResolvedValue(undefined);
     localStorage.clear();
+    const existing = document.getElementById("shadow-claw-static-manifest");
+    if (existing) existing.remove();
   });
 
   it("purges on first boot when purgeId is present and localStorage is empty", async () => {
@@ -982,6 +984,148 @@ describe("seedStaticMainSite – localStorage-gated purge", () => {
         expect(settings.titleTemplate).toBe("%title% — %site%");
       } finally {
         siteConfigScript.remove();
+      }
+    });
+  });
+
+  describe("extractPrerenderedPageContent and deduplication", () => {
+    it("extracts frontmatter and body HTML from pre-rendered [data-pages-rendered]", async () => {
+      const { extractPrerenderedPageContent } =
+        await import("./static-main-site.js");
+      const container = document.createElement("div");
+      container.className = "pages__rendered";
+      container.setAttribute("data-pages-rendered", "");
+      container.setAttribute("data-initial-path", "index.html");
+      container.innerHTML = `
+        <section class="markdown-frontmatter" data-markdown-frontmatter="" data-frontmatter='{"title": "Custom Title", "slug": "custom-slug"}'>
+          <details><summary>Frontmatter</summary><pre><code>...</code></pre></details>
+        </section>
+        <article>
+          <h2>Hello World</h2>
+          <p>Welcome to pre-rendered HTML.</p>
+        </article>
+      `;
+      document.body.appendChild(container);
+
+      try {
+        const extracted = extractPrerenderedPageContent("index.html");
+        expect(extracted).not.toBeNull();
+        expect(extracted).toContain('title: "Custom Title"');
+        expect(extracted).toContain('slug: "custom-slug"');
+        expect(extracted).toContain("<h2>Hello World</h2>");
+        expect(extracted).not.toContain("markdown-frontmatter");
+      } finally {
+        container.remove();
+      }
+    });
+
+    it("extracts body HTML without frontmatter if no frontmatter element exists", async () => {
+      const { extractPrerenderedPageContent } =
+        await import("./static-main-site.js");
+      const container = document.createElement("div");
+      container.className = "pages__rendered";
+      container.setAttribute("data-pages-rendered", "");
+      container.setAttribute("data-initial-path", "index.html");
+      container.innerHTML = `<article><h1>Simple</h1></article>`;
+      document.body.appendChild(container);
+
+      try {
+        const extracted = extractPrerenderedPageContent("index.html");
+        expect(extracted).toBe("<article><h1>Simple</h1></article>");
+      } finally {
+        container.remove();
+      }
+    });
+
+    it("getStaticPageContent finds content from inline script without #shadow-claw-static-manifest", async () => {
+      const inlineScript = document.createElement("script");
+      inlineScript.type = "text/markdown";
+      inlineScript.setAttribute("data-shadow-claw-page", "docs/test.md");
+      inlineScript.textContent = "# Inline Docs Content";
+      document.body.appendChild(inlineScript);
+
+      try {
+        const content = await getStaticPageContent("docs/test.md");
+        expect(content).toBe("# Inline Docs Content");
+      } finally {
+        inlineScript.remove();
+      }
+    });
+
+    it("resolves empty MEMORY.md script tag to DEFAULT_MAIN_GROUP_MEMORY_CONTENT in getStaticMainManifest", async () => {
+      const { DEFAULT_MAIN_GROUP_MEMORY_CONTENT } =
+        await import("./default-memory-content.mjs");
+      const memScript = document.createElement("script");
+      memScript.type = "text/markdown";
+      memScript.setAttribute("data-shadow-claw-page", "MEMORY.md");
+      memScript.textContent = "   ";
+      document.body.appendChild(memScript);
+
+      try {
+        const manifest = await getStaticMainManifest();
+        const memPage = manifest.pages.find(
+          (p) => p.displayPath === "MEMORY.md",
+        );
+        expect(memPage).toBeDefined();
+        expect(memPage?.content).toBe(DEFAULT_MAIN_GROUP_MEMORY_CONTENT);
+      } finally {
+        memScript.remove();
+      }
+    });
+
+    it("resolves empty index.html script tag from pre-rendered DOM in getStaticMainManifest", async () => {
+      const indexScript = document.createElement("script");
+      indexScript.type = "text/markdown";
+      indexScript.setAttribute("data-shadow-claw-page", "index.html");
+      indexScript.textContent = "";
+      document.body.appendChild(indexScript);
+
+      const container = document.createElement("div");
+      container.className = "pages__rendered";
+      container.setAttribute("data-pages-rendered", "");
+      container.setAttribute("data-initial-path", "index.html");
+      container.innerHTML = `<article><h2>Pre-rendered Workspace</h2></article>`;
+      document.body.appendChild(container);
+
+      try {
+        const manifest = await getStaticMainManifest();
+        const indexPage = manifest.pages.find(
+          (p) => p.displayPath === "index.html",
+        );
+        expect(indexPage).toBeDefined();
+        expect(indexPage?.content).toBe(
+          "<article><h2>Pre-rendered Workspace</h2></article>",
+        );
+      } finally {
+        indexScript.remove();
+        container.remove();
+      }
+    });
+
+    it("discovers pre-rendered initial page and default MEMORY.md when no manifest or inline script exists", async () => {
+      const container = document.createElement("div");
+      container.className = "pages__rendered";
+      container.setAttribute("data-pages-rendered", "");
+      container.setAttribute("data-initial-path", "index.html");
+      container.innerHTML = `<article><h2>Autodiscovered Shell</h2></article>`;
+      document.body.appendChild(container);
+
+      try {
+        const manifest = await getStaticMainManifest();
+        expect(manifest.pages.some((p) => p.displayPath === "index.html")).toBe(
+          true,
+        );
+        expect(manifest.pages.some((p) => p.displayPath === "MEMORY.md")).toBe(
+          true,
+        );
+        const indexPage = manifest.pages.find(
+          (p) => p.displayPath === "index.html",
+        );
+        expect(indexPage?.content).toBe(
+          "<article><h2>Autodiscovered Shell</h2></article>",
+        );
+      } finally {
+        container.remove();
       }
     });
   });

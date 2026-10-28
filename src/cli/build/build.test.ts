@@ -698,6 +698,56 @@ describe("build without and with pages", () => {
       expect(indexHtml).toContain("--single-file-accent: #00ff00;");
       expect(indexHtml).toContain('data-shadow-claw-page="about.md"');
       expect(indexHtml).toContain("Standalone single-file markdown content.");
+      expect(indexHtml).toContain('name="shadow-claw-asset-base"');
+      expect(indexHtml).toContain("https://cdn.jsdelivr.net/npm/shadow-claw@");
+      expect(indexHtml).toContain("theme-init.js");
+      expect(indexHtml).toContain("index.css");
+      expect(indexHtml).toContain('data-shadow-claw-opfs-cleanup="true"');
+      expect(indexHtml).toContain('data-shadow-claw-dedent="true"');
+      expect(indexHtml).toContain("<!-- prettier-ignore -->");
+      expect(indexHtml).not.toContain('<script type="module" src="index.js">');
+      expect(indexHtml).not.toContain(
+        '<script type="module" src="service-worker/init.js">',
+      );
+    } finally {
+      logSpy.mockRestore();
+      await rm(tempConsumerRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("builds a single-file bundle with custom cdnBase", async () => {
+    const tempConsumerRoot = await mkdtemp(
+      path.join(os.tmpdir(), "shadow-claw-custom-cdn-"),
+    );
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      await runConsumerBuild({
+        contentRoot: tempConsumerRoot,
+        toolchainRoot: tempProjectRoot,
+        isProduction: false,
+        quiet: true,
+        stdio: "pipe",
+        singleFile: true,
+        cdn: "https://custom.example.com/cdn/shadow-claw@9.9.9",
+      });
+
+      const indexHtml = await readFile(
+        path.join(tempConsumerRoot, "dist/public/index.html"),
+        "utf8",
+      );
+      expect(indexHtml).toContain(
+        '<meta name="shadow-claw-asset-base" content="https://custom.example.com/cdn/shadow-claw@9.9.9/dist/public/" />',
+      );
+      expect(indexHtml).toContain(
+        'src="https://custom.example.com/cdn/shadow-claw@9.9.9/dist/public/theme-init.js"',
+      );
+      expect(indexHtml).toContain(
+        'href="https://custom.example.com/cdn/shadow-claw@9.9.9/dist/public/index.css"',
+      );
+      expect(indexHtml).toContain(
+        '"shadow-claw": "https://custom.example.com/cdn/shadow-claw@9.9.9/dist/lib/index.js"',
+      );
     } finally {
       logSpy.mockRestore();
       await rm(tempConsumerRoot, { recursive: true, force: true });

@@ -24,6 +24,7 @@ import { isPageSuppressed, pageRefKey } from "./suppressed-pages.js";
 import { writeGroupFile } from "./write-group-file.js";
 import { isPagePathAllowed } from "../utils/is-page-path-allowed.js";
 import { normalizeStringList } from "../utils/normalize-string-list.js";
+import { dedentLeadingWhitespace } from "../utils/frontmatter.js";
 
 import type { SavedPageRef, ShadowClawDatabase } from "../db/types.js";
 
@@ -198,6 +199,125 @@ export async function fetchStaticMainFile(
   return null;
 }
 
+export function findPrerenderedElement(
+  displayPath?: string,
+): HTMLElement | null {
+  if (typeof document === "undefined") {
+    return null;
+  }
+  const matchPath = (el: Element | null | undefined): el is HTMLElement => {
+    if (!el || !(el instanceof HTMLElement)) return false;
+    if (!displayPath) return true;
+    const initialPath = el.getAttribute("data-initial-path")?.trim();
+    return !initialPath || initialPath === displayPath;
+  };
+
+  // 1. Direct light DOM check
+  const lightDirect = document.querySelector(
+    displayPath
+      ? `[data-pages-rendered][data-initial-path="${displayPath}"]`
+      : "[data-pages-rendered]",
+  );
+  if (matchPath(lightDirect)) return lightDirect;
+
+  // 2. Traversal through custom element shadow roots
+  const sc = document.querySelector("shadow-claw");
+  const scRoot = sc?.shadowRoot;
+  const pagesEl = scRoot?.querySelector("shadow-claw-pages");
+  const pagesRoot = pagesEl?.shadowRoot;
+  const shadowRendered =
+    pagesRoot?.querySelector(
+      displayPath
+        ? `[data-pages-rendered][data-initial-path="${displayPath}"]`
+        : "[data-pages-rendered]",
+    ) ||
+    scRoot?.querySelector(
+      displayPath
+        ? `[data-pages-rendered][data-initial-path="${displayPath}"]`
+        : "[data-pages-rendered]",
+    );
+  if (matchPath(shadowRendered)) return shadowRendered;
+
+  // 3. Search unattached template elements (e.g. DSD templates prior to attachment / polyfills / jsdom)
+  const templates = document.querySelectorAll("template");
+  for (const t of Array.from(templates)) {
+    const fromTemplate = t.content?.querySelector(
+      displayPath
+        ? `[data-pages-rendered][data-initial-path="${displayPath}"]`
+        : "[data-pages-rendered]",
+    );
+    if (matchPath(fromTemplate)) return fromTemplate;
+    const nestedTemplates = t.content?.querySelectorAll("template");
+    if (nestedTemplates) {
+      for (const nt of Array.from(nestedTemplates)) {
+        const fromNested = nt.content?.querySelector(
+          displayPath
+            ? `[data-pages-rendered][data-initial-path="${displayPath}"]`
+            : "[data-pages-rendered]",
+        );
+        if (matchPath(fromNested)) return fromNested;
+      }
+    }
+  }
+
+  return null;
+}
+
+export function extractPrerenderedPageContent(
+  displayPath: string = "index.html",
+): string | null {
+  const renderedEl = findPrerenderedElement(displayPath);
+  if (!renderedEl) {
+    return null;
+  }
+
+  const initialPath = renderedEl.getAttribute("data-initial-path")?.trim();
+  if (initialPath && initialPath !== displayPath) {
+    return null;
+  }
+
+  // Check for frontmatter
+  const fmEl = renderedEl.querySelector("[data-markdown-frontmatter]");
+  let frontmatterData: Record<string, any> | null = null;
+  if (fmEl) {
+    const rawFm = fmEl.getAttribute("data-frontmatter");
+    if (rawFm) {
+      try {
+        frontmatterData = JSON.parse(rawFm);
+      } catch {}
+    }
+  }
+
+  // Extract body: clone renderedEl and remove the frontmatter element if present
+  const clone = renderedEl.cloneNode(true) as HTMLElement;
+  const cloneFm = clone.querySelector("[data-markdown-frontmatter]");
+  if (cloneFm) {
+    cloneFm.remove();
+  }
+  const bodyHtml = clone.innerHTML.trim();
+  if (!bodyHtml && !frontmatterData) {
+    return null;
+  }
+
+  // If frontmatter exists, serialize to YAML
+  if (frontmatterData && Object.keys(frontmatterData).length > 0) {
+    const yamlLines = ["---"];
+    for (const [key, value] of Object.entries(frontmatterData)) {
+      if (typeof value === "string") {
+        yamlLines.push(`${key}: ${JSON.stringify(value)}`);
+      } else if (typeof value === "number" || typeof value === "boolean") {
+        yamlLines.push(`${key}: ${value}`);
+      } else {
+        yamlLines.push(`${key}: ${JSON.stringify(value)}`);
+      }
+    }
+    yamlLines.push("---", "");
+    return `${yamlLines.join("\n")}\n${bodyHtml}`;
+  }
+
+  return bodyHtml;
+}
+
 export async function getStaticMainManifest(
   options: { preferEmbedded?: boolean; fetchFallback?: boolean } = {},
 ): Promise<StaticMainManifest> {
@@ -227,7 +347,22 @@ export async function getStaticMainManifest(
         for (const el of Array.from(inlinePageEls)) {
           const pagePath = el.getAttribute("data-shadow-claw-page")?.trim();
           if (pagePath) {
-            const content = el.textContent || "";
+            let content = el.textContent || "";
+            content = dedentLeadingWhitespace(content);
+            // Deduplicate empty MEMORY.md: fallback to DEFAULT_MAIN_GROUP_MEMORY_CONTENT
+            if (!content.trim() && /^memory\.(md|markdown)$/iu.test(pagePath)) {
+              content = DEFAULT_MAIN_GROUP_MEMORY_CONTENT;
+            }
+            // Deduplicate empty index.html / initial page: fallback to pre-rendered DSD or DEFAULT_MAIN_GROUP_INDEX_CONTENT
+            if (
+              !content.trim() &&
+              (pagePath === "index.html" ||
+                /^index\.(html?|xhtml)$/iu.test(pagePath))
+            ) {
+              content =
+                extractPrerenderedPageContent(pagePath) ??
+                DEFAULT_MAIN_GROUP_INDEX_CONTENT;
+            }
             const existingIndex = manifest.pages.findIndex(
               (p) => p.displayPath === pagePath,
             );
@@ -252,13 +387,54 @@ export async function getStaticMainManifest(
             for (const file of config.pages.files) {
               if (typeof file === "string" && file.trim()) {
                 const filePath = file.trim();
+                let initialContent = "";
+                if (/^memory\.(md|markdown)$/iu.test(filePath)) {
+                  initialContent = DEFAULT_MAIN_GROUP_MEMORY_CONTENT;
+                } else if (
+                  filePath === "index.html" ||
+                  /^index\.(html?|xhtml)$/iu.test(filePath)
+                ) {
+                  initialContent =
+                    extractPrerenderedPageContent(filePath) ??
+                    DEFAULT_MAIN_GROUP_INDEX_CONTENT;
+                }
                 if (!manifest.pages.some((p) => p.displayPath === filePath)) {
-                  manifest.pages.push({ displayPath: filePath, content: "" });
+                  manifest.pages.push({
+                    displayPath: filePath,
+                    content: initialContent,
+                  });
                 }
               }
             }
           }
         } catch {}
+      }
+
+      // If no manifest or inline script existed, auto-discover pre-rendered DSD page
+      const prerenderedEl = findPrerenderedElement();
+      if (prerenderedEl) {
+        if (!manifest) {
+          manifest = { pages: [] };
+        }
+        const initialPath =
+          prerenderedEl.getAttribute("data-initial-path")?.trim() ||
+          "index.html";
+        if (!manifest.pages.some((p) => p.displayPath === initialPath)) {
+          const content =
+            extractPrerenderedPageContent(initialPath) ??
+            DEFAULT_MAIN_GROUP_INDEX_CONTENT;
+          manifest.pages.push({ displayPath: initialPath, content });
+        }
+        if (
+          !manifest.pages.some((p) =>
+            /^memory\.(md|markdown)$/iu.test(p.displayPath),
+          )
+        ) {
+          manifest.pages.push({
+            displayPath: "MEMORY.md",
+            content: DEFAULT_MAIN_GROUP_MEMORY_CONTENT,
+          });
+        }
       }
     }
 
@@ -303,6 +479,7 @@ export async function getStaticPageContent(
   displayPath: string,
 ): Promise<string | null> {
   if (typeof document !== "undefined") {
+    // 1. Check embedded JSON manifest
     const scriptEl = document.getElementById("shadow-claw-static-manifest");
     if (scriptEl && scriptEl.textContent) {
       try {
@@ -311,11 +488,46 @@ export async function getStaticPageContent(
           const found = parsed.pages.find(
             (p: StaticPageSource) => p.displayPath === displayPath,
           );
-          if (found && typeof found.content === "string") {
+          if (
+            found &&
+            typeof found.content === "string" &&
+            found.content.trim()
+          ) {
             return found.content;
           }
         }
       } catch {}
+    }
+
+    // 2. Check inline markdown script tags: <script type="text/markdown" data-shadow-claw-page="...">
+    const inlinePageEls = document.querySelectorAll<HTMLScriptElement>(
+      'script[type="text/markdown"][data-shadow-claw-page]',
+    );
+    for (const el of Array.from(inlinePageEls)) {
+      const pagePath = el.getAttribute("data-shadow-claw-page")?.trim();
+      if (pagePath === displayPath) {
+        const content = el.textContent || "";
+        if (content.trim()) {
+          return content;
+        }
+      }
+    }
+
+    // 3. Check pre-rendered DSD content
+    const prerendered = extractPrerenderedPageContent(displayPath);
+    if (typeof prerendered === "string" && prerendered.trim()) {
+      return prerendered;
+    }
+
+    // 4. Default fallbacks for built-in files
+    if (/^memory\.(md|markdown)$/iu.test(displayPath)) {
+      return DEFAULT_MAIN_GROUP_MEMORY_CONTENT;
+    }
+    if (
+      displayPath === "index.html" ||
+      /^index\.(html?|xhtml)$/iu.test(displayPath)
+    ) {
+      return DEFAULT_MAIN_GROUP_INDEX_CONTENT;
     }
   }
 
@@ -674,10 +886,11 @@ export async function seedStaticMainSite(
         continue;
       }
 
-      const customContent =
-        page.content !== DEFAULT_MAIN_GROUP_MEMORY_CONTENT
-          ? page.content
-          : undefined;
+      const hasCustomContent =
+        typeof page.content === "string" &&
+        page.content.trim().length > 0 &&
+        page.content !== DEFAULT_MAIN_GROUP_MEMORY_CONTENT;
+      const customContent = hasCustomContent ? page.content : undefined;
       const ensured =
         customContent === undefined
           ? await ensureMainGroupMemory(db, groupId)
@@ -703,8 +916,15 @@ export async function seedStaticMainSite(
       const exists = await groupFileExists(db, groupId, page.displayPath);
       if (!exists) {
         let contentToWrite = page.content;
-        if (typeof contentToWrite !== "string") {
-          contentToWrite = (await fetchStaticMainFile(page.displayPath)) ?? "";
+        if (typeof contentToWrite !== "string" || !contentToWrite.trim()) {
+          if (page.displayPath === "index.html") {
+            contentToWrite =
+              extractPrerenderedPageContent("index.html") ??
+              DEFAULT_MAIN_GROUP_INDEX_CONTENT;
+          } else {
+            contentToWrite =
+              (await fetchStaticMainFile(page.displayPath)) ?? "";
+          }
         }
         await writeGroupFile(db, groupId, page.displayPath, contentToWrite);
       }
@@ -751,7 +971,11 @@ export async function seedStaticMainSite(
 
   const hasEmbeddedScript =
     typeof document !== "undefined" &&
-    document.getElementById("shadow-claw-static-manifest") !== null;
+    (document.getElementById("shadow-claw-static-manifest") !== null ||
+      document.querySelector(
+        'script[type="text/markdown"][data-shadow-claw-page]',
+      ) !== null ||
+      findPrerenderedElement() !== null);
   const isPartialEmbeddedSeed =
     options.preferEmbedded !== false && hasEmbeddedScript;
 

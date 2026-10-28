@@ -1288,12 +1288,19 @@ export class ShadowClawPages extends ShadowClawElement {
     const token = ++this.renderToken;
     const pageKey = `${selectedPage.groupId}:${selectedPage.path}`;
 
+    const useInitialIframe =
+      isHtmlPath(selectedPage.path) &&
+      shouldPageRenderInIframe(selectedPage.path, this.pageFrontmatter.get());
+    const isDirectRenderable =
+      isMarkdownPath(selectedPage.path) ||
+      (isHtmlPath(selectedPage.path) && !useInitialIframe);
+
     // If this initial DSD page is already active and rendered, keep it!
     const isAlreadyDsdRendered =
       this.renderedKey === pageKey &&
       this.dsdInitialPath &&
       matchesPagePath(this.dsdInitialPath, selectedPage.path) &&
-      isMarkdownPath(selectedPage.path) &&
+      isDirectRenderable &&
       rendered.children.length > 0 &&
       !rendered.hidden;
 
@@ -1311,7 +1318,7 @@ export class ShadowClawPages extends ShadowClawElement {
       rendered.children.length > 0 &&
       !rendered.hidden;
 
-    if (hasDsdSeed && isMarkdownPath(selectedPage.path)) {
+    if (hasDsdSeed && isDirectRenderable) {
       this.renderedKey = pageKey;
       empty.hidden = true;
       rendered.hidden = false;

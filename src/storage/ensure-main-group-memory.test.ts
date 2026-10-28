@@ -72,10 +72,28 @@ describe("ensureMainGroupMemory", () => {
 
   it("does not overwrite MEMORY.md when it already exists", async () => {
     (mockGroupFileExists as any).mockResolvedValue(true);
+    (mockReadGroupFile as any).mockResolvedValue("Regular existing memory");
 
     await expect(ensureMainGroupMemory({} as any)).resolves.toBe(true);
 
     expect(mockWriteGroupFile).not.toHaveBeenCalled();
+  });
+
+  it("re-writes MEMORY.md if it contains legacy shadow-claw dsd markers", async () => {
+    (mockGroupFileExists as any).mockResolvedValue(true);
+    (mockReadGroupFile as any).mockResolvedValue(
+      '<shadow-claw data-shadow-claw-dsd="">old</shadow-claw>',
+    );
+    (mockWriteGroupFile as any).mockResolvedValue(undefined);
+
+    await expect(ensureMainGroupMemory({} as any)).resolves.toBe(true);
+
+    expect(mockWriteGroupFile).toHaveBeenCalledWith(
+      {} as any,
+      DEFAULT_GROUP_ID,
+      DEFAULT_MAIN_GROUP_MEMORY_PATH,
+      DEFAULT_MAIN_GROUP_MEMORY_CONTENT,
+    );
   });
 
   it("uses static main/MEMORY.md template when available", async () => {

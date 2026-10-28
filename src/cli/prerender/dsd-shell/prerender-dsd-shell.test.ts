@@ -6,6 +6,7 @@ import {
   extractTemplateContent,
   injectPageHeaderDsd,
   injectStaticManifestScript,
+  inlineCriticalAssets,
   isPageFile,
   markNoSeedPrerenderHost,
   minifyDsdTemplateHtml,
@@ -16,7 +17,7 @@ import {
   splitFrontmatterWithGrayMatter,
 } from "./prerender-dsd-shell.js";
 
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -798,6 +799,76 @@ describe("prerenderDsdShell purge flag pages", () => {
         'data-theme-stylesheet="true" href="pages/main/theme.css"',
       );
       expect(outputHtml).not.toContain('href="/pages/main/theme.css"');
+    });
+  });
+
+  describe("inlineCriticalAssets", () => {
+    let tempDir: string;
+
+    beforeEach(async () => {
+      tempDir = await mkdtemp(path.join(os.tmpdir(), "sc-inline-critical-"));
+      await writeFile(
+        path.join(tempDir, "index.css"),
+        "body { margin: 0; }",
+        "utf8",
+      );
+      await writeFile(
+        path.join(tempDir, "theme-init.js"),
+        "console.log('theme');",
+        "utf8",
+      );
+      await mkdir(path.join(tempDir, "service-worker"), { recursive: true });
+      await writeFile(
+        path.join(tempDir, "service-worker/init.js"),
+        "console.log('sw');",
+        "utf8",
+      );
+    });
+
+    afterEach(async () => {
+      await rm(tempDir, { recursive: true, force: true });
+    });
+
+    const sampleHtml = [
+      "<!doctype html>",
+      "<html>",
+      "<head>",
+      '  <link rel="stylesheet" href="index.css" />',
+      '  <script src="theme-init.js"></script>',
+      "</head>",
+      "<body>",
+      '  <script type="module" src="service-worker/init.js"></script>',
+      "</body>",
+      "</html>",
+    ].join("\n");
+
+    it("inlines critical assets when isProduction is true", async () => {
+      const result = await inlineCriticalAssets(sampleHtml, tempDir, {
+        isProduction: true,
+      });
+      expect(result).toContain("<style>body { margin: 0; }</style>");
+      expect(result).toContain("<script>console.log('theme');</script>");
+      expect(result).toContain(
+        "<script type=\"module\">console.log('sw');</script>",
+      );
+      expect(result).not.toContain('href="index.css"');
+      expect(result).not.toContain('src="theme-init.js"');
+      expect(result).not.toContain('src="service-worker/init.js"');
+    });
+
+    it("does not inline critical assets when isProduction is false", async () => {
+      const result = await inlineCriticalAssets(sampleHtml, tempDir, {
+        isProduction: false,
+      });
+      expect(result).toBe(sampleHtml);
+    });
+
+    it("does not inline critical assets when singleFile is true even in production", async () => {
+      const result = await inlineCriticalAssets(sampleHtml, tempDir, {
+        isProduction: true,
+        singleFile: true,
+      });
+      expect(result).toBe(sampleHtml);
     });
   });
 });

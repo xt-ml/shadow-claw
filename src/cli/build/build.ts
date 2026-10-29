@@ -790,7 +790,40 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
       await rimraf(join(distPublicDir, "sitemap.txt"));
     }
 
-    // 2. Copy/merge assets from contentRoot
+    // 2. Ensure default toolchain assets (icons, screenshots, fonts) are available
+    const toolchainAssets = join(toolchainRoot, "assets");
+    if (contentRoot !== toolchainRoot && (await pathExists(toolchainAssets))) {
+      const toolchainIcons = join(toolchainAssets, "icons");
+      if (await pathExists(toolchainIcons)) {
+        await cp(toolchainIcons, join(distPublicDir, "assets/icons"), {
+          recursive: true,
+          force: false,
+          errorOnExist: false,
+        });
+      }
+      const toolchainScreenshots = join(toolchainAssets, "screenshots");
+      if (await pathExists(toolchainScreenshots)) {
+        await cp(
+          toolchainScreenshots,
+          join(distPublicDir, "assets/screenshots"),
+          {
+            recursive: true,
+            force: false,
+            errorOnExist: false,
+          },
+        );
+      }
+      const toolchainFonts = join(toolchainAssets, "fonts");
+      if (await pathExists(toolchainFonts)) {
+        await cp(toolchainFonts, join(distPublicDir, "assets/fonts"), {
+          recursive: true,
+          force: false,
+          errorOnExist: false,
+        });
+      }
+    }
+
+    // 2b. Copy/merge assets from contentRoot
     const contentAssets = join(contentRoot, "assets");
     if (await pathExists(contentAssets)) {
       if (copyAllAssets) {

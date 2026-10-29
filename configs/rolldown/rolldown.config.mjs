@@ -401,6 +401,11 @@ const configs = [
             },
           },
           { src: "manifest.json", dest: "dist/public" },
+          { src: "assets/icons/**/*", dest: "dist/public/assets/icons" },
+          {
+            src: "assets/screenshots/**/*",
+            dest: "dist/public/assets/screenshots",
+          },
           {
             src: "404.html",
             dest: "dist/public",

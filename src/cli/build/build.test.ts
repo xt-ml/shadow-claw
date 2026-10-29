@@ -213,6 +213,17 @@ describe("build without and with pages", () => {
           ),
         ),
       ).toBe(true);
+      expect(
+        fs.existsSync(path.join(consumerDistPublic, "assets/icons/152.png")),
+      ).toBe(true);
+      expect(
+        fs.existsSync(
+          path.join(
+            consumerDistPublic,
+            "assets/screenshots/shadow-claw-screenshot-1920x1052.png",
+          ),
+        ),
+      ).toBe(true);
     } finally {
       logSpy.mockRestore();
       await rm(tempConsumerRoot, { recursive: true, force: true });

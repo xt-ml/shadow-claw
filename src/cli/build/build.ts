@@ -87,6 +87,9 @@ interface EmbedSingleFileBundleOptions {
   contentRoot: string;
   toolchainRoot?: string;
   cdnBase?: string;
+  siteConfig?: Record<string, any>;
+  siteConfigPath?: string;
+  pagesOrigin?: string;
   isQuiet?: boolean;
   log: (...args: any[]) => void;
 }
@@ -129,40 +132,43 @@ async function embedSingleFileBundle(
     }
 
     // 2. Discover and embed markdown pages
-    if (await pathExists(mainSourcePath)) {
-      try {
-        const pageSources = await collectPageSources(mainSourcePath);
-        const scriptsToInject: string[] = [];
-        for (const page of pageSources) {
-          if (page.absolutePath && (await pathExists(page.absolutePath))) {
-            const content = await readFile(page.absolutePath, "utf8");
-            const isMemory = /^memory\.(md|markdown)$/iu.test(page.displayPath);
-            const isDefaultMemory =
-              isMemory &&
-              content.trim() === DEFAULT_MAIN_GROUP_MEMORY_CONTENT.trim();
-            const isDefaultIndex =
-              page.displayPath === "index.html" &&
-              content.trim() === DEFAULT_MAIN_GROUP_INDEX_CONTENT.trim();
+    try {
+      const pageSources = await collectPageSources(mainSourcePath);
+      const scriptsToInject: string[] = [];
+      for (const page of pageSources) {
+        let content: string | null = null;
+        if (typeof page.inlineContent === "string") {
+          content = page.inlineContent;
+        } else if (page.absolutePath && (await pathExists(page.absolutePath))) {
+          content = await readFile(page.absolutePath, "utf8");
+        }
+        if (typeof content === "string") {
+          const isMemory = /^memory\.(md|markdown)$/iu.test(page.displayPath);
+          const isDefaultMemory =
+            isMemory &&
+            content.trim() === DEFAULT_MAIN_GROUP_MEMORY_CONTENT.trim();
+          const isDefaultIndex =
+            page.displayPath === "index.html" &&
+            content.trim() === DEFAULT_MAIN_GROUP_INDEX_CONTENT.trim();
 
-            if (isDefaultMemory || isDefaultIndex) {
-              scriptsToInject.push(
-                `<!-- prettier-ignore -->\n  <script type="text/markdown" data-shadow-claw-page="${page.displayPath}"></script>`,
-              );
-            } else {
-              scriptsToInject.push(
-                `<!-- prettier-ignore -->\n  <script type="text/markdown" data-shadow-claw-page="${page.displayPath}">${content}</script>`,
-              );
-            }
+          if (isDefaultMemory || isDefaultIndex) {
+            scriptsToInject.push(
+              `<!-- prettier-ignore -->\n  <script type="text/markdown" data-shadow-claw-page="${page.displayPath}"></script>`,
+            );
+          } else {
+            scriptsToInject.push(
+              `<!-- prettier-ignore -->\n  <script type="text/markdown" data-shadow-claw-page="${page.displayPath}">${content}</script>`,
+            );
           }
         }
-        if (scriptsToInject.length > 0) {
-          idxHtml = insertBeforeClosingHead(
-            idxHtml,
-            `  ${scriptsToInject.join("\n  ")}`,
-          );
-        }
-      } catch {}
-    }
+      }
+      if (scriptsToInject.length > 0) {
+        idxHtml = insertBeforeClosingHead(
+          idxHtml,
+          `  ${scriptsToInject.join("\n  ")}`,
+        );
+      }
+    } catch {}
 
     // 3. Resolve CDN base and runtime asset base
     let cdnBase = explicitCdnBase || env.SHADOWCLAW_CDN;
@@ -219,21 +225,95 @@ async function embedSingleFileBundle(
       );
     }
 
-    // Rewrite manifest.json
+    // 5b. Resolve branding URLs (manifest, favicon, apple-touch-icon)
+    let siteConfig = options.siteConfig;
+    if (
+      !siteConfig &&
+      options.siteConfigPath &&
+      (await pathExists(options.siteConfigPath))
+    ) {
+      try {
+        siteConfig = JSON.parse(await readFile(options.siteConfigPath, "utf8"));
+      } catch {}
+    }
+    const branding = siteConfig?.branding || {};
+    const pwa = siteConfig?.pwa || {};
+    const rawSiteUrl = branding.siteUrl || options.pagesOrigin;
+    const deployedBase =
+      typeof rawSiteUrl === "string" && rawSiteUrl.trim()
+        ? rawSiteUrl.trim().replace(/\/*$/, "/")
+        : "";
+
+    // Rewrite manifest.json to deployed URL if available, else CDN runtime
+    const manifestPath = (
+      pwa.manifestPath ||
+      branding.manifestPath ||
+      "manifest.json"
+    ).replace(/^\/+/, "");
+    const manifestTarget = deployedBase
+      ? `${deployedBase}${manifestPath}`
+      : `${assetBase}manifest.json`;
+
     idxHtml = idxHtml.replace(
-      /<link\b([^>]*?)href="[^"]*?manifest\.json"([^>]*?)\/?>/gi,
-      `<link$1href="${assetBase}manifest.json"$2 />`,
+      /<link\b[^>]*\b(?:href="[^"]*?manifest\.json"|rel=["']?manifest["']?)[^>]*\/?>/giu,
+      `<link rel="manifest" href="${manifestTarget}" />`,
     );
 
-    // Rewrite favicon / touch icons
+    // Rewrite favicon / touch icons to deployed URL if available, else CDN runtime
+    const faviconHref = (branding.faviconPath || "assets/icons/favicon.ico")
+      .replace(/^\/+/, "")
+      .replace(/^pages\/main\//, "");
+    const faviconTarget = deployedBase
+      ? `${deployedBase}${faviconHref}`
+      : `${assetBase}assets/icons/favicon.ico`;
+    const iconType = faviconHref.endsWith(".svg")
+      ? "image/svg+xml"
+      : faviconHref.endsWith(".png")
+        ? "image/png"
+        : "image/x-icon";
+
+    let faviconReplaced = false;
     idxHtml = idxHtml.replace(
-      /<link\b([^>]*?)href="(?:\.\/|\/)?assets\/icons\/favicon\.ico"([^>]*?)\/?>/gi,
-      `<link$1href="${assetBase}assets/icons/favicon.ico"$2 />`,
+      /<link\b[^>]*\brel=["']?(?:shortcut\s+)?icon["']?[^>]*\/?>/giu,
+      () => {
+        if (!faviconReplaced) {
+          faviconReplaced = true;
+          return `<link rel="icon" href="${faviconTarget}" type="${iconType}" />`;
+        }
+        return "";
+      },
     );
+    if (!faviconReplaced) {
+      idxHtml = insertBeforeClosingHead(
+        idxHtml,
+        `  <link rel="icon" href="${faviconTarget}" type="${iconType}" />`,
+      );
+    }
+
+    const appleHref = (branding.appleTouchIconPath || "assets/icons/180.png")
+      .replace(/^\/+/, "")
+      .replace(/^pages\/main\//, "");
+    const appleTarget = deployedBase
+      ? `${deployedBase}${appleHref}`
+      : `${assetBase}assets/icons/180.png`;
+
+    let appleReplaced = false;
     idxHtml = idxHtml.replace(
-      /<link\b([^>]*?)href="(?:\.\/|\/)?assets\/icons\/180\.png"([^>]*?)\/?>/gi,
-      `<link$1href="${assetBase}assets/icons/180.png"$2 />`,
+      /<link\b[^>]*\brel=["']?apple-touch-icon["']?[^>]*\/?>/giu,
+      () => {
+        if (!appleReplaced) {
+          appleReplaced = true;
+          return `<link rel="apple-touch-icon" href="${appleTarget}" />`;
+        }
+        return "";
+      },
     );
+    if (!appleReplaced && deployedBase) {
+      idxHtml = insertBeforeClosingHead(
+        idxHtml,
+        `  <link rel="apple-touch-icon" href="${appleTarget}" />`,
+      );
+    }
 
     // 6. Remove local module entry scripts: index.js and service-worker/init.js
     idxHtml = idxHtml.replace(
@@ -712,6 +792,9 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
           contentRoot,
           toolchainRoot,
           cdnBase: options.cdn,
+          siteConfig: inRepoSiteConfig,
+          siteConfigPath,
+          pagesOrigin,
           isQuiet,
           log,
         });
@@ -1061,10 +1144,16 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
     }
 
     const indexPath = join(distPublicDir, "index.html");
-    if (effectivePrerenderMainMemory && (await pathExists(contentPagesMain))) {
+    const hasContentPagesMain = await pathExists(contentPagesMain);
+    if (
+      effectivePrerenderMainMemory &&
+      (hasContentPagesMain || options.singleFile)
+    ) {
       await prerenderDsdShell({
         indexPath,
-        sourcePath: contentPagesMain,
+        sourcePath: hasContentPagesMain
+          ? contentPagesMain
+          : join(toolchainRoot, "pages/main"),
         prerenderPages,
         siteConfigPath,
         isProduction,
@@ -1260,6 +1349,9 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
         contentRoot,
         toolchainRoot,
         cdnBase: options.cdn,
+        siteConfig: consumerSiteConfig,
+        siteConfigPath,
+        pagesOrigin,
         isQuiet,
         log,
       });

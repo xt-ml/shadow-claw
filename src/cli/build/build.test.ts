@@ -764,4 +764,92 @@ describe("build without and with pages", () => {
       await rm(tempConsumerRoot, { recursive: true, force: true });
     }
   });
+
+  it("builds a single-file bundle without pages directory and embeds default index.html and MEMORY.md", async () => {
+    const tempConsumerRoot = await mkdtemp(
+      path.join(os.tmpdir(), "shadow-claw-single-file-no-pages-"),
+    );
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      await runConsumerBuild({
+        contentRoot: tempConsumerRoot,
+        toolchainRoot: tempProjectRoot,
+        isProduction: false,
+        quiet: true,
+        stdio: "pipe",
+        singleFile: true,
+      });
+
+      const indexHtml = await readFile(
+        path.join(tempConsumerRoot, "dist/public/index.html"),
+        "utf8",
+      );
+
+      // Must embed empty script tags for default index.html and MEMORY.md
+      expect(indexHtml).toContain('data-shadow-claw-page="index.html"');
+      expect(indexHtml).toContain('data-shadow-claw-page="MEMORY.md"');
+
+      // Must pre-render index.html as the initial DSD page and dropdown selection
+      expect(indexHtml).toContain('data-initial-path="index.html"');
+      expect(indexHtml).toContain(
+        '<span class="pages__dropdown-selected" data-pages-dropdown-selected>index.html</span>',
+      );
+    } finally {
+      logSpy.mockRestore();
+      await rm(tempConsumerRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rewrites favicon and manifest to deployed siteUrl in single-file builds", async () => {
+    const tempConsumerRoot = await mkdtemp(
+      path.join(os.tmpdir(), "shadow-claw-branding-urls-"),
+    );
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      await writeFile(
+        path.join(tempConsumerRoot, "shadow-claw.config.json"),
+        JSON.stringify({
+          site: { title: "Branded Hub" },
+          branding: {
+            siteUrl: "https://example.github.io/branded-hub/",
+            faviconPath: "assets/icons/favicon.ico",
+            appleTouchIconPath: "assets/icons/apple-touch-icon.png",
+          },
+          pwa: {
+            manifestPath: "manifest.json",
+          },
+        }),
+        "utf8",
+      );
+
+      await runConsumerBuild({
+        contentRoot: tempConsumerRoot,
+        toolchainRoot: tempProjectRoot,
+        isProduction: false,
+        quiet: true,
+        stdio: "pipe",
+        singleFile: true,
+      });
+
+      const indexHtml = await readFile(
+        path.join(tempConsumerRoot, "dist/public/index.html"),
+        "utf8",
+      );
+
+      expect(indexHtml).toContain(
+        '<link rel="icon" href="https://example.github.io/branded-hub/assets/icons/favicon.ico" type="image/x-icon" />',
+      );
+      expect(indexHtml).toContain(
+        '<link rel="apple-touch-icon" href="https://example.github.io/branded-hub/assets/icons/apple-touch-icon.png" />',
+      );
+      expect(indexHtml).toContain(
+        '<link rel="manifest" href="https://example.github.io/branded-hub/manifest.json" />',
+      );
+    } finally {
+      logSpy.mockRestore();
+      await rm(tempConsumerRoot, { recursive: true, force: true });
+    }
+  });
 });

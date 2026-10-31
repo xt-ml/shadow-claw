@@ -442,21 +442,21 @@ export async function getStaticMainManifest(
   };
   if (options.preferEmbedded !== false) {
     const embedded = parseEmbedded();
-    if (embedded) {
+    if (embedded && embedded.pages.length > 0) {
       return embedded;
     }
   }
 
   if (options.fetchFallback !== false) {
     const fetched = await fetchStaticMainManifest();
-    if (fetched) {
+    if (fetched && fetched.pages.length > 0) {
       return fetched;
     }
   }
 
   if (options.preferEmbedded === false) {
     const embedded = parseEmbedded();
-    if (embedded) {
+    if (embedded && embedded.pages.length > 0) {
       return embedded;
     }
   }

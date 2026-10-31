@@ -67,13 +67,13 @@ export async function applyRouteFromCurrentLocation(
     resolveDefaultPinnedPageRef(getSiteConfigDefaultPinnedPage());
   const defaultPinned = explicitDefaultPinned || oStore.effectiveDefaultPage;
 
-  if (isRoot && defaultPinned) {
+  if (isRoot) {
     const targetGroup =
-      defaultPinned.groupId || oStore.activeGroupId || DEFAULT_GROUP_ID;
+      defaultPinned?.groupId || oStore.activeGroupId || DEFAULT_GROUP_ID;
     const defaultRoute: ShadowClawAppRoute = {
       page: "pages",
       groupId: targetGroup,
-      path: defaultPinned.path,
+      path: defaultPinned?.path,
     };
 
     if (explicitDefaultPinned) {

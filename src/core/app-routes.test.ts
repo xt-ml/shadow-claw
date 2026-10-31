@@ -100,6 +100,20 @@ describe("app-routes", () => {
         new URL("http://localhost/settings/tool-configuration"),
       ),
     ).toEqual({ page: "tools", anchor: undefined });
+
+    expect(parseRouteFromUrl(new URL("http://localhost/"), "group-1")).toEqual({
+      page: "pages",
+      groupId: "group-1",
+      anchor: undefined,
+    });
+
+    expect(
+      parseRouteFromUrl(new URL("http://localhost/index.html"), "group-1"),
+    ).toEqual({
+      page: "pages",
+      groupId: "group-1",
+      anchor: undefined,
+    });
   });
 
   it("resolves href against route base", () => {

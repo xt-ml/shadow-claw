@@ -168,6 +168,35 @@ describe("applyRouteFromCurrentLocation", () => {
     replaceStateSpy.mockRestore();
   });
 
+  it("routes to default pages route on root URL when both defaultPinnedPage and effectiveDefaultPage are null", async () => {
+    mockParseRouteFromUrlAsync.mockResolvedValue(null);
+    (oStore as any).defaultPinnedPage = null;
+    (oStore as any).effectiveDefaultPage = null;
+    const rootUrl = new URL("http://localhost:8888/");
+
+    await applyRouteFromCurrentLocation(
+      shadow,
+      shadowClaw,
+      db,
+      fStore,
+      oStore,
+      rootUrl,
+    );
+
+    expect(mockApplyRoute).toHaveBeenCalledWith(
+      shadow,
+      shadowClaw,
+      db,
+      fStore,
+      oStore,
+      {
+        page: "pages",
+        groupId: "group1",
+        path: undefined,
+      },
+    );
+  });
+
   it("replaces history state when defaultPinnedPage has a non-root pretty path", async () => {
     const appRoutes = await import("../../../core/app-routes.js");
     (

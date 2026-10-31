@@ -446,8 +446,12 @@ export function parseRouteFromUrl(
     .map((part) => decodePathSegment(part));
   const anchor = url.hash ? url.hash.replace(/^#/, "") : undefined;
 
-  if (parts.length === 0) {
-    return null;
+  if (parts.length === 0 || (parts.length === 1 && parts[0] === "index.html")) {
+    return {
+      page: "pages",
+      groupId: normalizeRouteGroupId(fallbackGroupId),
+      anchor,
+    };
   }
 
   const page = parts[0].toLowerCase();

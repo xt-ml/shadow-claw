@@ -14,7 +14,6 @@ import {
 import { themeStore } from "../../stores/theme.js";
 
 import { yieldToMain } from "../../utils/delay.js";
-import { applyRoute } from "./utils/apply-route.js";
 import { applyRouteFromCurrentLocation } from "./utils/apply-route-from-current-location.js";
 import { bindEventListeners } from "./utils/bind-event-listeners.js";
 import { clearBootPendingClass } from "../../core/utils/clear-boot-pending-class.js";
@@ -400,24 +399,13 @@ export class ShadowClaw extends ShadowClawElement {
       navigateEvent.intercept({
         scroll: "manual",
         handler: async () => {
-          const { parseRouteFromUrlAsync } =
-            await import("../../core/app-routes.js");
-          const asyncRoute = await parseRouteFromUrlAsync(
-            parsedUrl,
-            orchestratorStore.activeGroupId,
-          );
-          if (!asyncRoute) {
-            // Not a SPA route, we could assign location to force a server hit or just return.
-            return;
-          }
-
-          await applyRoute(
+          await applyRouteFromCurrentLocation(
             this.shadowRoot,
             this,
             this.db,
             fileViewerStore,
             orchestratorStore,
-            asyncRoute,
+            parsedUrl,
           );
         },
       });

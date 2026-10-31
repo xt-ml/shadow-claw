@@ -60,7 +60,10 @@ jest.unstable_mockModule("../../stores/orchestrator.js", () => ({
     pages: [],
     setReady: jest.fn(),
     setActivePage: (jest.fn() as any).mockResolvedValue(undefined),
+    setActivePinnedPage: (jest.fn() as any).mockResolvedValue(undefined),
     loadFiles: (jest.fn() as any).mockResolvedValue(undefined),
+    loadHistory: (jest.fn() as any).mockResolvedValue(undefined),
+    switchConversation: (jest.fn() as any).mockResolvedValue(undefined),
     get activityLog() {
       return mockActivityLog.entries;
     },
@@ -872,6 +875,41 @@ describe("shadow-claw", () => {
     comp3.tasksSidebarHidden = true;
     comp3.filesSidebarHidden = true;
     (orchestratorStore as any).activePage = "tasks";
+  });
+
+  it("closes file viewer and restores root page view on back navigation to root URL via Navigation API", async () => {
+    const component = new ShadowClaw();
+    component.db = {} as any;
+    (orchestratorStore as any).activeGroupId = "main";
+    (orchestratorStore as any).effectiveDefaultPage = {
+      groupId: "main",
+      path: "index.html",
+    };
+
+    // User is currently viewing article.html in the file viewer
+    fileViewerStore.file = {
+      path: "docs/example/article.html",
+      name: "article.html",
+    };
+    expect(fileViewerStore.file).not.toBeNull();
+
+    // User clicks the browser back button, navigating to root URL
+    const mockIntercept = jest.fn();
+    const navEvent = {
+      intercept: mockIntercept,
+      destination: { url: `${window.location.origin}/` },
+    } as any;
+
+    component.handleNavigationApiNavigate(navEvent);
+    expect(mockIntercept).toHaveBeenCalledWith(
+      expect.objectContaining({ scroll: "manual" }),
+    );
+
+    const handlerObj = mockIntercept.mock.calls[0][0] as any;
+    await handlerObj.handler();
+
+    // The file viewer must be closed and root page view restored
+    expect(fileViewerStore.file).toBeNull();
   });
 
   it("yields to the main thread during connectedCallback initialization", async () => {

@@ -126,27 +126,29 @@ export function handleSpecialLinkNavigation(
   }
 
   // 1.5. Check if it is an absolute application route (e.g., /files/room:123/path, /chat/...)
-  if (trimmed.startsWith("/")) {
+  if (trimmed.startsWith("/") && !trimmed.startsWith("//")) {
     try {
       const urlLike = new URL(trimmed, window.location.origin);
-      const route = parseRouteFromUrl(urlLike, currentGroupId);
-      if (route) {
-        document.dispatchEvent(
-          new CustomEvent("shadow-claw-navigate", {
-            detail: {
-              page: route.page,
-              groupId: route.groupId,
-              path: route.path,
-              anchor:
-                route.anchor ||
-                (urlLike.hash ? urlLike.hash.slice(1) : undefined),
-            },
-            bubbles: true,
-            composed: true,
-          }),
-        );
+      if (urlLike.origin === window.location.origin) {
+        const route = parseRouteFromUrl(urlLike, currentGroupId);
+        if (route) {
+          document.dispatchEvent(
+            new CustomEvent("shadow-claw-navigate", {
+              detail: {
+                page: route.page,
+                groupId: route.groupId,
+                path: route.path,
+                anchor:
+                  route.anchor ||
+                  (urlLike.hash ? urlLike.hash.slice(1) : undefined),
+              },
+              bubbles: true,
+              composed: true,
+            }),
+          );
 
-        return true;
+          return true;
+        }
       }
     } catch {
       // Fallback to relative workspace path resolution below

@@ -470,8 +470,18 @@ const configs = [
             dest: "dist/public/assets",
           },
           {
+            src: "src/components/shadow-claw-file-viewer/file-viewer-preview-bridge.js",
+            dest: "dist/public/assets",
+            rename: "file-viewer-preview-runtime.js",
+          },
+          {
             src: "src/components/shadow-claw-file-viewer/iframe-storage-bridge.js",
             dest: "dist/public/assets",
+          },
+          {
+            src: "src/components/shadow-claw-file-viewer/iframe-storage-bridge.js",
+            dest: "dist/public/assets",
+            rename: "iframe-storage-proxy.js",
           },
           { src: "src/subsystems/channels/bindings", dest: "dist/public" },
         ],

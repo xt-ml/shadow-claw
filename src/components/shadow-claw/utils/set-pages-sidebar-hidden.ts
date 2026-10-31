@@ -3,6 +3,7 @@ import {
   SidebarNavPage,
 } from "./sidebar-visibility.js";
 import { getDefaultSidebarPage } from "./get-default-sidebar-page.js";
+import { ensureComponentLoaded } from "./load-component.js";
 import { showPage } from "./show-page.js";
 
 import type { ShadowClawDatabase } from "../../../db/types.js";
@@ -23,6 +24,9 @@ export function setSidebarNavHidden(
       break;
     case "chat":
       shadowClaw.chatSidebarHidden = hidden;
+      if (!hidden) {
+        void ensureComponentLoaded("conversations").catch(console.error);
+      }
       break;
     case "tasks":
       shadowClaw.tasksSidebarHidden = hidden;

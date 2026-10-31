@@ -24,7 +24,7 @@ import { isPageSuppressed, pageRefKey } from "./suppressed-pages.js";
 import { writeGroupFile } from "./write-group-file.js";
 import { isPagePathAllowed } from "../utils/is-page-path-allowed.js";
 import { normalizeStringList } from "../utils/normalize-string-list.js";
-import { dedentLeadingWhitespace } from "../utils/frontmatter.js";
+import { dedentLeadingWhitespace } from "../utils/dedent.js";
 
 import type { SavedPageRef, ShadowClawDatabase } from "../db/types.js";
 

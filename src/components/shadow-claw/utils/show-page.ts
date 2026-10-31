@@ -15,6 +15,7 @@ import type { OrchestratorStore } from "../../../stores/orchestrator.js";
  * Entries here must match the componentLoaders map in loadComponent.ts.
  */
 const PAGE_ELEMENT_TAGS: Record<string, string> = {
+  pages: "shadow-claw-pages",
   chat: "shadow-claw-chat",
   tasks: "shadow-claw-tasks",
   files: "shadow-claw-files",
@@ -31,7 +32,7 @@ const PAGE_ELEMENT_TAGS: Record<string, string> = {
 function ensurePageElementStamped(shadow: ShadowRoot, pageId: string): void {
   const tag = PAGE_ELEMENT_TAGS[pageId];
   if (!tag) {
-    return; // pages is pre-stamped; file-viewer is handled separately
+    return; // file-viewer is handled separately
   }
 
   const container = shadow.querySelector(`[data-page-id="${pageId}"]`);
@@ -51,6 +52,7 @@ export interface ShowPageContext {
   terminalPlacementFrame: number | null;
   headerMainCollapsedOverride: boolean | null;
   vmStatus: { ready: boolean; booting: boolean; bootAttempted: boolean };
+  orchestrator?: any;
 }
 
 /**
@@ -73,6 +75,7 @@ export function showPage(
     oStore,
     page,
     shadowClaw.pagesSidebarHidden,
+    shadowClaw as any,
   );
 
   // Handle chat horizontal split view
@@ -85,6 +88,14 @@ export function showPage(
   );
 
   if (isSplitActive) {
+    void ensureComponentLoaded("conversations").catch(console.error);
+    if (shadowClaw.orchestrator?.ensureWorkerReady) {
+      void shadowClaw.orchestrator.ensureWorkerReady();
+    }
+    if (typeof oStore?.loadHistory === "function") {
+      void oStore.loadHistory().catch(console.error);
+    }
+
     const chatTag = PAGE_ELEMENT_TAGS.chat;
     if (chatTag && customElements.get(chatTag)) {
       ensurePageElementStamped(shadow, "chat");
@@ -119,6 +130,7 @@ export function showPage(
   const tag = PAGE_ELEMENT_TAGS[resolvedPage];
   if (tag && customElements.get(tag)) {
     ensurePageElementStamped(shadow, resolvedPage);
+    void ensureComponentLoaded(resolvedPage).catch(console.error);
   } else {
     void ensureComponentLoaded(resolvedPage)
       .then(() => {
@@ -197,11 +209,28 @@ export function showPage(
     }
   }
 
-  // Check local AI onboarding when switching to the chat tab
+  // Check local AI onboarding and load dependencies when switching to the chat tab
   if (resolvedPage === "chat") {
+    void ensureComponentLoaded("conversations").catch(console.error);
+    if (shadowClaw.orchestrator?.ensureWorkerReady) {
+      void shadowClaw.orchestrator.ensureWorkerReady();
+    }
+    if (typeof oStore?.loadHistory === "function") {
+      void oStore.loadHistory().catch(console.error);
+    }
     const chatComp = shadow.querySelector("shadow-claw-chat") as any;
     if (chatComp && typeof chatComp.checkPromptApiOnboarding === "function") {
       void chatComp.checkPromptApiOnboarding();
+    }
+  }
+
+  // Load tasks and worker if switching to the tasks tab
+  if (resolvedPage === "tasks") {
+    if (shadowClaw.orchestrator?.ensureWorkerReady) {
+      void shadowClaw.orchestrator.ensureWorkerReady();
+    }
+    if (db && typeof oStore?.loadTasks === "function") {
+      void oStore.loadTasks(db).catch(console.error);
     }
   }
 

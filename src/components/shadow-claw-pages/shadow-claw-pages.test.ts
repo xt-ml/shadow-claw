@@ -2945,5 +2945,76 @@ describe("shadow-claw-pages", () => {
       expect(cssText).toContain("--shadow-claw-pages-viewer-margin");
       expect(cssText).toContain("--shadow-claw-pages-viewer-width");
     });
+
+    it("does not abort or leave stale DOM when renderSelectedPage is re-entered during async processing", async () => {
+      const component = new ShadowClawPages();
+      component.db = {} as any;
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const rendered = root.querySelector(
+        "[data-pages-rendered]",
+      ) as HTMLElement;
+      rendered.hidden = false;
+      rendered.innerHTML = "<h1>Initial Feed Page</h1>";
+
+      const htmlContent =
+        "---\niframe: false\n---\n<h1>Portfolio Page</h1><p id='target'>Content</p>";
+      (
+        readGroupFile as jest.MockedFunction<typeof readGroupFile>
+      ).mockImplementation(async () => {
+        // Yield to event loop to allow second call to enter while first call is in flight
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return htmlContent;
+      });
+
+      component.selectedPage = { groupId: "group-1", path: "portfolio.html" };
+
+      const firstCall = component.renderSelectedPage();
+      const secondCall = component.renderSelectedPage();
+
+      await Promise.all([firstCall, secondCall]);
+
+      expect(rendered.innerHTML).toContain("Portfolio Page");
+      expect((component as any).renderedKey).toBe("group-1:portfolio.html");
+    });
+
+    it("preserves scroll position when navigating to an anchor hash", async () => {
+      const component = new ShadowClawPages();
+      component.db = {} as any;
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const viewerScroll = root.querySelector(
+        ".pages__viewer-scroll",
+      ) as HTMLElement;
+      const scrollToSpy = jest.fn();
+      viewerScroll.scrollTo = scrollToSpy;
+
+      const htmlContent =
+        "---\niframe: false\n---\n<h1>Portfolio Page</h1><h2 id='corporate-sites'>Corporate Sites</h2>";
+      (
+        readGroupFile as jest.MockedFunction<typeof readGroupFile>
+      ).mockResolvedValue(htmlContent);
+
+      component.selectedPage = { groupId: "group-1", path: "portfolio.html" };
+
+      // With hash in location
+      const originalHash = window.location.hash;
+      try {
+        window.location.hash = "#corporate-sites";
+        await component.renderSelectedPage();
+
+        expect(scrollToSpy).not.toHaveBeenCalled();
+
+        // Without hash in location
+        (component as any).renderedKey = null;
+        window.location.hash = "";
+        await component.renderSelectedPage();
+        expect(scrollToSpy).toHaveBeenCalledWith(0, 0);
+      } finally {
+        window.location.hash = originalHash;
+      }
+    });
   });
 });

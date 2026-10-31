@@ -11,6 +11,7 @@ describe("setPagesSidebarHidden and setSidebarNavHidden", () => {
   let mockApplySidebarNavVisibility: any;
   let mockGetDefaultSidebarPage: any;
   let mockShowPage: any;
+  let mockEnsureComponentLoaded: any;
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -29,7 +30,11 @@ describe("setPagesSidebarHidden and setSidebarNavHidden", () => {
     mockApplySidebarNavVisibility = jest.fn();
     mockGetDefaultSidebarPage = jest.fn().mockReturnValue("default-page");
     mockShowPage = jest.fn();
+    mockEnsureComponentLoaded = (jest.fn() as any).mockResolvedValue(undefined);
 
+    jest.unstable_mockModule("./load-component.js", () => ({
+      ensureComponentLoaded: mockEnsureComponentLoaded,
+    }));
     jest.unstable_mockModule("./sidebar-visibility.js", () => ({
       applySidebarNavVisibility: mockApplySidebarNavVisibility,
     }));
@@ -113,5 +118,18 @@ describe("setPagesSidebarHidden and setSidebarNavHidden", () => {
       oStore,
       "default-page",
     );
+  });
+
+  it("should dynamically load shadow-claw-conversations when chat is unhidden in settings", () => {
+    shadowClaw.currentPage = "pages";
+    setSidebarNavHidden(shadowRoot, shadowClaw, oStore, db, "chat", false);
+
+    expect(shadowClaw.chatSidebarHidden).toBe(false);
+    expect(mockApplySidebarNavVisibility).toHaveBeenCalledWith(
+      shadowRoot,
+      "chat",
+      false,
+    );
+    expect(mockEnsureComponentLoaded).toHaveBeenCalledWith("conversations");
   });
 });

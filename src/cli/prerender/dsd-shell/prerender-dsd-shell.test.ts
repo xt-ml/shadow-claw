@@ -870,5 +870,64 @@ describe("prerenderDsdShell purge flag pages", () => {
       });
       expect(result).toBe(sampleHtml);
     });
+
+    it("injects modulepreload link tags for index.js and its imported chunks in production", async () => {
+      await writeFile(
+        path.join(tempDir, "index.js"),
+        'import { foo } from "./chunk-core.js";\nimport("./shadow-claw-chunk.js");',
+        "utf8",
+      );
+      await writeFile(
+        path.join(tempDir, "chunk-core.js"),
+        'export const foo = "bar";',
+        "utf8",
+      );
+      await writeFile(
+        path.join(tempDir, "shadow-claw-chunk.js"),
+        'console.log("shell");',
+        "utf8",
+      );
+
+      const result = await inlineCriticalAssets(sampleHtml, tempDir, {
+        isProduction: true,
+      });
+      expect(result).toContain('<link rel="modulepreload" href="index.js" />');
+      expect(result).toContain(
+        '<link rel="modulepreload" href="chunk-core.js" />',
+      );
+      expect(result).toContain(
+        '<link rel="modulepreload" href="shadow-claw-chunk.js" />',
+      );
+    });
+
+    it("injects modulepreload link tags for minified imports, re-exports, and template literal imports", async () => {
+      await writeFile(
+        path.join(tempDir, "index.js"),
+        'import{A,B}from"./min-a.js";export{C}from"./min-b.js";async function load(){await import(`./min-c.js`);}',
+        "utf8",
+      );
+      await writeFile(
+        path.join(tempDir, "min-a.js"),
+        "export const A=1,B=2;",
+        "utf8",
+      );
+      await writeFile(
+        path.join(tempDir, "min-b.js"),
+        "export const C=3;",
+        "utf8",
+      );
+      await writeFile(
+        path.join(tempDir, "min-c.js"),
+        "export const D=4;",
+        "utf8",
+      );
+
+      const result = await inlineCriticalAssets(sampleHtml, tempDir, {
+        isProduction: true,
+      });
+      expect(result).toContain('<link rel="modulepreload" href="min-a.js" />');
+      expect(result).toContain('<link rel="modulepreload" href="min-b.js" />');
+      expect(result).toContain('<link rel="modulepreload" href="min-c.js" />');
+    });
   });
 });

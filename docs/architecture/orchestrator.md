@@ -236,3 +236,20 @@ Key operations include:
 - **Tasks:** `syncTaskToServer`, `deleteTaskFromServer`, `shouldStartLocalScheduler` (`src/core/orchestrator/utils/operations/task.ts`)
 
 Initialization is handled by modular setup functions (`initCoreConfig`, `initChannelsAndRooms`, `initWorkerAndScheduler`) coordinated during app startup. Non-critical tasks (such as background model registry fetching and full static site manifest syncing) are deferred via `requestIdleCallback` during `initTasks` (`src/core/orchestrator/utils/init-tasks.ts`) to maintain immediate UI responsiveness.
+
+## Sidebar-Aware Conditional Loading
+
+To avoid spinning up the agent worker, channel registry, and secondary data stores (chat history, tasks, files) when the user interface only displays the Pages sidebar — a common static-site publishing scenario — both `Orchestrator.init()` and `OrchestratorStore.init()` read sidebar visibility from IndexedDB (`CONFIG_KEYS.SIDEBAR_CHAT_HIDDEN`, `CONFIG_KEYS.SIDEBAR_TASKS_HIDDEN`, `CONFIG_KEYS.SIDEBAR_FILES_HIDDEN`) and `shadow-claw.config.json` (`sidebar.chatHidden`, `sidebar.tasksHidden`, `sidebar.filesHidden`) before initiating any deferred setup:
+
+- **Worker initialization** (`initWorkerAndScheduler`): Skipped entirely on static sites or deferred 15 s when both chat and tasks sidebars are hidden.
+- **Channel setup** (`initChannelsAndRooms` + `browserChat.onDisplay`): Skipped when both chat and tasks are hidden; a `channelsInitialized` flag on the `Orchestrator` instance prevents double-init if `ensureWorkerReady()` is later called on-demand.
+- **Tools & WebMCP sync** (`toolsStore.load`, `syncWebMcpRegistration`): Also gated on the same `areChatAndTasksHidden` flag, preventing unnecessary IndexedDB reads and MCP registration on pages-only deployments.
+- **Secondary store loads** in `OrchestratorStore` (`loadHistory`, `loadTasks`, `loadFiles`): Each data-load is individually gated — `loadHistory` is skipped when chat is hidden (unless `activePage === "chat"`), `loadTasks` when tasks are hidden, and `loadFiles` when files are hidden — covering both the deferred background path and the immediate await path.
+
+## Lazy Module Imports
+
+Several heavyweight modules are now imported lazily on first use rather than at module parse time:
+
+- **`invokeAgent`** (`src/core/orchestrator/utils/invoke-agent.ts`): Dynamic-imported inside `Orchestrator.invoke()` to avoid loading the full invocation pipeline until the first actual agent call.
+- **`compactContext`** (`src/core/orchestrator/utils/compact-context.ts`): Dynamic-imported inside `OrchestratorStore.compactContext()` for the same reason.
+- **`processPeerQueryParam`**, **`processRoomQueryParam`**, **`processPendingSharedPayloads`** in `shadow-claw.ts`: Now gated on query-parameter presence (`?peer=`, `?room=`/`?host=`, `?share-target=`) and loaded dynamically, reducing initial parse cost on page loads without those parameters. Shared-payload processing is additionally deferred via `requestIdleCallback` (or a 1 s `setTimeout` fallback) when not triggered by an explicit `?share-target=` parameter.

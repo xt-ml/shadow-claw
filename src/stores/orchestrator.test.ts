@@ -31,6 +31,14 @@ const mockGetStaticMainManifest = jest.fn() as any;
 const mockCopyGroupDirectory = jest.fn() as any;
 const mockDeleteMessage = jest.fn() as any;
 const mockSaveMessage = jest.fn() as any;
+const mockCompactContext = jest.fn() as any;
+
+jest.unstable_mockModule(
+  "../core/orchestrator/utils/compact-context.js",
+  () => ({
+    compactContext: mockCompactContext,
+  }),
+);
 
 jest.unstable_mockModule(
   "../core/orchestrator/utils/operations/provider.js",
@@ -1501,6 +1509,20 @@ describe("OrchestratorStore", () => {
     );
 
     errorSpy.mockRestore();
+  });
+
+  it("compactContext dynamically imports and delegates to compactContext utility", async () => {
+    const store = new OrchestratorStore();
+    const mockOrchestrator = {} as any;
+    store.orchestrator = mockOrchestrator;
+    mockCompactContext.mockResolvedValueOnce("compacted-result");
+    const result = await store.compactContext({} as any);
+    expect(mockCompactContext).toHaveBeenCalledWith(
+      mockOrchestrator,
+      {},
+      DEFAULT_GROUP_ID,
+    );
+    expect(result).toBe("compacted-result");
   });
 
   it("manual workspace sync helpers call orchestrator bridge", () => {
@@ -3720,6 +3742,126 @@ describe("OrchestratorStore", () => {
         configElement.remove();
         getConfigSpy.mockRestore();
         window.history.replaceState(null, "", "/");
+      }
+    });
+
+    it("should skip loadHistory on boot when sidebarChatHidden is true and active page is not chat", async () => {
+      const dbGetConfig = await import("../db/get-config.js");
+      const getConfigSpy = jest
+        .spyOn(dbGetConfig, "getConfig")
+        .mockImplementation(async (_db: any, key: string) => {
+          if (key === CONFIG_KEYS.SIDEBAR_CHAT_HIDDEN) {
+            return "true";
+          }
+          return undefined;
+        });
+
+      try {
+        const store = new OrchestratorStore();
+        const orch: any = {
+          provider: "openrouter",
+          model: "openai/gpt-4o",
+          events: { on: jest.fn() },
+        };
+        const mockDb: any = {};
+
+        const historySpy = jest
+          .spyOn(store, "loadHistory")
+          .mockResolvedValue(undefined as any);
+        const tasksSpy = jest
+          .spyOn(store, "loadTasks")
+          .mockResolvedValue(undefined as any);
+        const filesSpy = jest
+          .spyOn(store, "loadFiles")
+          .mockResolvedValue(undefined as any);
+
+        await store.init(mockDb, orch);
+
+        expect(historySpy).not.toHaveBeenCalled();
+        expect(tasksSpy).toHaveBeenCalled();
+        expect(filesSpy).toHaveBeenCalled();
+      } finally {
+        getConfigSpy.mockRestore();
+      }
+    });
+
+    it("should skip loadTasks on boot when sidebarTasksHidden is true and active page is not tasks", async () => {
+      const dbGetConfig = await import("../db/get-config.js");
+      const getConfigSpy = jest
+        .spyOn(dbGetConfig, "getConfig")
+        .mockImplementation(async (_db: any, key: string) => {
+          if (key === CONFIG_KEYS.SIDEBAR_TASKS_HIDDEN) {
+            return "true";
+          }
+          return undefined;
+        });
+
+      try {
+        const store = new OrchestratorStore();
+        const orch: any = {
+          provider: "openrouter",
+          model: "openai/gpt-4o",
+          events: { on: jest.fn() },
+        };
+        const mockDb: any = {};
+
+        const historySpy = jest
+          .spyOn(store, "loadHistory")
+          .mockResolvedValue(undefined as any);
+        const tasksSpy = jest
+          .spyOn(store, "loadTasks")
+          .mockResolvedValue(undefined as any);
+        const filesSpy = jest
+          .spyOn(store, "loadFiles")
+          .mockResolvedValue(undefined as any);
+
+        await store.init(mockDb, orch);
+
+        expect(historySpy).toHaveBeenCalled();
+        expect(tasksSpy).not.toHaveBeenCalled();
+        expect(filesSpy).toHaveBeenCalled();
+      } finally {
+        getConfigSpy.mockRestore();
+      }
+    });
+
+    it("should skip loadFiles on boot when sidebarFilesHidden is true and active page is not files", async () => {
+      const dbGetConfig = await import("../db/get-config.js");
+      const getConfigSpy = jest
+        .spyOn(dbGetConfig, "getConfig")
+        .mockImplementation(async (_db: any, key: string) => {
+          if (key === CONFIG_KEYS.SIDEBAR_FILES_HIDDEN) {
+            return "true";
+          }
+          return undefined;
+        });
+
+      try {
+        const store = new OrchestratorStore();
+        const orch: any = {
+          provider: "openrouter",
+          model: "openai/gpt-4o",
+          events: { on: jest.fn() },
+        };
+        const mockDb: any = {};
+
+        const historySpy = jest
+          .spyOn(store, "loadHistory")
+          .mockResolvedValue(undefined as any);
+        const tasksSpy = jest
+          .spyOn(store, "loadTasks")
+          .mockResolvedValue(undefined as any);
+        const filesSpy = jest
+          .spyOn(store, "loadFiles")
+          .mockResolvedValue(undefined as any);
+
+        await store.init(mockDb, orch);
+
+        expect(historySpy).toHaveBeenCalled();
+        expect(tasksSpy).toHaveBeenCalled();
+        expect(filesSpy).not.toHaveBeenCalled();
+      } finally {
+        getConfigSpy.mockRestore();
       }
     });
   });

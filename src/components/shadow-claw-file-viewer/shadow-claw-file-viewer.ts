@@ -56,6 +56,12 @@ import type { Config } from "dompurify";
 import type { ShadowClawDatabase } from "../../db/types.js";
 
 import {
+  FILE_VIEWER_PREVIEW_BRIDGE_SCRIPT,
+  IFRAME_STORAGE_BRIDGE_SCRIPT,
+  safeInlineScript,
+} from "./utils/iframe-bridge-scripts.js";
+
+import {
   getApprovedCustomElementScriptDescriptors,
   getIframeCsp,
   getIframeSandboxPolicy,
@@ -1416,10 +1422,6 @@ export class ShadowClawFileViewer extends ShadowClawElement {
 
     // Nonce-gated CSP: only the bridge script and approved custom element scripts may run.
     const nonce = crypto.randomUUID().replace(/-/g, "");
-    const bridgeScriptUrl = this.getIframeBridgeScriptUrl();
-    const storageBridgeScriptUrl = resolveRuntimeAsset(
-      "/assets/iframe-storage-bridge.js",
-    );
 
     const approvedScripts = getApprovedCustomElementScriptDescriptors();
     const cspContent = getIframeCsp(nonce);
@@ -1476,8 +1478,8 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       `<base href="${applyBasePath(getFileRouteDirPath(orchestratorStore.activeGroupId, filePath))}" target="_blank">`,
       searchScriptHtml,
       siteConfigHtml,
-      `<script src="${storageBridgeScriptUrl}" nonce="${nonce}"></script>`,
-      `<script src="${bridgeScriptUrl}" nonce="${nonce}"></script>`,
+      `<script nonce="${nonce}">${safeInlineScript(IFRAME_STORAGE_BRIDGE_SCRIPT)}</script>`,
+      `<script nonce="${nonce}">${safeInlineScript(FILE_VIEWER_PREVIEW_BRIDGE_SCRIPT)}</script>`,
       getIframeThemeStyleHtml(),
       themeStylesheetLink,
       customElementScriptsHtml,

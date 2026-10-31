@@ -874,6 +874,12 @@ export function buildShadowClawDsdTemplate(
     /<shadow-claw-pages><\/shadow-claw-pages>/iu,
     () => pagesDsdHost,
   );
+  if (withPages === shadowClawTemplateContent) {
+    withPages = shadowClawTemplateContent.replace(
+      /(<div\s+class="page(?:\s+active)?"\s+data-page-id="pages">)[\s\S]*?(<\/div>)/iu,
+      `$1\n          ${pagesDsdHost}\n        $2`,
+    );
+  }
   withPages = applySidebarVisibilityToTemplate(withPages, sidebarConfig);
   const content = wrapShadowClawDialogContentInTemplate(withPages);
 
@@ -1040,6 +1046,59 @@ export async function inlineCriticalAssets(
     );
   } catch (err: any) {
     console.warn("Failed to inline service-worker/init.js", err.message);
+  }
+
+  try {
+    const indexJsPath = path.join(publicDir, "index.js");
+    const indexExists = await stat(indexJsPath)
+      .then(() => true)
+      .catch(() => false);
+
+    if (indexExists) {
+      const indexContent = await readFile(indexJsPath, "utf8");
+      const criticalChunks = new Set<string>();
+      criticalChunks.add("index.js");
+
+      const importRegex =
+        /(?:(?:import|export)\b[^;]*?\bfrom\s*|import\s*\(|import\s*)\s*[`"']\.\/([^`"']+?\.js)[`"']/g;
+      let match: RegExpExecArray | null;
+      while ((match = importRegex.exec(indexContent)) !== null) {
+        criticalChunks.add(match[1]);
+      }
+
+      // Also scan direct imports of the main app shell chunks if discovered
+      for (const chunk of Array.from(criticalChunks)) {
+        if (chunk.startsWith("shadow-claw-") || chunk.startsWith("chunk-")) {
+          try {
+            const chunkPath = path.join(publicDir, chunk);
+            const chunkContent = await readFile(chunkPath, "utf8");
+            let subMatch: RegExpExecArray | null;
+            const subRegex =
+              /(?:(?:import|export)\b[^;]*?\bfrom\s*|import\s*\(|import\s*)\s*[`"']\.\/([^`"']+?\.js)[`"']/g;
+            while ((subMatch = subRegex.exec(chunkContent)) !== null) {
+              criticalChunks.add(subMatch[1]);
+            }
+          } catch {}
+        }
+      }
+
+      const preloadTags: string[] = [];
+      for (const chunk of criticalChunks) {
+        const tag = `<link rel="modulepreload" href="${chunk}" />`;
+        if (
+          !nextHtml.includes(tag) &&
+          !nextHtml.includes(`rel="modulepreload" href="${chunk}"`)
+        ) {
+          preloadTags.push(`  ${tag}`);
+        }
+      }
+
+      if (preloadTags.length > 0) {
+        nextHtml = insertBeforeClosingHead(nextHtml, preloadTags.join("\n"));
+      }
+    }
+  } catch (err: any) {
+    console.warn("Failed to inject modulepreload tags", err.message);
   }
 
   return nextHtml;

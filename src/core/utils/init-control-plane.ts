@@ -13,6 +13,7 @@ import {
   DEFAULT_CONTROL_PLANE_TRANSPORT,
 } from "../../config/config.js";
 import type { ControlPlaneTransport } from "../../server/control-plane-types.js";
+import { toolsStore } from "../../stores/tools.js";
 
 export function getOrCreateControlPlaneClientId(): string {
   if (typeof localStorage !== "undefined") {
@@ -386,7 +387,6 @@ export async function executeClientControlCommand(
       try {
         const { orchestratorStore } =
           await import("../../stores/orchestrator.js");
-        const { toolsStore } = await import("../../stores/tools.js");
         const orch =
           options.orchestrator ||
           orchestratorStore.orchestrator ||

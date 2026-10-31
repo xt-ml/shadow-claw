@@ -3,7 +3,7 @@
 > The LLM provider registry — multiple API formats, streaming, key management,
 > and the special browser Prompt API path.
 
-**Source:** `src/config/config.ts` · `src/config/model-catalog.ts` · `src/subsystems/providers/providers.ts` · `src/subsystems/providers/prompt-api-provider.ts` · `src/subsystems/providers/model-registry.ts` · `src/server/routes/bedrock-adaptive.ts`
+**Source:** `src/config/config.ts` · `src/config/model-catalog.ts` · `src/subsystems/providers/providers.ts` · `src/subsystems/providers/prompt-api-provider.ts` · `src/subsystems/providers/utils/is-prompt-api-supported.ts` · `src/subsystems/providers/model-registry.ts` · `src/server/routes/bedrock-adaptive.ts`
 
 ## Provider Architecture
 

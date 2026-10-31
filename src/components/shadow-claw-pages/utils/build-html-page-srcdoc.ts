@@ -3,7 +3,6 @@ import {
   applyBasePath,
   getFileRouteDirPath,
 } from "../../../core/app-routes.js";
-import { resolveRuntimeAsset } from "../../../utils/runtime-assets.js";
 import { rewriteWorkspacePreviewHtml } from "./rewrite-workspace-preview-html.js";
 import { sanitizeSrcdocHtml } from "../../../security/trusted-types.js";
 import {
@@ -17,6 +16,11 @@ import {
   hasApprovedCustomElement,
   isAllowedCustomElement,
 } from "../../../security/custom-element-security.js";
+import {
+  FILE_VIEWER_PREVIEW_BRIDGE_SCRIPT,
+  IFRAME_STORAGE_BRIDGE_SCRIPT,
+  safeInlineScript,
+} from "../../shadow-claw-file-viewer/utils/iframe-bridge-scripts.js";
 
 export const defaultPreviewSanitizeOptions: Config = {
   // Allow blob URLs for locally resolved OPFS preview assets.
@@ -81,12 +85,6 @@ export async function buildHtmlPageSrcdoc({
 
   // Nonce-gated CSP: only the bridge script and approved custom element scripts may run.
   const nonce = crypto.randomUUID().replace(/-/g, "");
-  const bridgeScriptUrl = resolveRuntimeAsset(
-    "/assets/file-viewer-preview-bridge.js",
-  );
-  const storageBridgeScriptUrl = resolveRuntimeAsset(
-    "/assets/iframe-storage-bridge.js",
-  );
 
   const approvedScripts = getApprovedCustomElementScriptDescriptors();
   const cspContent = getIframeCsp(nonce);
@@ -144,8 +142,8 @@ export async function buildHtmlPageSrcdoc({
     `<base href="${routeDir}" target="_blank">`,
     searchScriptHtml,
     siteConfigHtml,
-    `<script src="${storageBridgeScriptUrl}" nonce="${nonce}"></script>`,
-    `<script src="${bridgeScriptUrl}" nonce="${nonce}"></script>`,
+    `<script nonce="${nonce}">${safeInlineScript(IFRAME_STORAGE_BRIDGE_SCRIPT)}</script>`,
+    `<script nonce="${nonce}">${safeInlineScript(FILE_VIEWER_PREVIEW_BRIDGE_SCRIPT)}</script>`,
     getIframeThemeStyleHtml(),
     themeStylesheetLink,
     customElementScriptsHtml,

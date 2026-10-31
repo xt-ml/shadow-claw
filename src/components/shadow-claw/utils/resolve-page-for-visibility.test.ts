@@ -35,6 +35,21 @@ describe("resolvePageForVisibility", () => {
     mockGetDefaultSidebarPage.mockReturnValue("chat");
     const result = resolvePageForVisibility({}, "pages", true);
     expect(result).toBe("chat");
-    expect(mockGetDefaultSidebarPage).toHaveBeenCalledWith({});
+    expect(mockGetDefaultSidebarPage).toHaveBeenCalledWith({}, undefined);
+  });
+
+  it("should preserve 'pages' even if pages sidebar is hidden when sidebarDefaultPage is 'pages'", () => {
+    const oStore = { sidebarDefaultPage: "pages" };
+    const result = resolvePageForVisibility(oStore, "pages", true);
+    expect(result).toBe("pages");
+    expect(mockGetDefaultSidebarPage).not.toHaveBeenCalled();
+  });
+
+  it("should forward context to getDefaultSidebarPage when redirecting", () => {
+    mockGetDefaultSidebarPage.mockReturnValue("tasks");
+    const context = { chatSidebarHidden: true };
+    const result = resolvePageForVisibility({}, "pages", true, context);
+    expect(result).toBe("tasks");
+    expect(mockGetDefaultSidebarPage).toHaveBeenCalledWith({}, context);
   });
 });

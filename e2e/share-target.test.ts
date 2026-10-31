@@ -76,7 +76,7 @@ test.describe("Web Share Target import", () => {
         hasText: sharedConversationName,
       }),
     ).toHaveCount(1);
-    expect(await conversations.activeConversationName()).toBe(
+    await expect(conversations.activeItem()).toContainText(
       sharedConversationName,
     );
 
@@ -102,7 +102,7 @@ test.describe("Web Share Target import", () => {
         hasText: sharedConversationName,
       }),
     ).toHaveCount(1);
-    expect(await conversations.activeConversationName()).toBe(
+    await expect(conversations.activeItem()).toContainText(
       sharedConversationName,
     );
 

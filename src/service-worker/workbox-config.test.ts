@@ -7,6 +7,9 @@ type WorkboxConfigShape = {
   runtimeCaching: Array<{
     urlPattern: (ctx: { url: URL; sameOrigin?: boolean }) => boolean;
     handler: string;
+    options?: {
+      cacheName?: string;
+    };
   }>;
 };
 
@@ -202,5 +205,41 @@ describe("workbox runtime caching rules", () => {
     expect(workboxConfig.globPatterns).not.toContain("**/*.css");
     expect(workboxConfig.globPatterns).toContain("index.html");
     expect(workboxConfig.globPatterns).toContain("index.js");
+  });
+
+  it("ensures runtimeCaching rule matches on-demand component chunks (shadow-claw-chat, tasks, files, conversations)", () => {
+    const matcher = workboxConfig.runtimeCaching[0]?.urlPattern;
+    const components = [
+      "shadow-claw-chat-abc123.js",
+      "shadow-claw-tasks-def456.js",
+      "shadow-claw-files-ghi789.js",
+      "shadow-claw-conversations-jkl012.js",
+      "shadow-claw-pages-mno345.js",
+    ];
+
+    for (const chunk of components) {
+      expect(
+        matcher({
+          url: new URL(`https://xt-ml.github.io/shadow-claw/${chunk}`),
+          sameOrigin: true,
+        }),
+      ).toBe(true);
+    }
+  });
+
+  it("ensures runtimeCaching rule matches agent.worker.js", () => {
+    const matcher = workboxConfig.runtimeCaching[0]?.urlPattern;
+    expect(
+      matcher({
+        url: new URL("https://xt-ml.github.io/shadow-claw/agent.worker.js"),
+        sameOrigin: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("verifies handler is NetworkFirst and cacheName is shadow-claw-cache", () => {
+    const rule = workboxConfig.runtimeCaching[0];
+    expect(rule.handler).toBe("NetworkFirst");
+    expect(rule.options?.cacheName).toBe("shadow-claw-cache");
   });
 });

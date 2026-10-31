@@ -22,23 +22,37 @@ describe("showPage", () => {
     shadowRoot.innerHTML = `
       <div class="page active" data-page-id="old"></div>
       <div class="page" data-page-id="chat"></div>
+      <div class="page" data-page-id="tasks"></div>
+      <div class="page" data-page-id="files"></div>
+      <div class="page" data-page-id="pages"></div>
       <div class="nav-item active" data-page="old"></div>
       <div class="nav-item" data-page="chat"></div>
+      <div class="nav-item" data-page="tasks"></div>
+      <div class="nav-item" data-page="files"></div>
+      <div class="nav-item" data-page="pages"></div>
     `;
 
     shadowClaw = {
       pagesSidebarHidden: false,
+      chatSidebarHidden: false,
+      tasksSidebarHidden: false,
+      filesSidebarHidden: false,
       currentPage: "old",
       terminalElement: {},
       terminalVisible: true,
       terminalPlacementFrame: null,
       headerMainCollapsedOverride: null,
       vmStatus: { ready: true },
+      orchestrator: {
+        ensureWorkerReady: jest.fn().mockResolvedValue(undefined as never),
+      },
     };
     db = {};
     oStore = {
       setActivePage: (jest.fn() as any).mockResolvedValue(undefined),
       loadFiles: (jest.fn() as any).mockResolvedValue(undefined),
+      loadHistory: (jest.fn() as any).mockResolvedValue(undefined),
+      loadTasks: (jest.fn() as any).mockResolvedValue(undefined),
       activityLog: [1, 2],
     };
 
@@ -106,6 +120,7 @@ describe("showPage", () => {
       oStore,
       "chat",
       false,
+      shadowClaw,
     );
 
     // Check classes
@@ -219,5 +234,54 @@ describe("showPage", () => {
     showPage(shadowRoot, shadowClaw, db, oStore, "pages", false, false);
 
     expect(activePage.scrollTo).not.toHaveBeenCalled();
+  });
+
+  it("should dynamically load chat, conversations, and boot worker when navigating to chat", () => {
+    mockResolvePageForVisibility.mockReturnValue("chat");
+    showPage(shadowRoot, shadowClaw, db, oStore, "chat");
+
+    expect(mockEnsureComponentLoaded).toHaveBeenCalledWith("chat");
+    expect(mockEnsureComponentLoaded).toHaveBeenCalledWith("conversations");
+    expect(shadowClaw.orchestrator.ensureWorkerReady).toHaveBeenCalled();
+    expect(oStore.loadHistory).toHaveBeenCalled();
+  });
+
+  it("should dynamically load tasks and invoke oStore.loadTasks and ensureWorkerReady when navigating to tasks", () => {
+    mockResolvePageForVisibility.mockReturnValue("tasks");
+    showPage(shadowRoot, shadowClaw, db, oStore, "tasks");
+
+    expect(mockEnsureComponentLoaded).toHaveBeenCalledWith("tasks");
+    expect(shadowClaw.orchestrator.ensureWorkerReady).toHaveBeenCalled();
+    expect(oStore.loadTasks).toHaveBeenCalledWith(db);
+  });
+
+  it("should dynamically load files and invoke oStore.loadFiles when navigating to files", () => {
+    mockResolvePageForVisibility.mockReturnValue("files");
+    showPage(shadowRoot, shadowClaw, db, oStore, "files");
+
+    expect(mockEnsureComponentLoaded).toHaveBeenCalledWith("files");
+    expect(oStore.loadFiles).toHaveBeenCalledWith(db);
+  });
+
+  it("should dynamically load pages and stamp shadow-claw-pages when navigating to pages", () => {
+    mockResolvePageForVisibility.mockReturnValue("pages");
+    if (!customElements.get("shadow-claw-pages")) {
+      customElements.define("shadow-claw-pages", class extends HTMLElement {});
+    }
+
+    showPage(shadowRoot, shadowClaw, db, oStore, "pages");
+
+    expect(mockEnsureComponentLoaded).toHaveBeenCalledWith("pages");
+    const pagesContainer = shadowRoot.querySelector('[data-page-id="pages"]');
+    expect(pagesContainer?.querySelector("shadow-claw-pages")).not.toBeNull();
+  });
+
+  it("should not call ensureComponentLoaded for hidden inactive pages", () => {
+    mockResolvePageForVisibility.mockReturnValue("pages");
+    showPage(shadowRoot, shadowClaw, db, oStore, "pages");
+
+    expect(mockEnsureComponentLoaded).not.toHaveBeenCalledWith("chat");
+    expect(mockEnsureComponentLoaded).not.toHaveBeenCalledWith("tasks");
+    expect(mockEnsureComponentLoaded).not.toHaveBeenCalledWith("files");
   });
 });

@@ -3,7 +3,7 @@ import {
   getModelMaxTokens,
 } from "../../../../config/config.js";
 import { modelRegistry } from "../../../../subsystems/providers/model-registry.js";
-import { isPromptApiSupported } from "../../../../subsystems/providers/prompt-api-provider.js";
+import { isPromptApiSupported } from "../../../../subsystems/providers/utils/is-prompt-api-supported.js";
 
 export type BrowserNavigator = Navigator & {
   deviceMemory?: number;

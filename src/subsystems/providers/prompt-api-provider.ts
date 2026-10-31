@@ -38,31 +38,12 @@ const PROMPT_API_TOOLS = TOOL_DEFINITIONS.filter((t) =>
 
 export { PROMPT_API_TOOLS };
 
-function getLanguageModelApi(): {
-  availability: Function;
-  create: Function;
-} | null {
-  const candidate = (globalThis as any).LanguageModel;
-  if (!candidate || typeof candidate !== "function") {
-    return null;
-  }
+import {
+  getLanguageModelApi,
+  isPromptApiSupported,
+} from "./utils/is-prompt-api-supported.js";
 
-  if (
-    typeof candidate.availability !== "function" ||
-    typeof candidate.create !== "function"
-  ) {
-    return null;
-  }
-
-  return candidate;
-}
-
-/**
- * Feature detection for the Prompt API.
- */
-export function isPromptApiSupported(): boolean {
-  return !!getLanguageModelApi();
-}
+export { isPromptApiSupported };
 
 function supportsPromptConstraintOptions(): boolean {
   // Conservative gate: if Prompt API exists, option bag support is still

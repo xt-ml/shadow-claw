@@ -5,8 +5,6 @@ import { persistMessageAttachments } from "../../../content/message-attachments.
 import { listGroups } from "../../../db/groups.js";
 import { saveMessage } from "../../../db/save-message.js";
 
-import { invokeAgent } from "./invoke-agent.js";
-
 import { clearPeerJsTypingState } from "./operations/channel.js";
 import { getApiKeyForRequest } from "./operations/provider.js";
 
@@ -323,6 +321,7 @@ export async function processQueue(
   const msg = o.messageQueue.shift()!;
 
   try {
+    const { invokeAgent } = await import("./invoke-agent.js");
     await invokeAgent(
       o,
       db,

@@ -3,7 +3,6 @@ import { Signal } from "signal-polyfill";
 import { yieldToMain } from "../utils/delay.js";
 
 import { CONFIG_KEYS, DEFAULT_GROUP_ID } from "../config/config.js";
-import { compactContext } from "../core/orchestrator/utils/compact-context.js";
 
 import {
   flushTerminalWorkspace,
@@ -82,6 +81,7 @@ import { showError, showSuccess } from "../ui/toast.js";
 import { applyJsonPatch } from "../utils/json-patch.js";
 import { isPagePathAllowed } from "../utils/is-page-path-allowed.js";
 import { normalizeStringList } from "../utils/normalize-string-list.js";
+import { isTruthyConfigValue } from "../utils/parse-boolean-config.js";
 import { parseStoredStringList } from "../utils/parse-stored-string-list.js";
 import { getSiteConfig } from "../utils/site-config.js";
 import { ulid } from "../utils/ulid.js";
@@ -475,7 +475,16 @@ export class OrchestratorStore {
     this._gitProxyUrl = new Signal.State("/git-proxy");
     this._vmBashFullInternetAccess = new Signal.State(false);
     this._activePage = new Signal.State("pages");
-    this._sidebarDefaultPage = new Signal.State("chat");
+    const siteConfig = getSiteConfig();
+    const siteConfigDefaultPage = siteConfig?.sidebar?.defaultPage;
+    const initialSidebarDefaultPage =
+      siteConfigDefaultPage === "pages" ||
+      siteConfigDefaultPage === "chat" ||
+      siteConfigDefaultPage === "tasks" ||
+      siteConfigDefaultPage === "files"
+        ? siteConfigDefaultPage
+        : "chat";
+    this._sidebarDefaultPage = new Signal.State(initialSidebarDefaultPage);
     this._pages = new Signal.State([]);
     this._pagesAllowList = new Signal.State([]);
     this._pagesDenyList = new Signal.State([]);
@@ -1028,8 +1037,8 @@ export class OrchestratorStore {
       // Source has no attachments directory — nothing to copy
     }
 
-    await this.loadGroups(db);
     this.setActiveGroup(db, clone.groupId);
+    await this.loadGroups(db);
 
     return clone;
   }
@@ -1039,6 +1048,8 @@ export class OrchestratorStore {
    */
   async compactContext(db: ShadowClawDatabase): Promise<any> {
     if (!this.orchestrator) return;
+    const { compactContext } =
+      await import("../core/orchestrator/utils/compact-context.js");
     return compactContext(this.orchestrator, db, this._activeGroupId.get());
   }
 
@@ -1050,8 +1061,8 @@ export class OrchestratorStore {
     name: string,
   ): Promise<GroupMeta> {
     const group = await createGroup(db, name);
-    await this.loadGroups(db);
     this.setActiveGroup(db, group.groupId);
+    await this.loadGroups(db);
 
     return group;
   }
@@ -1646,12 +1657,46 @@ export class OrchestratorStore {
       );
     }
 
+    const [dbChatHiddenRaw, dbTasksHiddenRaw, dbFilesHiddenRaw] =
+      await Promise.all([
+        getConfig(db, CONFIG_KEYS.SIDEBAR_CHAT_HIDDEN),
+        getConfig(db, CONFIG_KEYS.SIDEBAR_TASKS_HIDDEN),
+        getConfig(db, CONFIG_KEYS.SIDEBAR_FILES_HIDDEN),
+      ]);
+
+    const siteConfig = getSiteConfig();
+    const siteChatHidden = siteConfig?.sidebar?.chatHidden;
+    const siteTasksHidden = siteConfig?.sidebar?.tasksHidden;
+    const siteFilesHidden = siteConfig?.sidebar?.filesHidden;
+
+    const isChatHidden =
+      dbChatHiddenRaw !== null && dbChatHiddenRaw !== undefined
+        ? isTruthyConfigValue(dbChatHiddenRaw)
+        : Boolean(siteChatHidden);
+
+    const isTasksHidden =
+      dbTasksHiddenRaw !== null && dbTasksHiddenRaw !== undefined
+        ? isTruthyConfigValue(dbTasksHiddenRaw)
+        : Boolean(siteTasksHidden);
+
+    const isFilesHidden =
+      dbFilesHiddenRaw !== null && dbFilesHiddenRaw !== undefined
+        ? isTruthyConfigValue(dbFilesHiddenRaw)
+        : Boolean(siteFilesHidden);
+
     const runSecondaryLoads = () => {
-      void Promise.all([
-        this.loadHistory(),
-        this.loadTasks(db),
-        this.loadFiles(db),
-      ]).catch((err) => {
+      const secondaryLoads: Promise<unknown>[] = [];
+      if (!isChatHidden || this.activePage === "chat") {
+        secondaryLoads.push(this.loadHistory());
+      }
+      if (!isTasksHidden || this.activePage === "tasks") {
+        secondaryLoads.push(this.loadTasks(db));
+      }
+      if (!isFilesHidden || this.activePage === "files") {
+        secondaryLoads.push(this.loadFiles(db));
+      }
+
+      void Promise.all(secondaryLoads).catch((err) => {
         console.warn("Secondary background store loads failed:", err);
       });
     };
@@ -1665,11 +1710,17 @@ export class OrchestratorStore {
         setTimeout(runSecondaryLoads, 100);
       }
     } else {
-      await Promise.all([
-        this.loadHistory(),
-        this.loadTasks(db),
-        this.loadFiles(db),
-      ]);
+      const immediateLoads: Promise<unknown>[] = [];
+      if (!isChatHidden || this.activePage === "chat") {
+        immediateLoads.push(this.loadHistory());
+      }
+      if (!isTasksHidden || this.activePage === "tasks") {
+        immediateLoads.push(this.loadTasks(db));
+      }
+      if (!isFilesHidden || this.activePage === "files") {
+        immediateLoads.push(this.loadFiles(db));
+      }
+      await Promise.all(immediateLoads);
     }
 
     await yieldToMain();
@@ -2904,6 +2955,8 @@ export class OrchestratorStore {
           }
         }
         if (defaultPage && typeof defaultPage === "string") {
+          const normalized = this.normalizeSidebarDefaultPage(defaultPage);
+          this._sidebarDefaultPage.set(normalized);
           const cur = await getConfig(db, CONFIG_KEYS.SIDEBAR_DEFAULT_PAGE);
           if (!cur) {
             await setConfig(db, CONFIG_KEYS.SIDEBAR_DEFAULT_PAGE, defaultPage);

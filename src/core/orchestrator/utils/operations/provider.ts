@@ -13,7 +13,7 @@ import { getConfig } from "../../../../db/get-config.js";
 import { setConfig as _defaultSetConfig } from "../../../../db/set-config.js";
 import { toolsStore } from "../../../../stores/tools.js";
 import { modelRegistry } from "../../../../subsystems/providers/model-registry.js";
-import { isPromptApiSupported } from "../../../../subsystems/providers/prompt-api-provider.js";
+import { isPromptApiSupported } from "../../../../subsystems/providers/utils/is-prompt-api-supported.js";
 
 import type { ShadowClawDatabase } from "../../../../db/db.js";
 import type { LLMProvider } from "../../../../subsystems/providers/types.js";

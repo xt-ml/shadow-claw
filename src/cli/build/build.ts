@@ -197,15 +197,27 @@ async function embedSingleFileBundle(
     // 5. Rewrite local scripts and stylesheets to CDN URLs
     // Rewrite theme-init.js
     idxHtml = idxHtml.replace(
+      /<script\b[^>]*>\s*var\s+ShadowClawThemeInit\b[\s\S]*?<\/script>/giu,
+      `<script src="${assetBase}theme-init.js"></script>`,
+    );
+    idxHtml = idxHtml.replace(
       /<script\s+src="[^"]*?theme-init\.js"><\/script>/gi,
       `<script src="${assetBase}theme-init.js"></script>`,
     );
 
-    // Rewrite index.css
-    idxHtml = idxHtml.replace(
-      /<link\b([^>]*?)href="[^"]*?index\.css"([^>]*?)\/?>/gi,
-      `<link$1href="${assetBase}index.css"$2 />`,
-    );
+    // Rewrite index.css; inject a CDN link if the HTML has no local link to rewrite
+    // (the built index.html inlines CSS as <style> rather than serving index.css)
+    if (/index\.css/i.test(idxHtml)) {
+      idxHtml = idxHtml.replace(
+        /<link\b([^>]*?)href="[^"]*?index\.css"([^>]*?)\/?>/gi,
+        `<link$1href="${assetBase}index.css"$2 />`,
+      );
+    } else {
+      idxHtml = insertBeforeClosingHead(
+        idxHtml,
+        `  <link rel="stylesheet" href="${assetBase}index.css" />`,
+      );
+    }
 
     // Rewrite manifest.json
     idxHtml = idxHtml.replace(

@@ -1,6 +1,8 @@
 const componentLoaders: Record<string, () => Promise<unknown>> = {
   pages: () => import("../../shadow-claw-pages/shadow-claw-pages.js"),
   chat: () => import("../../shadow-claw-chat/shadow-claw-chat.js"),
+  conversations: () =>
+    import("../../shadow-claw-conversations/shadow-claw-conversations.js"),
   tasks: () => import("../../shadow-claw-tasks/shadow-claw-tasks.js"),
   files: () => import("../../shadow-claw-files/shadow-claw-files.js"),
   settings: () => import("../../shadow-claw-settings/shadow-claw-settings.js"),

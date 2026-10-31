@@ -27,6 +27,9 @@ describe("loadPagesSidebarVisibilityPreference", () => {
     mockGetConfig = jest.fn();
     mockIsTruthyConfigValue = jest.fn((val) => val === "true");
 
+    jest.unstable_mockModule("./load-component.js", () => ({
+      ensureComponentLoaded: jest.fn().mockResolvedValue(undefined as never),
+    }));
     jest.unstable_mockModule("../../../db/get-config.js", () => ({
       getConfig: mockGetConfig,
     }));

@@ -45,11 +45,13 @@ import { RoomChannel } from "../../subsystems/channels/room.js";
 import { TelegramChannel } from "../../subsystems/channels/telegram.js";
 
 import { unregisterWebMcpTools } from "../../subsystems/mcp/webmcp.js";
-import { isPromptApiSupported } from "../../subsystems/providers/prompt-api-provider.js";
+import { isPromptApiSupported } from "../../subsystems/providers/utils/is-prompt-api-supported.js";
 
 import { getContextLimit } from "../../subsystems/providers/providers.js";
 import { TaskScheduler } from "../../subsystems/tools/task-scheduler.js";
 import { formatA2UIActionPrompt } from "../../ui/a2ui/utils/format-a2ui-action-prompt.js";
+import { isTruthyConfigValue } from "../../utils/parse-boolean-config.js";
+import { getSiteConfig } from "../../utils/site-config.js";
 import { ulid } from "../../utils/ulid.js";
 import { yieldToMain } from "../../utils/delay.js";
 import { buildSystemPrompt } from "../../worker/utils/system-prompt.js";
@@ -66,8 +68,6 @@ import {
   initProviderAndModel,
   initWorkerAndScheduler,
 } from "./utils/init-tasks.js";
-
-import { invokeAgent } from "./utils/invoke-agent.js";
 
 import {
   cancelLlamafileRequest,
@@ -102,6 +102,7 @@ export class Orchestrator {
   };
 
   channelRegistry: ChannelRegistry = new ChannelRegistry();
+  channelsInitialized: boolean = false;
   contextCompressionEnabled: boolean = false;
 
   db: ShadowClawDatabase | null = null;
@@ -236,8 +237,17 @@ export class Orchestrator {
   }
 
   async ensureWorkerReady(): Promise<void> {
+    if (this.db && !this.channelsInitialized) {
+      this.channelsInitialized = true;
+      await initChannelsAndRooms(this, this.db);
+      this.browserChat.onDisplay(() => {});
+    }
     if (!this.agentWorker && this.db) {
       await initWorkerAndScheduler(this, this.db);
+    }
+    if (this.db) {
+      void toolsStore.load(this.db);
+      syncWebMcpRegistration(this, this.db);
     }
   }
 
@@ -479,20 +489,46 @@ export class Orchestrator {
       typeof document !== "undefined" &&
       Boolean(document.getElementById(STATIC_ROUTING_SCRIPT_ID));
 
+    const siteConfig = getSiteConfig();
+    const siteChatHidden = siteConfig?.sidebar?.chatHidden;
+    const siteTasksHidden = siteConfig?.sidebar?.tasksHidden;
+
+    const [dbChatHiddenRaw, dbTasksHiddenRaw] = await Promise.all([
+      getConfig(db, CONFIG_KEYS.SIDEBAR_CHAT_HIDDEN),
+      getConfig(db, CONFIG_KEYS.SIDEBAR_TASKS_HIDDEN),
+    ]);
+
+    const isChatHidden =
+      dbChatHiddenRaw !== null && dbChatHiddenRaw !== undefined
+        ? isTruthyConfigValue(dbChatHiddenRaw)
+        : Boolean(siteChatHidden);
+
+    const isTasksHidden =
+      dbTasksHiddenRaw !== null && dbTasksHiddenRaw !== undefined
+        ? isTruthyConfigValue(dbTasksHiddenRaw)
+        : Boolean(siteTasksHidden);
+
+    const areChatAndTasksHidden = isChatHidden && isTasksHidden;
+
     if (isStaticSite) {
-      setTimeout(() => {
-        void this.ensureWorkerReady();
-      }, 15_000);
-    } else {
+      if (!areChatAndTasksHidden) {
+        setTimeout(() => {
+          void this.ensureWorkerReady();
+        }, 15_000);
+      }
+    } else if (!areChatAndTasksHidden) {
       await initWorkerAndScheduler(this, db);
     }
 
     // Channels/rooms are deferred to a background microtask so the UI reaches
     // "ready" without waiting for room metadata reads or peer-channel setup.
     // browserChat.onDisplay is called after channels are configured.
-    void initChannelsAndRooms(this, db).then(() => {
-      this.browserChat.onDisplay(() => {});
-    });
+    if (!areChatAndTasksHidden) {
+      this.channelsInitialized = true;
+      void initChannelsAndRooms(this, db).then(() => {
+        this.browserChat.onDisplay(() => {});
+      });
+    }
 
     this.events.emit("ready", undefined);
 
@@ -503,16 +539,20 @@ export class Orchestrator {
         ? (globalThis as any).window
         : undefined;
     if (isStaticSite) {
-      setTimeout(() => {
-        void toolsStore.load(db);
-        syncWebMcpRegistration(this, db);
-      }, 15_000);
+      if (!areChatAndTasksHidden) {
+        setTimeout(() => {
+          void toolsStore.load(db);
+          syncWebMcpRegistration(this, db);
+        }, 15_000);
+      }
     } else if (win && typeof win.requestIdleCallback === "function") {
-      win.requestIdleCallback(() => {
-        void toolsStore.load(db);
-        syncWebMcpRegistration(this, db);
-      });
-    } else {
+      if (!areChatAndTasksHidden) {
+        win.requestIdleCallback(() => {
+          void toolsStore.load(db);
+          syncWebMcpRegistration(this, db);
+        });
+      }
+    } else if (!areChatAndTasksHidden) {
       await toolsStore.load(db);
       syncWebMcpRegistration(this, db);
     }
@@ -693,6 +733,7 @@ export class Orchestrator {
 
     this.stopCurrentRequest(groupId);
 
+    const { invokeAgent } = await import("./utils/invoke-agent.js");
     await invokeAgent(this, this.db, groupId, triggerContent);
 
     return true;

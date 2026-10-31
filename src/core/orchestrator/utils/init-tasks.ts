@@ -17,7 +17,7 @@ import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { RoomManager } from "../../../subsystems/channels/room-manager.js";
 import { setWebMcpMode as applyWebMcpMode } from "../../../subsystems/mcp/webmcp.js";
 import { modelRegistry } from "../../../subsystems/providers/model-registry.js";
-import { isPromptApiSupported } from "../../../subsystems/providers/prompt-api-provider.js";
+import { isPromptApiSupported } from "../../../subsystems/providers/utils/is-prompt-api-supported.js";
 import { fetchTokenizerConfig } from "../../../subsystems/providers/utils/chat-template.js";
 import { TaskScheduler } from "../../../subsystems/tools/task-scheduler.js";
 import { STATIC_ROUTING_SCRIPT_ID } from "../../../storage/static-routing.js";

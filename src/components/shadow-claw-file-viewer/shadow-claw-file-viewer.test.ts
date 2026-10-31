@@ -524,15 +524,21 @@ describe("shadow-claw-file-viewer", () => {
     );
   });
 
-  it("loads the reviewed link bridge from a same-origin script file", async () => {
+  it("inlines the reviewed link bridge and storage bridge into the html iframe srcdoc", async () => {
     const component = new ShadowClawFileViewer();
     const srcdoc = await component.buildIframePreviewSrcdoc({
       name: "index.html",
       content: '<a href="docs/guide">Guide</a>',
     });
 
-    expect(srcdoc).toContain("/assets/file-viewer-preview-bridge.js");
-    expect(srcdoc).not.toContain("window.parent.postMessage");
+    expect(srcdoc).toContain("file-viewer-preview-bridge.js");
+    expect(srcdoc).toContain("iframe-storage-bridge.js");
+    expect(srcdoc).not.toContain(
+      '<script src="/assets/file-viewer-preview-bridge.js"',
+    );
+    expect(srcdoc).not.toContain(
+      '<script src="/assets/iframe-storage-bridge.js"',
+    );
   });
 
   it("keeps same-origin external application links (e.g. block-garden) untouched in html iframe srcdoc", async () => {
@@ -656,7 +662,7 @@ describe("shadow-claw-file-viewer", () => {
     const nonce = nonceMatch![1];
 
     expect(srcdoc).toContain(`nonce="${nonce}"`);
-    expect(srcdoc).toContain("/assets/file-viewer-preview-bridge.js");
+    expect(srcdoc).toContain("file-viewer-preview-bridge.js");
   });
 
   it("injects site config, theme stylesheet, and approved custom element scripts into html iframe srcdoc when configured", async () => {

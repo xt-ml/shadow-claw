@@ -1516,21 +1516,20 @@ export class ShadowClawPages extends ShadowClawElement {
           ) {
             this.showNavButtonsTemporarily(2500);
 
-            const viewerScroll = root.querySelector(".pages__viewer-scroll");
-            if (viewerScroll instanceof HTMLElement) {
-              if (typeof viewerScroll.scrollTo === "function") {
-                viewerScroll.scrollTo({ top: 0, behavior: "smooth" });
-              } else {
-                viewerScroll.scrollTop = 0;
+            if (!window.location.hash) {
+              const viewerScroll = root.querySelector(".pages__viewer-scroll");
+              if (viewerScroll instanceof HTMLElement) {
+                if (typeof viewerScroll.scrollTo === "function") {
+                  viewerScroll.scrollTo({ top: 0, behavior: "smooth" });
+                } else {
+                  viewerScroll.scrollTop = 0;
+                }
               }
             }
 
             return;
           }
 
-          this.renderedKey = pageKey;
-          this.renderedContent = content;
-          this.renderedFrontmatterToggle = null;
           removePreviewIframe(root);
           rendered.hidden = false;
 
@@ -1658,14 +1657,24 @@ export class ShadowClawPages extends ShadowClawElement {
             }),
           );
 
+          if (token !== this.renderToken) {
+            return;
+          }
+
+          this.renderedKey = pageKey;
+          this.renderedContent = content;
+          this.renderedFrontmatterToggle = null;
+
           this.showNavButtonsTemporarily(2500);
 
-          const viewerScroll = root.querySelector(".pages__viewer-scroll");
-          if (viewerScroll instanceof HTMLElement) {
-            if (typeof viewerScroll.scrollTo === "function") {
-              viewerScroll.scrollTo(0, 0);
-            } else {
-              viewerScroll.scrollTop = 0;
+          if (!window.location.hash) {
+            const viewerScroll = root.querySelector(".pages__viewer-scroll");
+            if (viewerScroll instanceof HTMLElement) {
+              if (typeof viewerScroll.scrollTo === "function") {
+                viewerScroll.scrollTo(0, 0);
+              } else {
+                viewerScroll.scrollTop = 0;
+              }
             }
           }
 
@@ -1685,18 +1694,16 @@ export class ShadowClawPages extends ShadowClawElement {
           return;
         }
 
-        this.renderedKey = pageKey;
-        this.renderedContent = content;
-        this.renderedFrontmatterToggle = null;
         const iframe = this.ensurePreviewIframe(root, rendered);
         this.previewFrameWindow = null;
-        setTrustedSrcdoc(
-          iframe,
-          await this.buildHtmlPageSrcdoc(
-            parsedFrontmatter.content,
-            selectedPage.path,
-          ),
+        const srcdoc = await this.buildHtmlPageSrcdoc(
+          parsedFrontmatter.content,
+          selectedPage.path,
         );
+        if (token !== this.renderToken) {
+          return;
+        }
+        setTrustedSrcdoc(iframe, srcdoc);
         // Any visible content in the rendered slot — DSD seed *or* a prior page
         // rendered by JS — should trigger the wait-for-iframe-load path so the
         // swap is seamless. The original Boolean(prevRenderedKey) guard was
@@ -1730,6 +1737,14 @@ export class ShadowClawPages extends ShadowClawElement {
           rendered.hidden = true;
           iframe.hidden = false;
         }
+
+        if (token !== this.renderToken) {
+          return;
+        }
+
+        this.renderedKey = pageKey;
+        this.renderedContent = content;
+        this.renderedFrontmatterToggle = null;
         this.showNavButtonsTemporarily(2500);
 
         return;
@@ -1767,9 +1782,6 @@ export class ShadowClawPages extends ShadowClawElement {
           return;
         }
 
-        this.renderedKey = pageKey;
-        this.renderedContent = content;
-        this.renderedFrontmatterToggle = renderFrontmatter;
         rendered.hidden = false;
 
         const { renderMarkdown } = await import("../../content/markdown.js");
@@ -1865,6 +1877,14 @@ export class ShadowClawPages extends ShadowClawElement {
           selectedPage.groupId,
           selectedPage.path,
         );
+
+        if (token !== this.renderToken) {
+          return;
+        }
+
+        this.renderedKey = pageKey;
+        this.renderedContent = content;
+        this.renderedFrontmatterToggle = renderFrontmatter;
         this.showNavButtonsTemporarily(2500);
 
         return;
@@ -1880,12 +1900,16 @@ export class ShadowClawPages extends ShadowClawElement {
         return;
       }
 
+      if (token !== this.renderToken) {
+        return;
+      }
+
+      rendered.hidden = false;
+      rendered.textContent = content;
       this.renderedKey = pageKey;
       this.renderedContent = content;
       this.renderedFrontmatterToggle = null;
       this.pageFrontmatter.set(null);
-      rendered.hidden = false;
-      rendered.textContent = content;
       this.showNavButtonsTemporarily(2500);
     } catch (error) {
       this.renderedKey = null;

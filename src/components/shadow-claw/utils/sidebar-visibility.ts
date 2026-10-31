@@ -1,6 +1,7 @@
 import { CONFIG_KEYS } from "../../../config/config.js";
 import { getConfig } from "../../../db/get-config.js";
 import { isTruthyConfigValue } from "../../../utils/parse-boolean-config.js";
+import { ensureComponentLoaded } from "./load-component.js";
 
 import type { ShadowClawDatabase } from "../../../db/types.js";
 import type { OrchestratorStore } from "../../../stores/orchestrator.js";
@@ -101,6 +102,10 @@ export async function loadAllSidebarVisibilityPreferences(
     const prop = getHiddenProp(navPage);
     shadowClaw[prop] = hidden;
     applySidebarNavVisibility(shadow, navPage, hidden);
+
+    if (navPage === "chat" && !hidden) {
+      await ensureComponentLoaded("conversations");
+    }
   }
 }
 

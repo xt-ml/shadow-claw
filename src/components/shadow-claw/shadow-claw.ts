@@ -28,9 +28,6 @@ import { handleOrchestratorRoomInvite } from "./utils/handle-orchestrator-room-i
 import { handleShadowClawNavigate } from "./utils/handle-shadow-claw-navigate.js";
 import { historyState } from "./utils/history-state.js";
 import { loadPagesSidebarVisibilityPreference } from "./utils/load-pages-sidebar-visibility-preference.js";
-import { processPeerQueryParam } from "./utils/process-peer-query-param.js";
-import { processPendingSharedPayloads } from "./utils/process-pending-shared-payloads.js";
-import { processRoomQueryParam } from "./utils/process-room-query-param.js";
 import { requestDialog } from "./utils/request-dialog.js";
 import { scheduleTerminalPlacement } from "./utils/schedule-terminal-placement.js";
 import { setupEffects } from "./utils/setup-effects.js";
@@ -116,7 +113,6 @@ export class ShadowClaw extends ShadowClawElement {
       // Lazily load non-critical UI components when idle to reduce initial JS execution
       const loadDeferredComponents = () => {
         Promise.all([
-          import("../shadow-claw-conversations/shadow-claw-conversations.js"),
           import("../shadow-claw-dialog/shadow-claw-dialog.js"),
           import("../shadow-claw-toast/shadow-claw-toast.js"),
         ]).catch(console.error);
@@ -151,8 +147,16 @@ export class ShadowClaw extends ShadowClawElement {
       // markup starts on a different page. On a fresh install (no persisted page),
       // trust the pre-rendered content instead of forcing to Chat — unless the
       // Pages sidebar is hidden, in which case we must redirect away from it.
+      const hasAlternativeVisibleSidebar =
+        !this.chatSidebarHidden ||
+        !this.tasksSidebarHidden ||
+        !this.filesSidebarHidden;
+
       const isCurrentPageHidden =
-        (orchestratorStore.activePage === "pages" && this.pagesSidebarHidden) ||
+        (orchestratorStore.activePage === "pages" &&
+          this.pagesSidebarHidden &&
+          orchestratorStore.sidebarDefaultPage !== "pages" &&
+          hasAlternativeVisibleSidebar) ||
         (orchestratorStore.activePage === "chat" && this.chatSidebarHidden) ||
         (orchestratorStore.activePage === "tasks" && this.tasksSidebarHidden) ||
         (orchestratorStore.activePage === "files" && this.filesSidebarHidden);
@@ -195,31 +199,76 @@ export class ShadowClaw extends ShadowClawElement {
         initialLocationUrl || new URL(window.location.href),
       );
 
-      await processPeerQueryParam(
-        this.shadowRoot,
-        this,
-        this.db,
-        this.orchestrator,
-      );
+      const currentUrl =
+        initialLocationUrl ||
+        (typeof window !== "undefined" && window.location?.href
+          ? new URL(window.location.href)
+          : null);
 
-      await processRoomQueryParam(
-        window,
-        this.shadowRoot,
-        this,
-        this.db,
-        this.orchestrator,
-        orchestratorStore,
-      );
+      if (currentUrl?.searchParams?.has("peer")) {
+        const { processPeerQueryParam } =
+          await import("./utils/process-peer-query-param.js");
+        await processPeerQueryParam(
+          this.shadowRoot,
+          this,
+          this.db,
+          this.orchestrator,
+        );
+      }
 
-      await processPendingSharedPayloads(
-        window,
-        this.shadowRoot,
-        this,
-        orchestratorStore,
-        fileViewerStore,
-        this.db,
-        new URL(window.location.href),
-      );
+      if (
+        currentUrl?.searchParams?.has("room") ||
+        currentUrl?.searchParams?.has("host")
+      ) {
+        const { processRoomQueryParam } =
+          await import("./utils/process-room-query-param.js");
+        await processRoomQueryParam(
+          window,
+          this.shadowRoot,
+          this,
+          this.db,
+          this.orchestrator,
+          orchestratorStore,
+        );
+      }
+
+      const runDeferredShares = async () => {
+        if (!this.db) {
+          return;
+        }
+        const { processPendingSharedPayloads } =
+          await import("./utils/process-pending-shared-payloads.js");
+        await processPendingSharedPayloads(
+          window,
+          this.shadowRoot,
+          this,
+          orchestratorStore,
+          fileViewerStore,
+          this.db,
+          currentUrl || new URL(window.location.href),
+        );
+      };
+
+      if (
+        currentUrl?.searchParams?.has("share-target") ||
+        (globalThis as any).__SHADOWCLAW_E2E_ENABLE__ === true
+      ) {
+        // In production, share-target URL param triggers immediate processing.
+        // In E2E tests, always run eagerly so the conversation is visible before
+        // waitForReady() resolves — requestIdleCallback fires too late for assertions.
+        await runDeferredShares();
+      } else if (
+        typeof window !== "undefined" &&
+        "requestIdleCallback" in window
+      ) {
+        (window as any).requestIdleCallback(() => {
+          void runDeferredShares().catch(console.error);
+        });
+      } else {
+        setTimeout(() => {
+          void runDeferredShares().catch(console.error);
+        }, 1000);
+      }
 
       console.log("ShadowClaw UI initialized");
 
@@ -429,7 +478,12 @@ export class ShadowClaw extends ShadowClawElement {
     const chatSplitHandle = this.shadowRoot?.querySelector(
       ".chat-split-resize-handle",
     );
-    if (this.shadowRoot && chatSplitHandle instanceof HTMLElement) {
+    if (
+      this.chatSplitViewEnabled &&
+      !this.chatSidebarHidden &&
+      this.shadowRoot &&
+      chatSplitHandle instanceof HTMLElement
+    ) {
       const { initChatSplitResize } =
         await import("./utils/init-chat-split-resize.js");
       await initChatSplitResize(

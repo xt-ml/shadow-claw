@@ -21,9 +21,20 @@ describe("buildHtmlPageSrcdoc", () => {
 
     expect(html).toContain("<!doctype html>");
     expect(html).toContain('<meta http-equiv="Content-Security-Policy"');
-    expect(html).toContain("<h1>Hello World</h1>");
     expect(html).toContain("iframe-storage-bridge.js");
     expect(html).toContain("file-viewer-preview-bridge.js");
+    expect(html).not.toContain(
+      '<script src="/assets/iframe-storage-bridge.js"',
+    );
+    expect(html).not.toContain(
+      '<script src="/assets/file-viewer-preview-bridge.js"',
+    );
+    expect(html).toMatch(
+      /<script nonce="[a-f0-9]+">[\s\S]*?iframe-storage-bridge\.js/,
+    );
+    expect(html).toMatch(
+      /<script nonce="[a-f0-9]+">[\s\S]*?file-viewer-preview-bridge\.js/,
+    );
     expect(html).toContain("foo=bar");
     expect(html).not.toContain('<link rel="stylesheet" href="/theme.css">');
     expect(html).toMatch(/<body class="(light|dark)-mode">/);

@@ -2215,6 +2215,143 @@ describe("Orchestrator", () => {
       }
     });
 
+    it("should not schedule worker startup on timer if both chat and tasks are hidden", async () => {
+      const script = document.createElement("script");
+      script.id = "shadow-claw-static-routing";
+      script.type = "application/json";
+      script.textContent = JSON.stringify({ routes: {} });
+      document.head.appendChild(script);
+
+      const configScript = document.createElement("script");
+      configScript.id = "shadow-claw-site-config";
+      configScript.type = "application/json";
+      configScript.textContent = JSON.stringify({
+        sidebar: {
+          chatHidden: true,
+          tasksHidden: true,
+        },
+      });
+      document.head.appendChild(configScript);
+
+      const setTimeoutSpy = jest.spyOn(globalThis, "setTimeout");
+
+      try {
+        const o = new Orchestrator();
+        jest.spyOn(o.roomManager, "loadRooms").mockImplementation(() => {});
+        const loadToolsSpy = jest
+          .spyOn(toolsStore, "load")
+          .mockResolvedValue(undefined);
+        loadToolsSpy.mockClear();
+        jest.spyOn(o, "loadApiKeyForProvider").mockResolvedValue();
+        jest.spyOn(o, "loadSecretConfig").mockResolvedValue("");
+
+        const db = await o.init();
+        expect(db).toBeDefined();
+        expect(loadToolsSpy).not.toHaveBeenCalled();
+        expect(o.agentWorker).toBeNull();
+
+        // 15-second timer should NOT be scheduled
+        const timer15sCalls = setTimeoutSpy.mock.calls.filter(
+          (call) => call[1] === 15_000,
+        );
+        expect(timer15sCalls.length).toBe(0);
+      } finally {
+        script.remove();
+        configScript.remove();
+        setTimeoutSpy.mockRestore();
+      }
+    });
+
+    it("should defer channels, scheduler, worker, and tools on boot when chat and tasks are hidden, and initialize on demand via ensureWorkerReady", async () => {
+      const script = document.createElement("script");
+      script.id = "shadow-claw-static-routing";
+      script.type = "application/json";
+      script.textContent = JSON.stringify({ routes: {} });
+      document.head.appendChild(script);
+
+      const configScript = document.createElement("script");
+      configScript.id = "shadow-claw-site-config";
+      configScript.type = "application/json";
+      configScript.textContent = JSON.stringify({
+        sidebar: {
+          chatHidden: true,
+          tasksHidden: true,
+        },
+      });
+      document.head.appendChild(configScript);
+
+      const origWorker = (globalThis as any).Worker;
+      const mockWorker = {
+        postMessage: jest.fn(),
+        terminate: jest.fn(),
+        addEventListener: jest.fn(),
+        removeEventListener: jest.fn(),
+      };
+      (globalThis as any).Worker = jest.fn(() => mockWorker);
+
+      try {
+        const o = new Orchestrator();
+        jest.spyOn(o.roomManager, "loadRooms").mockImplementation(() => {});
+        const loadToolsSpy = jest
+          .spyOn(toolsStore, "load")
+          .mockResolvedValue(undefined);
+        jest.spyOn(o, "loadApiKeyForProvider").mockResolvedValue();
+        jest.spyOn(o, "loadSecretConfig").mockResolvedValue("");
+
+        const db = await o.init();
+        expect(db).toBeDefined();
+        expect(o.channelsInitialized).toBe(false);
+        expect(o.agentWorker).toBeNull();
+        expect(loadToolsSpy).not.toHaveBeenCalled();
+
+        await o.ensureWorkerReady();
+        expect(o.channelsInitialized).toBe(true);
+        expect(o.agentWorker).not.toBeNull();
+        expect(loadToolsSpy).toHaveBeenCalled();
+      } finally {
+        script.remove();
+        configScript.remove();
+        if (!origWorker) {
+          delete (globalThis as any).Worker;
+        } else {
+          (globalThis as any).Worker = origWorker;
+        }
+      }
+    });
+
+    it("should boot worker and load tools on demand when ensureWorkerReady is explicitly called", async () => {
+      const o = new Orchestrator();
+      const origWorker = (globalThis as any).Worker;
+      const mockWorker = {
+        postMessage: jest.fn(),
+        terminate: jest.fn(),
+        addEventListener: jest.fn(),
+        removeEventListener: jest.fn(),
+      };
+      (globalThis as any).Worker = jest.fn(() => mockWorker);
+
+      const loadToolsSpy = jest
+        .spyOn(toolsStore, "load")
+        .mockResolvedValue(undefined);
+
+      try {
+        o.db = await openDatabase();
+        expect(o.agentWorker).toBeNull();
+
+        await o.ensureWorkerReady();
+
+        expect(o.agentWorker).not.toBeNull();
+        expect(loadToolsSpy).toHaveBeenCalled();
+      } finally {
+        if (!origWorker) {
+          delete (globalThis as any).Worker;
+        } else {
+          (globalThis as any).Worker = origWorker;
+        }
+        loadToolsSpy.mockRestore();
+      }
+    });
+
     it("initializes channels and browserChat onMessage immediately without 15s delay under static routing", async () => {
       const script = document.createElement("script");
       script.id = "shadow-claw-static-routing";

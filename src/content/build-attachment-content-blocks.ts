@@ -13,6 +13,8 @@ export const MAX_NATIVE_DOCUMENT_BYTES = 20 * 1024 * 1024; // 20 MB
 
 export interface BuildAttachmentContentBlocksOptions {
   maxInlineTextBytes?: number;
+  /** Max image size in bytes for inline base64 encoding (default: MAX_NATIVE_IMAGE_BYTES = 3 MB). */
+  maxImageBytes?: number;
 }
 
 /**
@@ -29,6 +31,7 @@ export async function buildAttachmentContentBlocks(
 ): Promise<ContentBlock[]> {
   const maxInlineTextBytes =
     options.maxInlineTextBytes ?? DEFAULT_MAX_INLINE_TEXT_BYTES;
+  const maxImageBytes = options.maxImageBytes ?? MAX_NATIVE_IMAGE_BYTES;
   const blocks: ContentBlock[] = [];
 
   for (const attachment of attachments) {
@@ -80,7 +83,7 @@ export async function buildAttachmentContentBlocks(
     };
 
     if (bytes) {
-      if (mediaType === "image" && effectiveSize <= MAX_NATIVE_IMAGE_BYTES) {
+      if (mediaType === "image" && effectiveSize <= maxImageBytes) {
         block.data = bytesToBase64(bytes);
       } else if (
         mediaType === "audio" &&

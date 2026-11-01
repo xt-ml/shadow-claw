@@ -8,13 +8,18 @@ const UPDATE_FAILURE_KEY = "shadowclaw-sw-update-failure";
 
 const mockMessageSkipWaiting = jest.fn();
 const mockRegister = jest.fn();
+const mockUpdate = jest.fn();
 const workboxScriptUrls: unknown[] = [];
+const workboxOptions: unknown[] = [];
 
 jest.unstable_mockModule("workbox-window", () => ({
   Workbox: class {
-    constructor(scriptUrl: string) {
+    constructor(scriptUrl: string, options?: unknown) {
       workboxScriptUrls.push(scriptUrl);
+      workboxOptions.push(options);
     }
+
+    update = mockUpdate;
 
     addEventListener(event: string, handler: () => void | Promise<void>) {
       listeners[event] = handler;
@@ -33,6 +38,7 @@ describe("service-worker init", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     workboxScriptUrls.length = 0;
+    workboxOptions.length = 0;
     for (const key of Object.keys(listeners)) {
       delete listeners[key];
     }
@@ -233,6 +239,202 @@ describe("service-worker init", () => {
     listeners.controlling?.();
 
     expect(globalThis.sessionStorage.getItem(UPDATE_FAILURE_KEY)).toBeNull();
+  });
+
+  it("registers with updateViaCache none so imported scripts are revalidated", async () => {
+    await import("./init.js");
+
+    expect(workboxOptions[0]).toEqual(
+      expect.objectContaining({ updateViaCache: "none" }),
+    );
+  });
+
+  describe("update checks and re-prompting", () => {
+    const INTERVAL_MS = 5000;
+    const MIN_GAP_MS = 30_000;
+    const REPROMPT_MS = 60_000;
+    let setIntervalSpy: jest.SpiedFunction<typeof globalThis.setInterval>;
+    let intervalCallbacks: Array<() => void | Promise<void>>;
+    let eventHandlers: Record<string, () => void | Promise<void>>;
+    let addEventListenerSpy: jest.SpiedFunction<
+      typeof globalThis.addEventListener
+    >;
+    let docAddEventListenerSpy: jest.SpiedFunction<
+      typeof document.addEventListener
+    >;
+
+    async function importInit(
+      overrides: Record<string, unknown> = {},
+    ): Promise<typeof import("./init.js")> {
+      jest.resetModules();
+      jest.unstable_mockModule("./update-config.js", () => ({
+        SW_UPDATE_CHECK_INTERVAL_MS: INTERVAL_MS,
+        SW_UPDATE_CHECK_ON_FOCUS: true,
+        SW_UPDATE_CHECK_MIN_GAP_MS: MIN_GAP_MS,
+        SW_UPDATE_REPROMPT_INTERVAL_MS: REPROMPT_MS,
+        ...overrides,
+      }));
+
+      return import("./init.js");
+    }
+
+    beforeEach(() => {
+      intervalCallbacks = [];
+      eventHandlers = {};
+      setIntervalSpy = jest
+        .spyOn(globalThis, "setInterval")
+        .mockImplementation((cb: any) => {
+          intervalCallbacks.push(cb);
+
+          return 1 as any;
+        });
+      addEventListenerSpy = jest
+        .spyOn(globalThis, "addEventListener")
+        .mockImplementation((event: string, handler: any) => {
+          eventHandlers[`window:${event}`] = handler;
+        });
+      docAddEventListenerSpy = jest
+        .spyOn(document, "addEventListener")
+        .mockImplementation((event: string, handler: any) => {
+          eventHandlers[`document:${event}`] = handler;
+        });
+    });
+
+    afterEach(() => {
+      setIntervalSpy.mockRestore();
+      addEventListenerSpy.mockRestore();
+      docAddEventListenerSpy.mockRestore();
+      jest.restoreAllMocks();
+    });
+
+    it("checks for updates on the configured interval", async () => {
+      await importInit();
+
+      expect(setIntervalSpy).toHaveBeenCalledWith(
+        expect.any(Function),
+        INTERVAL_MS,
+      );
+
+      await intervalCallbacks[0]?.();
+
+      expect(mockUpdate).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not schedule periodic checks when the interval is 0", async () => {
+      await importInit({ SW_UPDATE_CHECK_INTERVAL_MS: 0 });
+
+      expect(setIntervalSpy).not.toHaveBeenCalled();
+    });
+
+    it("checks for updates when the window regains focus", async () => {
+      await importInit();
+
+      await eventHandlers["window:focus"]?.();
+
+      expect(mockUpdate).toHaveBeenCalledTimes(1);
+    });
+
+    it("checks for updates when the document becomes visible", async () => {
+      await importInit();
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        value: "visible",
+      });
+
+      await eventHandlers["document:visibilitychange"]?.();
+
+      expect(mockUpdate).toHaveBeenCalledTimes(1);
+    });
+
+    it("throttles focus-triggered checks to the minimum gap", async () => {
+      await importInit();
+
+      await eventHandlers["window:focus"]?.();
+      await eventHandlers["window:focus"]?.();
+
+      expect(mockUpdate).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not listen for focus when on-focus checks are disabled", async () => {
+      await importInit({ SW_UPDATE_CHECK_ON_FOCUS: false });
+
+      expect(eventHandlers["window:focus"]).toBeUndefined();
+      expect(eventHandlers["document:visibilitychange"]).toBeUndefined();
+    });
+
+    it("re-prompts after Later once the re-prompt interval has elapsed", async () => {
+      requestDialog.mockResolvedValue(false);
+      const now = jest.spyOn(Date, "now");
+      now.mockReturnValue(1_000_000);
+      await importInit();
+
+      await listeners.waiting?.();
+      expect(requestDialog).toHaveBeenCalledTimes(1);
+
+      now.mockReturnValue(1_000_000 + REPROMPT_MS - 1);
+      await intervalCallbacks[0]?.();
+      expect(requestDialog).toHaveBeenCalledTimes(1);
+
+      now.mockReturnValue(1_000_000 + REPROMPT_MS + 1);
+      await intervalCallbacks[0]?.();
+      expect(requestDialog).toHaveBeenCalledTimes(2);
+    });
+
+    it("retries on the next check when the UI bridge was not ready", async () => {
+      let tick = 0;
+      const now = jest
+        .spyOn(Date, "now")
+        .mockImplementation(() => (tick += 2000));
+      querySpy.mockImplementation(() => null);
+      await importInit();
+
+      await listeners.waiting?.();
+      expect(requestDialog).not.toHaveBeenCalled();
+      expect(mockMessageSkipWaiting).not.toHaveBeenCalled();
+
+      now.mockRestore();
+      querySpy.mockImplementation((selector) =>
+        selector === "shadow-claw" ? ({ requestDialog } as any) : null,
+      );
+      await intervalCallbacks[0]?.();
+
+      expect(requestDialog).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not re-prompt when no update is waiting", async () => {
+      await importInit();
+
+      await intervalCallbacks[0]?.();
+
+      expect(requestDialog).not.toHaveBeenCalled();
+    });
+
+    it("asks to reload when another tab activated a new service worker", async () => {
+      Object.defineProperty(globalThis.navigator, "serviceWorker", {
+        value: {
+          controller: {},
+          addEventListener: jest.fn((event: string, handler: any) => {
+            serviceWorkerListeners[event] = handler;
+          }),
+        },
+        configurable: true,
+      });
+      await importInit();
+
+      await serviceWorkerListeners.controllerchange?.();
+
+      expect(requestDialog).toHaveBeenCalledWith(
+        expect.objectContaining({ title: "Update Installed" }),
+      );
+    });
+
+    it("does not ask to reload on first install takeover", async () => {
+      await importInit();
+
+      await serviceWorkerListeners.controllerchange?.();
+
+      expect(requestDialog).not.toHaveBeenCalled();
+    });
   });
 
   describe("Origin-Agent-Cluster reload compatibility", () => {

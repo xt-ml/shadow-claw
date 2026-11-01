@@ -65,8 +65,12 @@ npx shadow-claw agent --tools none --no-system-prompt --no-history run "Explain 
 # Pipe plain text into an agent tool (auto-mapped to tool schema)
 echo "how are you doing today" | npx shadow-claw agent tool rewrite_text
 
-# Attach local files (repeatable) without sharing a workspace
-npx shadow-claw agent run "Compare these" -f a.png -f b.png
+# Attach local files (repeatable) — images, PDFs, audio, code, text
+npx shadow-claw agent run "Compare these" --no-tools -f a.png -f b.png
+
+# Images > 3 MB fall back to a text reference by default.
+# Raise the limit with --max-image-size (in MB) for larger images:
+npx shadow-claw agent run "Describe this poster" --no-tools --max-image-size 10 -f big-photo.png
 
 # Combine CLI prompt with piped document content and save to file
 cat doc.txt | npx shadow-claw agent run "Summarize this" -o summary.txt

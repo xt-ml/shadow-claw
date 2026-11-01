@@ -46,7 +46,20 @@ Text and structured code attachments (`.ts`, `.json`, `.md`, `.txt`, etc.) at or
 
 If a model is detected to support a specific modality, the attachment is delivered using the provider's native block format (e.g., `image` or `document` blocks in Anthropic; base64 data URLs in OpenAI).
 
-### 3. Fallback Delivery
+### 3. Payload Size Limits & Guardrails
+
+To prevent oversized requests from exceeding provider context windows or runtime memory limits, inline delivery is subject to per-type size thresholds:
+
+| Category   | Default Limit | Configuration / Override                                             |
+| :--------- | :------------ | :------------------------------------------------------------------- |
+| `text`     | 100 KB        | `DEFAULT_MAX_INLINE_TEXT_BYTES` / `maxInlineTextBytes`               |
+| `image`    | 3 MB          | `MAX_NATIVE_IMAGE_BYTES` / `--max-image-size <MB>` (`maxImageBytes`) |
+| `audio`    | 5 MB          | `MAX_NATIVE_AUDIO_BYTES` (5 MB)                                      |
+| `document` | 20 MB         | `MAX_NATIVE_DOCUMENT_BYTES` (20 MB)                                  |
+
+Files exceeding these limits are not silently dropped: they fall back to metadata text references, and in headless CLI execution (`shadow-claw agent run`), an explicit warning is printed to `stderr` advising the user to resize or compress the asset (or raise the limit via `--max-image-size` for high-resolution images).
+
+### 4. Fallback Delivery
 
 If a model does not support the modality (or is unknown), ShadowClaw performs a "markdown-optimized" conversion:
 

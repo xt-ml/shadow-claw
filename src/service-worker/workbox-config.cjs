@@ -58,7 +58,7 @@ module.exports = {
     /\/assets\//,
     /\.(png|jpe?g|gif|webp|svg|ico|bmp|avif|mp4|webm|mp3|wav|ogg|pdf|zip|gz|tar|css|js|json|wasm)$/i,
   ],
-  // cleanupOutdatedCaches: true,
+  cleanupOutdatedCaches: true,
   // https://developer.chrome.com/docs/workbox/modules/workbox-build#property-BasePartial-maximumFileSizeToCacheInBytes
   // maximumFileSizeToCacheInBytes: 1024 * 1024 * 6, // 6MB
   maximumFileSizeToCacheInBytes: 1024 * 1024 * 1024 * 10, // 10GB

@@ -1,6 +1,7 @@
 import { execSync } from "node:child_process";
-import { cp, mkdir, readFile, stat, writeFile } from "node:fs/promises";
-import { basename, join, relative, resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { cp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { chdir, env, exit } from "node:process";
 import { fileURLToPath } from "node:url";
 import { rimraf } from "rimraf";
@@ -24,6 +25,16 @@ import {
   resolveSiteBasePath,
 } from "../site-config/apply.js";
 import { patchServiceWorkerTrustedTypesFile } from "../tools/patch-service-worker-trusted-types.js";
+import {
+  generateSingleFileServiceWorker,
+  generateSingleFileSwRegistration,
+} from "./single-file-service-worker.js";
+import {
+  SW_UPDATE_CHECK_INTERVAL_MS,
+  SW_UPDATE_CHECK_MIN_GAP_MS,
+  SW_UPDATE_CHECK_ON_FOCUS,
+  SW_UPDATE_REPROMPT_INTERVAL_MS,
+} from "../../service-worker/update-config.js";
 import { touchNoJekyll } from "../tools/touch-nojekyll.js";
 
 import { DEFAULT_MAIN_GROUP_INDEX_CONTENT } from "../../storage/default-index-content.mjs";
@@ -87,6 +98,7 @@ interface EmbedSingleFileBundleOptions {
   contentRoot: string;
   toolchainRoot?: string;
   cdnBase?: string;
+  serviceWorker?: boolean;
   siteConfig?: Record<string, any>;
   siteConfigPath?: string;
   pagesOrigin?: string;
@@ -103,6 +115,7 @@ async function embedSingleFileBundle(
     contentRoot,
     toolchainRoot,
     cdnBase: explicitCdnBase,
+    serviceWorker,
     isQuiet,
     log,
   } = options;
@@ -180,6 +193,11 @@ async function embedSingleFileBundle(
       cdnBase = `https://cdn.jsdelivr.net/npm/shadow-claw@${pkgVersion}`;
     }
     cdnBase = cdnBase.replace(/\/+$/, "");
+    if (serviceWorker && /@(?:latest|next|canary|dev)\b/.test(cdnBase)) {
+      console.warn(
+        "Warning: Using --service-worker with an unpinned CDN URL may cause stale runtime assets to be cached.",
+      );
+    }
     const assetBase = `${cdnBase}/dist/public/`;
 
     // 4. Inject or update <meta name="shadow-claw-asset-base">
@@ -325,6 +343,21 @@ async function embedSingleFileBundle(
       "",
     );
 
+    // Local chunks, local module entries and the inlined service worker registration
+    // do not exist next to a lone index.html
+    idxHtml = idxHtml.replace(
+      /\s*<link\b[^>]*\brel=["']?modulepreload["']?[^>]*\/?>/giu,
+      (tag) => (/\bhref=["']?(?:https?:)?\/\//iu.test(tag) ? tag : ""),
+    );
+    idxHtml = idxHtml.replace(
+      /\s*<script\b[^>]*\btype=["']?module["']?[^>]*\bsrc=["'](?!(?:https?:)?\/\/)[^"']*["'][^>]*><\/script>/giu,
+      "",
+    );
+    idxHtml = idxHtml.replace(
+      /\s*<script\b[^>]*\btype=["']?module["']?[^>]*>(?:(?!<\/script>)[\s\S])*?service-worker\.js(?:(?!<\/script>)[\s\S])*?<\/script>/giu,
+      "",
+    );
+
     // 7. Inject importmap and module import before </head> if not already present (or update if already present)
     if (idxHtml.includes('<script type="importmap">')) {
       idxHtml = idxHtml.replace(
@@ -412,6 +445,33 @@ async function embedSingleFileBundle(
       idxHtml = insertBeforeClosingHead(idxHtml, opfsCleanupScript);
     }
 
+    // 10. Service worker: versioned by page content so every build produces a new worker
+    const swPath = join(dirname(indexPath), "service-worker.js");
+    if (serviceWorker) {
+      const buildVersion = createHash("sha256")
+        .update(idxHtml)
+        .digest("hex")
+        .slice(0, 12);
+      await writeFile(
+        swPath,
+        generateSingleFileServiceWorker(cdnBase, buildVersion),
+        "utf8",
+      );
+      if (!idxHtml.includes('data-shadow-claw-sw="true"')) {
+        idxHtml = insertBeforeClosingHead(
+          idxHtml,
+          generateSingleFileSwRegistration({
+            checkIntervalMs: SW_UPDATE_CHECK_INTERVAL_MS,
+            checkOnFocus: SW_UPDATE_CHECK_ON_FOCUS,
+            checkMinGapMs: SW_UPDATE_CHECK_MIN_GAP_MS,
+            repromptIntervalMs: SW_UPDATE_REPROMPT_INTERVAL_MS,
+          }),
+        );
+      }
+    } else {
+      await rm(swPath, { force: true });
+    }
+
     await writeFile(indexPath, idxHtml, "utf8");
   }
 }
@@ -430,6 +490,7 @@ export interface RunBuildOptions {
   basePath?: string;
   singleFile?: boolean;
   cdn?: string;
+  serviceWorker?: boolean;
 }
 
 export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
@@ -792,6 +853,7 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
           contentRoot,
           toolchainRoot,
           cdnBase: options.cdn,
+          serviceWorker: options.serviceWorker,
           siteConfig: inRepoSiteConfig,
           siteConfigPath,
           pagesOrigin,
@@ -1349,12 +1411,17 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
         contentRoot,
         toolchainRoot,
         cdnBase: options.cdn,
+        serviceWorker: options.serviceWorker,
         siteConfig: consumerSiteConfig,
         siteConfigPath,
         pagesOrigin,
         isQuiet,
         log,
       });
+    } else if (options.serviceWorker) {
+      console.warn(
+        "Warning: --service-worker is only supported in combination with --single-file and will be ignored.",
+      );
     }
 
     log("Build completed successfully.");

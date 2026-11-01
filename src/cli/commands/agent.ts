@@ -1812,6 +1812,13 @@ export async function runAgentRun(
     return { success: false, error: errorMsg };
   }
 
+  // Derive max image bytes from --max-image-size (MB) or options.maxImageSize (bytes).
+  // Default is MAX_NATIVE_IMAGE_BYTES (3 MB) from build-attachment-content-blocks.ts.
+  const maxImageBytes =
+    typeof options.maxImageSize === "number" && options.maxImageSize > 0
+      ? Math.round(options.maxImageSize * 1024 * 1024)
+      : 3 * 1024 * 1024;
+
   let attachments: any[] = [];
   const attachmentByteMap = new Map<string, Uint8Array>();
   try {
@@ -1928,6 +1935,7 @@ export async function runAgentRun(
                 }
                 return null;
               },
+              { maxImageBytes },
             );
             if (blocks.length > 0) {
               const text = typeof msg.content === "string" ? msg.content : "";
@@ -1980,6 +1988,7 @@ export async function runAgentRun(
         }
         return null;
       },
+      { maxImageBytes },
     );
     if (blocks.length > 0) {
       invokeUserMessage = {
@@ -2036,6 +2045,14 @@ export async function runAgentRun(
         }
       },
       "streaming-done": () => {},
+      "streaming-error": (msg) => {
+        if (msg.payload?.error) {
+          capturedError = msg.payload.error;
+          if (!options.quiet) {
+            console.error(`Error: ${msg.payload.error}`);
+          }
+        }
+      },
       "streaming-end": () => {
         hasStreamedChunks = false;
         capturedStreamedText = "";
@@ -2195,6 +2212,22 @@ export async function runAgentRun(
       ) {
         process.stderr.write(
           `[Agent] Warning: Model "${model}" does not accept PDF/document input; "${att.fileName}" will be passed as a reference only.\n`,
+        );
+      }
+
+      // Size limit warnings — mirrors limits in build-attachment-content-blocks.ts
+      const sizeBytes = typeof att.size === "number" ? att.size : 0;
+      if (category === "image" && sizeBytes > maxImageBytes) {
+        process.stderr.write(
+          `[Agent] Warning: "${att.fileName}" is ${(sizeBytes / 1024 / 1024).toFixed(1)} MB — exceeds the ${(maxImageBytes / 1024 / 1024).toFixed(0)} MB image limit and will be passed as a text reference only. Resize or compress the image before attaching.\n`,
+        );
+      } else if (category === "audio" && sizeBytes > 5 * 1024 * 1024) {
+        process.stderr.write(
+          `[Agent] Warning: "${att.fileName}" is ${(sizeBytes / 1024 / 1024).toFixed(1)} MB — exceeds the 5 MB audio limit and will be passed as a text reference only.\n`,
+        );
+      } else if (category === "document" && sizeBytes > 20 * 1024 * 1024) {
+        process.stderr.write(
+          `[Agent] Warning: "${att.fileName}" is ${(sizeBytes / 1024 / 1024).toFixed(1)} MB — exceeds the 20 MB document limit and will be passed as a text reference only.\n`,
         );
       }
     }

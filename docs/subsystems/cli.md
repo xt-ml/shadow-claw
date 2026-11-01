@@ -65,18 +65,30 @@ graph TD
 
 Builds a static site bundle into `./dist/public`.
 
-| Option                     | Type    | Description                                                                              | Default           |
-| :------------------------- | :------ | :--------------------------------------------------------------------------------------- | :---------------- |
-| `--prod, --production`     | boolean | Build in production mode (minification, base path rewriting, revision stamping)          | `false`           |
-| `--origin <url>`           | string  | Canonical site origin URL (overrides `PAGES_ORIGIN`)                                     | `""`              |
-| `--base-path <path>`       | string  | Base path prefix (e.g. `/my-site/`, overrides `PAGES_BASE_PATH`)                         | `"/shadow-claw/"` |
-| `--out-dir <dir>`          | string  | Output directory relative to content root                                                | `"dist/public"`   |
-| `--content-root <dir>`     | string  | Working directory containing site content                                                | `process.cwd()`   |
-| `--prerender-pages <mode>` | string  | Prerender mode: `all`, `auto`, `none`                                                    | `"auto"`          |
-| `--copy-all-assets`        | boolean | Copy entire `assets/` directory into output                                              | `false`           |
-| `--single-file`            | boolean | Bundle static pages, configuration, and theme into a standalone single-file `index.html` | `false`           |
+| Option                     | Type    | Description                                                                                 | Default                                              |
+| :------------------------- | :------ | :------------------------------------------------------------------------------------------ | :--------------------------------------------------- |
+| `--prod, --production`     | boolean | Build in production mode (minification, base path rewriting, revision stamping)             | `false`                                              |
+| `--origin <url>`           | string  | Canonical site origin URL (overrides `PAGES_ORIGIN`)                                        | `""`                                                 |
+| `--base-path <path>`       | string  | Base path prefix (e.g. `/my-site/`, overrides `PAGES_BASE_PATH`)                            | `"/shadow-claw/"`                                    |
+| `--out-dir <dir>`          | string  | Output directory relative to content root                                                   | `"dist/public"`                                      |
+| `--content-root <dir>`     | string  | Working directory containing site content                                                   | `process.cwd()`                                      |
+| `--prerender-pages <mode>` | string  | Prerender mode: `all`, `auto`, `none`                                                       | `"auto"`                                             |
+| `--copy-all-assets`        | boolean | Copy entire `assets/` directory into output                                                 | `false`                                              |
+| `--single-file`            | boolean | Bundle static pages, configuration, and theme into a standalone single-file `index.html`    | `false`                                              |
+| `--cdn <url>`              | string  | Base CDN URL to load runtime assets from for single-file builds                             | `https://cdn.jsdelivr.net/npm/shadow-claw@<version>` |
+| `--service-worker`         | boolean | With `--single-file`, also emit `service-worker.js` that caches `index.html` and CDN assets | `false`                                              |
 
 When `--single-file` is specified, the build engine automatically bundles workspace pages (discovered from `pages/main/*.md`), theme styling (`pages/main/theme.css` or `theme.css`), and site configuration directly into `dist/public/index.html`. Markdown pages are injected as inline `<script type="text/markdown" data-shadow-claw-page="...">` elements and themes as `<style id="shadow-claw-theme">`, producing a completely self-contained, zero-shim single HTML file for embedding or simple static hosting.
+
+When `--service-worker` is combined with `--single-file`:
+
+- A standalone `service-worker.js` is generated into the output directory alongside `index.html`. It implements a network-first strategy for navigation requests (`index.html`) and stale-while-revalidate for CDN runtime assets, enabling offline PWA functionality for single-file deployments.
+- Each build stamps `service-worker.js` with a unique content hash comment (`// build: <sha256>`), ensuring the browser detects byte-level changes and triggers worker updates.
+- An inline registration script (`data-shadow-claw-sw="true"`) is injected into `index.html`. It registers the service worker with `updateViaCache: "none"`, integrates with Trusted Types policies, and surfaces update modals via `shadow-claw`'s UI dialog bridge (`requestDialog`):
+  - **Periodic Checks**: Periodically checks for new service worker versions (default: `SW_UPDATE_CHECK_INTERVAL_MS = 3600000`, 1 hour).
+  - **Focus & Visibility Checks**: Triggers update checks when the window regains focus or becomes visible (`SW_UPDATE_CHECK_ON_FOCUS = true`), with a debounce gap (`SW_UPDATE_CHECK_MIN_GAP_MS = 30000`, 30 seconds).
+  - **Update Available Dialog**: When a new service worker installs, users are prompted with "Update Available" (Reload now / Later). Choosing "Later" re-prompts after `SW_UPDATE_REPROMPT_INTERVAL_MS = 900000` (15 minutes).
+  - **Multi-Tab Sync**: When another tab applies the update, remaining tabs receive an "Update Installed" reload prompt on `controllerchange`.
 
 When pretty paths are prerendered (`--prerender-pages`), the build resolves the site `<base href="...">` via `resolveSiteBasePath` (from `--base-path` / `PAGES_BASE_PATH`, `--origin` / `PAGES_ORIGIN` pathname, or `branding.siteUrl` pathname) and patches it across `dist/public/index.html` and all generated pretty-path `index.html` files (`patchBaseHref`), alongside Yoast-style SEO metadata (page titles formatted via `formatSeoTitle`, meta descriptions via `extractMarkdownDescription`, canonical URLs via `resolveCanonicalUrl`, and Open Graph/Twitter tags via `patchHtmlHeadMetadata`). When the content project has no configured or existing sitemap, the build generates `sitemap.xml` from `routes.json` if a canonical origin is set with `--origin` / `PAGES_ORIGIN` or `branding.siteUrl`. The generated sitemap includes the site root and unique pretty paths. See [Pages System](pages.md#pre-rendered-content-routing--pretty-paths) for sitemap precedence, routing details, and SEO metadata configuration.
 
@@ -217,40 +229,41 @@ npx shadow-claw agent import vercel-labs/agent-skills --skills react-best-practi
 | `skill`           | `<name>`            | Executes a skill's declarative tool pipeline (`execution.type: "tools"`) or runs the skill body as an LLM prompt.                                                                                                                                                                               |
 | `import`          | `<source>`          | Imports tools, skills (including multi-file companion `files` manifests), and companion scripts from a remote RFC v0.2.0 discovery endpoint, direct `SKILL.md` URL, GitHub `owner/repo` / `owner/repo@skill` shorthand (`npx skills` delegation with native HTTP fallback), or local directory. |
 
-#### Options
+#### Agent Options
 
-| Option                               | Type    | Description                                                                           | Default                                   |
-| :----------------------------------- | :------ | :------------------------------------------------------------------------------------ | :---------------------------------------- |
-| `--workspace <dir>`                  | string  | Workspace directory for file I/O and configuration                                    | isolated sandbox in `tmpdir()`            |
-| `--database-dir <dir>`               | string  | Directory where SQLite databases (`shadow-claw.db`) are stored                        | `<workspace>/database`                    |
-| `--cache-dir <dir>`                  | string  | Custom cache directory for databases, models, and logs                                | `undefined`                               |
-| `--tmp, --temp`                      | boolean | Store cache, token, and databases in OS temporary directory (`tmpdir()`)              | `false`                                   |
-| `-y, --yes`                          | boolean | Skip interactive prompts and accept defaults                                          | `false`                                   |
-| `--group <groupId>`                  | string  | Conversation group identifier for chat history isolation (`agent run`, `clear`, etc.) | `"server:main"`                           |
-| `--provider <provider>`              | string  | LLM provider ID (`transformers_js_local`, `openrouter`, `llamafile`, `gemini`, etc.)  | auto-resolved (`"transformers_js_local"`) |
-| `--model <model>`                    | string  | Model identifier (e.g. `onnx-community/gemma-4-E2B-it-ONNX`)                          | auto-resolved (curated local default)     |
-| `--download`                         | boolean | Prewarm and download the model during agent init or before execution                  | `false`                                   |
-| `--api-key <key>`                    | string  | API key for cloud providers                                                           | auto-resolved from env                    |
-| `--stream` / `--no-stream`           | boolean | Stream response tokens to stdout as they arrive                                       | `true`                                    |
-| `--no-history`                       | boolean | Do not load prior conversation history for `agent run`                                | history loaded                            |
-| `--progress` / `--no-progress`       | boolean | Show terminal progress bar during model downloads                                     | `true`                                    |
-| `--system-prompt <text>`             | string  | Override system prompt with inline text (pass `""` or `"none"` to disable)            | `undefined`                               |
-| `--no-system-prompt`                 | boolean | Disable system prompt completely for pure text completion                             | `false`                                   |
-| `--system-prompt-file <file>`        | string  | Load system prompt from a text or markdown file                                       | `undefined`                               |
-| `--tools <tools>`                    | string  | Comma-separated list of tools to enable or import (e.g. `bash,read_file`)             | `undefined`                               |
-| `--no-tools`                         | boolean | Disable all tools for pure text completion / zero tool-call overhead                  | `false`                                   |
-| `--skills <skills>`                  | string  | Comma-separated list of skills to filter or import                                    | `undefined`                               |
-| `--scripts <scripts>`                | string  | Comma-separated list of companion scripts to import                                   | `undefined`                               |
-| `--all`                              | boolean | Import all tools, skills, and scripts from discovery manifest                         | `false`                                   |
-| `--overwrite`                        | boolean | Overwrite existing skills, tools, or scripts during import                            | `false`                                   |
-| `--auto-enable` / `--no-auto-enable` | boolean | Automatically enable imported declarative tools in database                           | `true`                                    |
-| `--tools-profile <name>`             | string  | Tools profile to activate (e.g. `__builtin_default`)                                  | `undefined`                               |
-| `-r, --remote`, `--hf`               | boolean | List or search available models from Hugging Face `onnx-community` repository         | `false`                                   |
-| `--query <query>`                    | string  | Filter remote or local models by search query                                         | `undefined`                               |
-| `-v, --verbose`                      | boolean | Enable verbose tool activity and diagnostic logging                                   | `false`                                   |
-| `-o, --output <file>`                | string  | Write command output to a file instead of stdout                                      | `undefined`                               |
-| `-f, --file <path>`                  | string  | Attach a local file to `agent run`                                                    | `undefined`                               |
-| `-q, --quiet`                        | boolean | Suppress all non-error output                                                         | `false`                                   |
+| Option                               | Type    | Description                                                                                                 | Default                                   |
+| :----------------------------------- | :------ | :---------------------------------------------------------------------------------------------------------- | :---------------------------------------- |
+| `--workspace <dir>`                  | string  | Workspace directory for file I/O and configuration                                                          | isolated sandbox in `tmpdir()`            |
+| `--database-dir <dir>`               | string  | Directory where SQLite databases (`shadow-claw.db`) are stored                                              | `<workspace>/database`                    |
+| `--cache-dir <dir>`                  | string  | Custom cache directory for databases, models, and logs                                                      | `undefined`                               |
+| `--tmp, --temp`                      | boolean | Store cache, token, and databases in OS temporary directory (`tmpdir()`)                                    | `false`                                   |
+| `-y, --yes`                          | boolean | Skip interactive prompts and accept defaults                                                                | `false`                                   |
+| `--group <groupId>`                  | string  | Conversation group identifier for chat history isolation (`agent run`, `clear`, etc.)                       | `"server:main"`                           |
+| `--provider <provider>`              | string  | LLM provider ID (`transformers_js_local`, `openrouter`, `llamafile`, `gemini`, etc.)                        | auto-resolved (`"transformers_js_local"`) |
+| `--model <model>`                    | string  | Model identifier (e.g. `onnx-community/gemma-4-E2B-it-ONNX`)                                                | auto-resolved (curated local default)     |
+| `--download`                         | boolean | Prewarm and download the model during agent init or before execution                                        | `false`                                   |
+| `--api-key <key>`                    | string  | API key for cloud providers                                                                                 | auto-resolved from env                    |
+| `--stream` / `--no-stream`           | boolean | Stream response tokens to stdout as they arrive                                                             | `true`                                    |
+| `--no-history`                       | boolean | Do not load prior conversation history for `agent run`                                                      | history loaded                            |
+| `--progress` / `--no-progress`       | boolean | Show terminal progress bar during model downloads                                                           | `true`                                    |
+| `--system-prompt <text>`             | string  | Override system prompt with inline text (pass `""` or `"none"` to disable)                                  | `undefined`                               |
+| `--no-system-prompt`                 | boolean | Disable system prompt completely for pure text completion                                                   | `false`                                   |
+| `--system-prompt-file <file>`        | string  | Load system prompt from a text or markdown file                                                             | `undefined`                               |
+| `--tools <tools>`                    | string  | Comma-separated list of tools to enable or import (e.g. `bash,read_file`)                                   | `undefined`                               |
+| `--no-tools`                         | boolean | Disable all tools for pure text completion / zero tool-call overhead                                        | `false`                                   |
+| `--skills <skills>`                  | string  | Comma-separated list of skills to filter or import                                                          | `undefined`                               |
+| `--scripts <scripts>`                | string  | Comma-separated list of companion scripts to import                                                         | `undefined`                               |
+| `--all`                              | boolean | Import all tools, skills, and scripts from discovery manifest                                               | `false`                                   |
+| `--overwrite`                        | boolean | Overwrite existing skills, tools, or scripts during import                                                  | `false`                                   |
+| `--auto-enable` / `--no-auto-enable` | boolean | Automatically enable imported declarative tools in database                                                 | `true`                                    |
+| `--tools-profile <name>`             | string  | Tools profile to activate (e.g. `__builtin_default`)                                                        | `undefined`                               |
+| `-r, --remote`, `--hf`               | boolean | List or search available models from Hugging Face `onnx-community` repository                               | `false`                                   |
+| `--query <query>`                    | string  | Filter remote or local models by search query                                                               | `undefined`                               |
+| `-v, --verbose`                      | boolean | Enable verbose tool activity and diagnostic logging                                                         | `false`                                   |
+| `-o, --output <file>`                | string  | Write command output to a file instead of stdout                                                            | `undefined`                               |
+| `-f, --file <path>`                  | string  | Attach a local file to `agent run` (repeatable for multiple files)                                          | `undefined`                               |
+| `--max-image-size <MB>`              | number  | Max size in MB for inline base64 (default: `3`). Larger fall back to a text ref. Raise for high-res. photos | `3`                                       |
+| `-q, --quiet`                        | boolean | Suppress all non-error output                                                                               | `false`                                   |
 
 > **First-Run Cache Directory Wizard:** When running the agent without an explicit `--workspace`, `--cache-dir`, or `--tmp` in a directory where no `.cache` or database exists, ShadowClaw prompts interactively (identical to `dev` and `serve`) to let you choose between the current directory (`.cache`), system temporary storage (`tmpdir()`), or a custom path. Pass `-y`, `--yes`, `--tmp`, or `--workspace <dir>` to skip the prompt.
 
@@ -335,16 +348,47 @@ echo "Summarize: ..." | npx shadow-claw agent run -o summary.txt
 
 #### Attaching files to `agent run`
 
-Use `-f, --file <path>` to attach local files without sharing a workspace.
-The flag is repeatable, so multiple files can be attached to a single prompt.
+Use `-f, --file <path>` to attach local files to a prompt. The flag is **repeatable** — pass it multiple times to attach several files at once.
 
 ```bash
-npx shadow-claw agent run "Describe these" -f photo.png -f report.pdf
+# Attach images, PDFs, audio, or text files (repeatable)
+npx shadow-claw agent run "Compare these" --no-tools -f a.png -f b.png
+
+# Attach a document alongside a piped prompt
+cat brief.txt | npx shadow-claw agent run "Summarize" -f appendix.pdf -o summary.txt
 ```
 
-- Each file is read from disk and copied into the conversation group's `attachments/` folder.
-- Attachments are saved on the user message and delivered through the same pipeline as browser attachments.
-- Images, audio, and documents are sent as native blocks when the model supports them, otherwise as metadata placeholders.
+> [!TIP]
+> Pass `--no-tools` (or `--tools none`) when attaching image files. Without it, the default tool set includes filesystem tools like `list_files` that can distract some models away from examining the attached images.
+
+##### Size limits & `--max-image-size`
+
+To prevent oversized requests, inline base64 encoding is subject to the following per-type limits:
+
+| Type     | Default limit |
+| :------- | :------------ |
+| Image    | 3 MB          |
+| Audio    | 5 MB          |
+| Document | 20 MB         |
+
+Files that exceed the limit are **not silently dropped** — they fall back to a metadata text reference and a warning is printed to `stderr`:
+
+```text
+[Agent] Warning: "photo.png" is 7.9 MB — exceeds the 3 MB image limit and will be passed as a text reference only. Resize or compress the image before attaching.
+```
+
+Use `--max-image-size <MB>` to raise the image limit when working with high-resolution photos or large screenshots:
+
+```bash
+# Raise the limit to 10 MB so both images are sent inline
+npx shadow-claw agent run "Compare these" --no-tools --max-image-size 10 -f photo-a.png -f photo-b.png
+```
+
+##### Other attachment behaviour
+
+- Each file is read from disk and copied into the conversation group's `attachments/` folder inside the workspace.
+- Attachments are persisted on the user message and delivered through the same pipeline as browser attachments.
+- Images, audio, and documents are sent as native content blocks when the model supports them; unsupported types fall back to descriptive metadata text.
 - A missing or unreadable file prints an error to `stderr` and exits with code `1` before the model is called.
 - Combines with the prompt argument and piped stdin.
 
@@ -741,7 +785,7 @@ npx shadow-claw skills remove my-new-skill
 npx shadow-claw skills restore
 ```
 
-#### Options
+#### Skills Options
 
 | Option              | Type    | Description                                     | Default         |
 | :------------------ | :------ | :---------------------------------------------- | :-------------- |

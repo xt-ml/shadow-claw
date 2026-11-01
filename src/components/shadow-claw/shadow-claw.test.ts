@@ -824,7 +824,12 @@ describe("shadow-claw", () => {
     const comp1 = new ShadowClaw();
     comp1.chatSidebarHidden = false;
     document.body.appendChild(comp1);
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    for (let i = 0; i < 50; i++) {
+      if (comp1.orchestrator) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
     expect(comp1.orchestrator).toBeDefined();
 
     // 2. Disconnect with navigationListenerAttached and mock navigation

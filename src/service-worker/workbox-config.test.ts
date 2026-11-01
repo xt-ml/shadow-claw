@@ -59,6 +59,10 @@ describe("workbox runtime caching rules", () => {
     ).toBe(true);
   });
 
+  it("cleans up outdated precaches so stale assets are not served", () => {
+    expect((workboxConfig as any).cleanupOutdatedCaches).toBe(true);
+  });
+
   it("excludes files/** from precache glob patterns so user files are not treated as core app assets", () => {
     const globIgnores = (workboxConfig as any).globIgnores ?? [];
     expect(globIgnores).toContain("files/**");

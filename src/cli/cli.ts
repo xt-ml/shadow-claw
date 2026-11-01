@@ -143,6 +143,11 @@ program
     "--cdn <url>",
     "Base CDN URL to load runtime assets from for single-file builds (default: https://cdn.jsdelivr.net/npm/shadow-claw@<version>)",
   )
+  .option(
+    "--service-worker",
+    "With --single-file, also emit service-worker.js that caches index.html and CDN runtime assets (must be served from the same origin as index.html)",
+    false,
+  )
   .optionsGroup("Path & Routing Options:")
   .option(
     "--origin <url>",
@@ -176,6 +181,7 @@ program
         copyAllAssets: options.copyAllAssets,
         singleFile: Boolean(options.singleFile),
         cdn: options.cdn || process.env.SHADOWCLAW_CDN,
+        serviceWorker: Boolean(options.serviceWorker),
       });
     } catch (err) {
       console.error("Build failed:", err);
@@ -1302,6 +1308,11 @@ program
     "-f, --file <path>",
     "Attach a local file to the prompt for `agent run` (repeatable)",
     (value: string, previous: string[] = []) => [...previous, value],
+  )
+  .option(
+    "--max-image-size <MB>",
+    "Max image size in MB for inline base64 encoding (default: 3). Images larger than this fall back to a text reference.",
+    parseFloat,
   )
   .option(
     "--stream",

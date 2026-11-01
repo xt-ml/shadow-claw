@@ -786,6 +786,11 @@ describe("build without and with pages", () => {
         "utf8",
       );
 
+      // No local runtime references: a lone index.html has nothing to serve them
+      expect(indexHtml).not.toMatch(/<link\b[^>]*rel="modulepreload"/);
+      expect(indexHtml).not.toMatch(/<script\b[^>]*type="module"[^>]*\bsrc=/);
+      expect(indexHtml).not.toContain("service-worker.js");
+
       // Must embed empty script tags for default index.html and MEMORY.md
       expect(indexHtml).toContain('data-shadow-claw-page="index.html"');
       expect(indexHtml).toContain('data-shadow-claw-page="MEMORY.md"');
@@ -794,6 +799,196 @@ describe("build without and with pages", () => {
       expect(indexHtml).toContain('data-initial-path="index.html"');
       expect(indexHtml).toContain(
         '<span class="pages__dropdown-selected" data-pages-dropdown-selected>index.html</span>',
+      );
+    } finally {
+      logSpy.mockRestore();
+      await rm(tempConsumerRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("strips local modulepreload links and inline service worker registration from single-file builds", async () => {
+    const tempConsumerRoot = await mkdtemp(
+      path.join(os.tmpdir(), "shadow-claw-single-file-prod-shell-"),
+    );
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    const toolchainIndex = path.join(tempProjectRoot, "dist/public/index.html");
+
+    try {
+      // Ensure the toolchain is built, then simulate a production shell (as published)
+      await runConsumerBuild({
+        contentRoot: tempConsumerRoot,
+        toolchainRoot: tempProjectRoot,
+        isProduction: false,
+        quiet: true,
+        stdio: "pipe",
+      });
+      const shell = await readFile(toolchainIndex, "utf8");
+      await writeFile(
+        toolchainIndex,
+        shell
+          .replace(
+            "</head>",
+            '<link rel="modulepreload" href="index.js" /><link rel="modulepreload" href="orchestrator-abc.js" /></head>',
+          )
+          .replace(
+            "</body>",
+            '<script type="module">const w=new Workbox("service-worker.js");w.register()</script></body>',
+          ),
+      );
+
+      await runConsumerBuild({
+        contentRoot: tempConsumerRoot,
+        toolchainRoot: tempProjectRoot,
+        isProduction: false,
+        quiet: true,
+        stdio: "pipe",
+        singleFile: true,
+      });
+
+      const indexHtml = await readFile(
+        path.join(tempConsumerRoot, "dist/public/index.html"),
+        "utf8",
+      );
+      expect(indexHtml).not.toMatch(/<link\b[^>]*rel="modulepreload"/);
+      expect(indexHtml).not.toContain("service-worker.js");
+      expect(indexHtml).toContain('import "shadow-claw";');
+    } finally {
+      logSpy.mockRestore();
+      await rm(tempConsumerRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("emits a standalone service worker and registration with singleFile + serviceWorker", async () => {
+    const tempConsumerRoot = await mkdtemp(
+      path.join(os.tmpdir(), "shadow-claw-single-file-sw-"),
+    );
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      await runConsumerBuild({
+        contentRoot: tempConsumerRoot,
+        toolchainRoot: tempProjectRoot,
+        isProduction: false,
+        quiet: true,
+        stdio: "pipe",
+        singleFile: true,
+        serviceWorker: true,
+        cdn: "https://custom.example.com/cdn/shadow-claw@9.9.9",
+      });
+
+      const distDir = path.join(tempConsumerRoot, "dist/public");
+      const indexHtml = await readFile(
+        path.join(distDir, "index.html"),
+        "utf8",
+      );
+      expect(indexHtml).toContain("register(swUrl,");
+      expect(indexHtml).toContain('let swUrl = "service-worker.js";');
+      expect(indexHtml).not.toMatch(/<link\b[^>]*rel="modulepreload"/);
+
+      const sw = await readFile(
+        path.join(distDir, "service-worker.js"),
+        "utf8",
+      );
+      expect(sw).toContain("https://custom.example.com/cdn/shadow-claw@9.9.9");
+      expect(sw).not.toContain("precacheAndRoute");
+      expect(sw).toContain('request.mode === "navigate"');
+
+      // Must wait for the update dialog instead of activating on install
+      expect(sw).not.toMatch(/install[\s\S]{0,80}skipWaiting\(\)/);
+      expect(sw).toContain('"SKIP_WAITING"');
+      expect(sw).toMatch(/\/\/ build: [0-9a-f]{12}/);
+      expect(indexHtml).toContain("requestDialog");
+      expect(indexHtml).toContain("SKIP_WAITING");
+      expect(indexHtml).toContain("registration.update()");
+    } finally {
+      logSpy.mockRestore();
+      await rm(tempConsumerRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("warns when --service-worker is used with unpinned CDN tag", async () => {
+    const tempConsumerRoot = await mkdtemp(
+      path.join(os.tmpdir(), "shadow-claw-single-file-unpinned-"),
+    );
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      await runConsumerBuild({
+        contentRoot: tempConsumerRoot,
+        toolchainRoot: tempProjectRoot,
+        isProduction: false,
+        quiet: true,
+        stdio: "pipe",
+        singleFile: true,
+        serviceWorker: true,
+        cdn: "https://cdn.jsdelivr.net/npm/shadow-claw@latest",
+      });
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("unpinned CDN URL"),
+      );
+    } finally {
+      logSpy.mockRestore();
+      warnSpy.mockRestore();
+      await rm(tempConsumerRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("warns when --service-worker is used without --single-file", async () => {
+    const tempConsumerRoot = await mkdtemp(
+      path.join(os.tmpdir(), "shadow-claw-sw-no-single-file-"),
+    );
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      await runConsumerBuild({
+        contentRoot: tempConsumerRoot,
+        toolchainRoot: tempProjectRoot,
+        isProduction: false,
+        quiet: true,
+        stdio: "pipe",
+        singleFile: false,
+        serviceWorker: true,
+      });
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          "--service-worker is only supported in combination with --single-file",
+        ),
+      );
+    } finally {
+      logSpy.mockRestore();
+      warnSpy.mockRestore();
+      await rm(tempConsumerRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("does not emit a service worker for singleFile without serviceWorker", async () => {
+    const tempConsumerRoot = await mkdtemp(
+      path.join(os.tmpdir(), "shadow-claw-single-file-nosw-"),
+    );
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      await runConsumerBuild({
+        contentRoot: tempConsumerRoot,
+        toolchainRoot: tempProjectRoot,
+        isProduction: false,
+        quiet: true,
+        stdio: "pipe",
+        singleFile: true,
+      });
+
+      const distDir = path.join(tempConsumerRoot, "dist/public");
+      const indexHtml = await readFile(
+        path.join(distDir, "index.html"),
+        "utf8",
+      );
+      expect(indexHtml).not.toContain("serviceWorker.register");
+      expect(fs.existsSync(path.join(distDir, "service-worker.js"))).toBe(
+        false,
       );
     } finally {
       logSpy.mockRestore();

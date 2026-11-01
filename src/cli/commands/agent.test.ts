@@ -1152,6 +1152,269 @@ Instructions for make-file
         stdoutSpy.mockRestore();
       }
     });
+
+    it("-f flag encodes local image files as base64 content blocks in the invoke payload", async () => {
+      const { runAgentRun } = await import("./agent.js");
+      const { getAgentCore } = await import("../utils/agent-core.js");
+      const core = await getAgentCore();
+
+      // Write a minimal PNG-headed file so MIME inference detects image/png
+      const pngMagic = Buffer.from([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      ]);
+      const imgFile = path.join(tmpDir, "test-image.png");
+      await writeFile(imgFile, pngMagic);
+
+      let capturedPayload: any = null;
+      const mockInvokeHandler = async (_db: any, payload: any) => {
+        capturedPayload = payload;
+        core.post({
+          type: "response",
+          payload: { groupId: payload.groupId, text: "Image received." },
+        });
+      };
+
+      const result = await runAgentRun("Compare these", {
+        workspace: tmpDir,
+        provider: "openrouter",
+        apiKey: "sk-or-v1-test",
+        file: [imgFile],
+        tools: "none",
+        invokeHandler: mockInvokeHandler,
+        quiet: true,
+      });
+
+      expect(result.success).toBe(true);
+      expect(capturedPayload).not.toBeNull();
+
+      // The user message should be an array of content blocks, not a plain string
+      const userMsg = capturedPayload.messages.find(
+        (m: any) => m.role === "user" && m.isTrigger,
+      );
+      expect(Array.isArray(userMsg?.content)).toBe(true);
+
+      // First block is the text prompt
+      expect(userMsg.content[0]).toMatchObject({
+        type: "text",
+        text: "Compare these",
+      });
+
+      // Second block is the image attachment with base64 data
+      const imgBlock = userMsg.content[1];
+      expect(imgBlock).toMatchObject({
+        type: "attachment",
+        mediaType: "image",
+        mimeType: "image/png",
+        fileName: "test-image.png",
+      });
+      expect(typeof imgBlock.data).toBe("string");
+      expect(imgBlock.data.length).toBeGreaterThan(0);
+    });
+
+    it("-f flag with two small images sends both as inline base64 content blocks", async () => {
+      const { runAgentRun } = await import("./agent.js");
+      const { getAgentCore } = await import("../utils/agent-core.js");
+      const core = await getAgentCore();
+
+      const pngMagic = Buffer.from([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+      ]);
+      const imgFile1 = path.join(tmpDir, "image-a.png");
+      const imgFile2 = path.join(tmpDir, "image-b.png");
+      await writeFile(imgFile1, pngMagic);
+      await writeFile(imgFile2, pngMagic);
+
+      let capturedPayload: any = null;
+      const mockInvokeHandler = async (_db: any, payload: any) => {
+        capturedPayload = payload;
+        core.post({
+          type: "response",
+          payload: { groupId: payload.groupId, text: "Both images received." },
+        });
+      };
+
+      const result = await runAgentRun("Compare these two images", {
+        workspace: tmpDir,
+        provider: "openrouter",
+        apiKey: "sk-or-v1-test",
+        file: [imgFile1, imgFile2],
+        tools: "none",
+        invokeHandler: mockInvokeHandler,
+        quiet: true,
+      });
+
+      expect(result.success).toBe(true);
+      const userMsg = capturedPayload.messages.find(
+        (m: any) => m.role === "user" && m.isTrigger,
+      );
+      expect(Array.isArray(userMsg?.content)).toBe(true);
+      // Should have text + 2 image blocks = 3 content blocks total
+      expect(userMsg.content).toHaveLength(3);
+      expect(userMsg.content[0]).toMatchObject({ type: "text" });
+      expect(userMsg.content[1]).toMatchObject({
+        type: "attachment",
+        mediaType: "image",
+        fileName: "image-a.png",
+      });
+      expect(userMsg.content[2]).toMatchObject({
+        type: "attachment",
+        mediaType: "image",
+        fileName: "image-b.png",
+      });
+      // Both images must have base64 data (not silently dropped)
+      expect(userMsg.content[1].data).toBeTruthy();
+      expect(userMsg.content[2].data).toBeTruthy();
+    });
+
+    it("warns on stderr when an image attachment exceeds the 3 MB size limit", async () => {
+      const { runAgentRun } = await import("./agent.js");
+      const { getAgentCore } = await import("../utils/agent-core.js");
+      const core = await getAgentCore();
+
+      // Write a fake >3MB image (just a PNG header + padding to trigger the size check)
+      const oversizedPng = Buffer.concat([
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        Buffer.alloc(3 * 1024 * 1024 + 1), // 3 MB + 1 byte
+      ]);
+      const bigImgFile = path.join(tmpDir, "big-image.png");
+      await writeFile(bigImgFile, oversizedPng);
+
+      const stderrSpy = jest
+        .spyOn(process.stderr, "write")
+        .mockImplementation(() => true);
+
+      const mockInvokeHandler = async (_db: any, payload: any) => {
+        core.post({
+          type: "response",
+          payload: { groupId: payload.groupId, text: "ok" },
+        });
+      };
+
+      try {
+        await runAgentRun("Describe this image", {
+          workspace: tmpDir,
+          provider: "openrouter",
+          apiKey: "sk-or-v1-test",
+          file: [bigImgFile],
+          tools: "none",
+          invokeHandler: mockInvokeHandler,
+          quiet: false,
+        });
+
+        expect(stderrSpy).toHaveBeenCalledWith(
+          expect.stringContaining("exceeds the 3 MB image limit"),
+        );
+        expect(stderrSpy).toHaveBeenCalledWith(
+          expect.stringContaining("big-image.png"),
+        );
+      } finally {
+        stderrSpy.mockRestore();
+      }
+    });
+
+    it("maxImageSize option raises the image size limit and sends the larger image inline", async () => {
+      const { runAgentRun } = await import("./agent.js");
+      const { getAgentCore } = await import("../utils/agent-core.js");
+      const core = await getAgentCore();
+
+      // A 4 MB image — over the default 3 MB but under the raised 8 MB limit
+      const biggerPng = Buffer.concat([
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+        Buffer.alloc(4 * 1024 * 1024),
+      ]);
+      const bigImgFile = path.join(tmpDir, "bigger-image.png");
+      await writeFile(bigImgFile, biggerPng);
+
+      let capturedPayload: any = null;
+      const mockInvokeHandler = async (_db: any, payload: any) => {
+        capturedPayload = payload;
+        core.post({
+          type: "response",
+          payload: { groupId: payload.groupId, text: "ok" },
+        });
+      };
+
+      const stderrSpy = jest
+        .spyOn(process.stderr, "write")
+        .mockImplementation(() => true);
+
+      try {
+        const result = await runAgentRun("Describe this image", {
+          workspace: tmpDir,
+          provider: "openrouter",
+          apiKey: "sk-or-v1-test",
+          file: [bigImgFile],
+          tools: "none",
+          maxImageSize: 8, // 8 MB limit — larger than the 4 MB image
+          invokeHandler: mockInvokeHandler,
+          quiet: false,
+        });
+
+        expect(result.success).toBe(true);
+
+        // No size warning should have fired since image is within the raised limit
+        const warnCalls = stderrSpy.mock.calls
+          .map((c) => String(c[0]))
+          .filter((s) => s.includes("exceeds the"));
+        expect(warnCalls).toHaveLength(0);
+
+        // Image must be sent as inline base64, not a text fallback
+        const userMsg = capturedPayload.messages.find(
+          (m: any) => m.role === "user" && m.isTrigger,
+        );
+        const imgBlock = userMsg?.content?.find(
+          (b: any) => b.type === "attachment" && b.mediaType === "image",
+        );
+        expect(imgBlock).toBeDefined();
+        expect(imgBlock.data).toBeTruthy();
+      } finally {
+        stderrSpy.mockRestore();
+      }
+    });
+
+    it("streaming-error is captured and surfaced as a failure (not silently dropped)", async () => {
+      const { runAgentRun } = await import("./agent.js");
+      const { getAgentCore } = await import("../utils/agent-core.js");
+      const core = await getAgentCore();
+
+      const consoleErrorSpy = jest
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+
+      const mockInvokeHandler = async (_db: any, payload: any) => {
+        // Simulate a streaming error — e.g. provider returned 400 for unsupported image
+        core.post({
+          type: "streaming-error",
+          payload: {
+            groupId: payload.groupId,
+            error: "OpenRouter API error 400: model does not support vision",
+          },
+        });
+      };
+
+      try {
+        const result = await runAgentRun("Compare these", {
+          workspace: tmpDir,
+          provider: "openrouter",
+          apiKey: "sk-or-v1-test",
+          invokeHandler: mockInvokeHandler,
+          quiet: false,
+        });
+
+        // streaming-error must be surfaced as a failure, not a silent exit
+        expect(result.success).toBe(false);
+        expect(result.error).toContain(
+          "OpenRouter API error 400: model does not support vision",
+        );
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+          expect.stringContaining("OpenRouter API error 400"),
+        );
+        expect(process.exitCode).toBe(1);
+      } finally {
+        consoleErrorSpy.mockRestore();
+        process.exitCode = 0;
+      }
+    });
   });
 
   describe("agent tool and tools <name> inspection & execution", () => {

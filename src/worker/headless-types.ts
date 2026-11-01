@@ -133,6 +133,8 @@ export interface AgentRunOptions {
   noTools?: boolean;
   internetAccess?: boolean;
   allowInternet?: boolean;
+  /** Max image size in bytes for inline base64 encoding (default: 3 MB). Images larger than this fall back to a text reference. */
+  maxImageSize?: number;
   invokeHandler?: (db: ShadowClawDatabase, payload: any) => Promise<void>;
   [key: string]: unknown;
 }

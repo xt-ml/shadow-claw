@@ -5,6 +5,12 @@ import {
   ensureDefaultTrustedTypesPolicy,
   toDefaultTrustedScriptUrl,
 } from "../security/default-trusted-types-policy.js";
+import {
+  SW_UPDATE_CHECK_INTERVAL_MS,
+  SW_UPDATE_CHECK_MIN_GAP_MS,
+  SW_UPDATE_CHECK_ON_FOCUS,
+  SW_UPDATE_REPROMPT_INTERVAL_MS,
+} from "./update-config.js";
 
 const RELOAD_FALLBACK_TIMEOUT_MS = 3000;
 const OAC_RELOAD_KEY = "shadowclaw-oac-reload-attempted";
@@ -15,6 +21,12 @@ const UPDATE_FAILURE_KEY = "shadowclaw-sw-update-failure";
 const UPDATE_FAILURE_COOLDOWN_MS = 5 * 60 * 1000;
 
 let didReloadAfterUpdate = false;
+let updateWaiting = false;
+let promptInFlight = false;
+let nextPromptAt = 0;
+let lastCheckAt = 0;
+let reloadPromptInFlight = false;
+let hadControllerAtStart = false;
 let pendingReloadTimeout: ReturnType<typeof globalThis.setTimeout> | null =
   null;
 
@@ -54,7 +66,8 @@ async function waitForShadowClawUiBridge(
   return null;
 }
 
-async function confirmServiceWorkerUpdate(): Promise<boolean> {
+// Resolves null when the UI bridge never became ready so callers can retry later.
+async function confirmServiceWorkerUpdate(): Promise<boolean | null> {
   const shadowclaw = await waitForShadowClawUiBridge();
   if (shadowclaw?.requestDialog) {
     return await shadowclaw.requestDialog({
@@ -66,9 +79,7 @@ async function confirmServiceWorkerUpdate(): Promise<boolean> {
     });
   }
 
-  // UI bridge was not ready in time; skip this update prompt gracefully.
-
-  return false;
+  return null;
 }
 
 async function notifyUpdateFailure(): Promise<void> {
@@ -329,8 +340,106 @@ function handleServiceWorkerControllerChange() {
     return;
   }
 
+  if (hadControllerAtStart) {
+    // Another tab activated a new worker; this page is still running old code.
+    void promptReloadForNewWorker();
+
+    return;
+  }
+
   if (shouldReloadForOriginAgentCluster()) {
     reloadForOriginAgentCluster();
+  }
+}
+
+async function promptReloadForNewWorker() {
+  if (reloadPromptInFlight || didReloadAfterUpdate) {
+    return;
+  }
+
+  reloadPromptInFlight = true;
+  try {
+    const shadowclaw = await waitForShadowClawUiBridge();
+    const accepted = await shadowclaw?.requestDialog?.({
+      title: "Update Installed",
+      message:
+        "A new version of ShadowClaw was installed. Reload now to use it?",
+      confirmLabel: "Reload now",
+      cancelLabel: "Later",
+    });
+    if (accepted) {
+      reloadCurrentPage();
+    }
+  } finally {
+    reloadPromptInFlight = false;
+  }
+}
+
+// Shows the update dialog for a waiting worker; honors the re-prompt backoff.
+async function promptForWaitingUpdate(wb: Workbox) {
+  if (!updateWaiting || promptInFlight || Date.now() < nextPromptAt) {
+    return;
+  }
+
+  if (hasRecentUpdateFailure()) {
+    return;
+  }
+
+  if (hasActiveUpdateIntent()) {
+    await applyPendingUpdate(wb);
+
+    return;
+  }
+
+  promptInFlight = true;
+  try {
+    const accepted = await confirmServiceWorkerUpdate();
+    if (accepted === null) {
+      // Bridge not ready: retry on the next check instead of dropping the update.
+      return;
+    }
+
+    if (accepted) {
+      beginUpdateIntent();
+      await applyPendingUpdate(wb);
+    } else {
+      nextPromptAt = Date.now() + SW_UPDATE_REPROMPT_INTERVAL_MS;
+    }
+  } finally {
+    promptInFlight = false;
+  }
+}
+
+async function checkForUpdate(wb: Workbox, fromFocus: boolean) {
+  if (fromFocus && Date.now() - lastCheckAt < SW_UPDATE_CHECK_MIN_GAP_MS) {
+    return;
+  }
+
+  lastCheckAt = Date.now();
+  try {
+    await wb.update();
+  } catch {
+    // Offline or transient failure; the next check will retry.
+  }
+
+  await promptForWaitingUpdate(wb);
+}
+
+function startUpdateChecks(wb: Workbox) {
+  if (SW_UPDATE_CHECK_INTERVAL_MS > 0) {
+    globalThis.setInterval(
+      () => checkForUpdate(wb, false),
+      SW_UPDATE_CHECK_INTERVAL_MS,
+    );
+  }
+
+  if (SW_UPDATE_CHECK_ON_FOCUS) {
+    globalThis.addEventListener("focus", () => checkForUpdate(wb, true));
+    document.addEventListener("visibilitychange", async () => {
+      if (document.visibilityState === "visible") {
+        await checkForUpdate(wb, true);
+      }
+    });
   }
 }
 
@@ -346,23 +455,14 @@ try {
 
     const wb = new Workbox(
       toDefaultTrustedScriptUrl("service-worker.js") as string,
+      { updateViaCache: "none" },
     );
 
+    hadControllerAtStart = Boolean(navigator.serviceWorker.controller);
+
     wb.addEventListener("waiting", async () => {
-      if (hasRecentUpdateFailure()) {
-        return;
-      }
-
-      if (hasActiveUpdateIntent()) {
-        await applyPendingUpdate(wb);
-
-        return;
-      }
-
-      if (await confirmServiceWorkerUpdate()) {
-        beginUpdateIntent();
-        await applyPendingUpdate(wb);
-      }
+      updateWaiting = true;
+      await promptForWaitingUpdate(wb);
     });
 
     wb.addEventListener("controlling", () => {
@@ -377,6 +477,7 @@ try {
       // Delay registration for 10 seconds to avoid blocking main thread startup.
       globalThis.setTimeout(() => {
         wb.register();
+        startUpdateChecks(wb);
       }, 10_000);
     };
 

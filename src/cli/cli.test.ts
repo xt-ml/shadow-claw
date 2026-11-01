@@ -389,6 +389,48 @@ slug: "custom-test"
     expect(builtIndexHtml).toContain("Single file CLI test.");
   }, 120_000);
 
+  it("builds a single-file bundle via cli with --service-worker flag", async () => {
+    const targetDir = path.join(tempDir, "single-file-sw-site");
+    await mkdir(path.join(targetDir, "pages/main"), { recursive: true });
+    await writeFile(
+      path.join(targetDir, "site-config.json"),
+      JSON.stringify({
+        site: { title: "CLI Single File SW" },
+      }),
+      "utf8",
+    );
+    await writeFile(
+      path.join(targetDir, "pages/main/about.md"),
+      "# CLI SW About Page\n\nSingle file SW test.",
+      "utf8",
+    );
+
+    await execFileAsync(process.execPath, [
+      cliPath,
+      "build",
+      "--single-file",
+      "--service-worker",
+      "--content-root",
+      targetDir,
+    ]);
+
+    const builtIndexHtml = await readFile(
+      path.join(targetDir, "dist/public/index.html"),
+      "utf8",
+    );
+    expect(builtIndexHtml).toContain("CLI Single File SW");
+    expect(builtIndexHtml).toContain('data-shadow-claw-sw="true"');
+    expect(builtIndexHtml).toContain("service-worker.js");
+
+    const swContent = await readFile(
+      path.join(targetDir, "dist/public/service-worker.js"),
+      "utf8",
+    );
+    expect(swContent).toContain("shadow-claw-single-file");
+    expect(swContent).toContain("SKIP_WAITING");
+    expect(swContent).toContain('request.mode === "navigate"');
+  }, 120_000);
+
   it("launches headless services with server command without requiring a dist folder", async () => {
     const { spawn } = await import("node:child_process");
     const http = (await import("node:http")).default;

@@ -70,7 +70,7 @@ The frontend UI and client-side agent runtime are built on browser-native techno
 
 The entire codebase is TypeScript. Rolldown produces modular bundles for the frontend, worker, service worker, server, and Electron.
 
-In production builds (`npm run build:prod`), critical assets (`index.css`, `theme-init.js`, and `service-worker/init.js`) are inlined directly into `index.html` alongside pre-rendered Declarative Shadow DOM (DSD) shells, eliminating render-blocking network requests. Production assets are further minified using `htmlnano` and `cssnano`. Service worker initialization is deferred (10-second idle delay) to prioritize immediate user interactivity.
+In production builds (`npm run build:prod`), critical assets (`index.css`, `theme-init.js`, and `service-worker/init.js`) are inlined directly into `index.html` alongside pre-rendered Declarative Shadow DOM (DSD) shells, eliminating render-blocking network requests. Production assets are further minified using `htmlnano` and `cssnano`. Service worker initialization is deferred (10-second idle delay) to prioritize immediate user interactivity, with periodic update polling (1 hour), window focus/visibility checks, and interactive update dialog flows with reprompt backoff. For single-file deployments, `shadow-claw build --single-file --service-worker` produces a companion `service-worker.js` with content-hashed caching and inlined registration.
 
 ### 3. Worker-isolated agent
 

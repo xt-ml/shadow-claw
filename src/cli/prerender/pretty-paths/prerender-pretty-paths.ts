@@ -34,6 +34,7 @@ import { trimSlashes } from "../../../utils/normalize-workspace-path.js";
 import { isPagePathAllowed } from "../../../utils/is-page-path-allowed.js";
 import { resolvePageScriptDependencies } from "../../../utils/resolve-page-script-dependencies.js";
 import { buildCustomElementScriptTags } from "../../site-config/custom-elements/build-custom-element-script-tags.js";
+import { normalizeCustomElementScriptSrc } from "../../site-config/custom-elements/normalize-custom-element-script-src.js";
 import {
   extractMarkdownDescription,
   formatSeoTitle,
@@ -628,13 +629,21 @@ export async function prerenderPrettyPaths(
     if (resolvedScripts.length > 0) {
       const headMatch = htmlWithScripts.match(/<head[^>]*>([\s\S]*?)<\/head>/i);
       const headContent = headMatch ? headMatch[1] : "";
-      const scriptsToInject = resolvedScripts.filter(
-        (s) =>
+      const scriptsToInject = resolvedScripts.filter((s) => {
+        const normSrc = normalizeCustomElementScriptSrc(s.src, basePath);
+        return (
           !headContent.includes(`src="${s.src}"`) &&
-          !headContent.includes(`src='${s.src}'`),
-      );
+          !headContent.includes(`src='${s.src}'`) &&
+          !headContent.includes(`src="${normSrc}"`) &&
+          !headContent.includes(`src='${normSrc}'`)
+        );
+      });
       if (scriptsToInject.length > 0) {
-        const scriptTags = buildCustomElementScriptTags(scriptsToInject);
+        const scriptTags = buildCustomElementScriptTags(
+          scriptsToInject,
+          undefined,
+          basePath,
+        );
         htmlWithScripts = insertBeforeClosingHead(
           htmlWithScripts,
           `  ${scriptTags.trim()}`,

@@ -741,6 +741,49 @@ describe("webmcp integration", () => {
       expect(custom.readOnlyHint).toBe(true);
       expect(custom.customMeta).toBe("important");
     });
+
+    it("registers declarative tools with their declared annotations", async () => {
+      await registerWebMcpTools(null, jest.fn(), "group-webmcp", [
+        {
+          name: "lightmeter_read",
+          description: "Read the light sensor.",
+          input_schema: { type: "object" },
+          annotations: { readOnlyHint: true },
+        } as any,
+        {
+          name: "lightmeter_send_raw",
+          description: "Send raw bytes.",
+          input_schema: { type: "object" },
+          annotations: { consequentialHint: true },
+        } as any,
+        {
+          name: "lightmeter_plain",
+          description: "No annotations declared.",
+          input_schema: { type: "object" },
+        } as any,
+      ]);
+
+      const byName = (name: string) =>
+        mockRegisterTool.mock.calls
+          .map((args: any[]) => args[0])
+          .find((r: any) => r.name === name);
+
+      expect(byName("lightmeter_read").annotations).toEqual({
+        readOnlyHint: true,
+        consequentialHint: false,
+        untrustedContentHint: true,
+      });
+      expect(byName("lightmeter_send_raw").annotations).toEqual({
+        readOnlyHint: false,
+        consequentialHint: true,
+        untrustedContentHint: true,
+      });
+      expect(byName("lightmeter_plain").annotations).toEqual({
+        readOnlyHint: false,
+        consequentialHint: false,
+        untrustedContentHint: true,
+      });
+    });
   });
 
   describe("Firefox originAgentCluster compatibility", () => {

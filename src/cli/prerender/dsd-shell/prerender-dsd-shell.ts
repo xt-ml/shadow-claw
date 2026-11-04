@@ -64,6 +64,8 @@ import { optimizeImgTags } from "../utils/optimize-img-tags.js";
 import { isPagePathAllowed } from "../../../utils/is-page-path-allowed.js";
 import { resolvePageScriptDependencies } from "../../../utils/resolve-page-script-dependencies.js";
 import { buildCustomElementScriptTags } from "../../site-config/custom-elements/build-custom-element-script-tags.js";
+import { normalizeCustomElementScriptSrc } from "../../site-config/custom-elements/normalize-custom-element-script-src.js";
+import { resolveSiteBasePath } from "../../site-config/apply.js";
 import { resolveThemeStylesheetHref } from "../../../ui/iframe-theme.js";
 
 export { escapeHtml };
@@ -107,6 +109,8 @@ export interface PrerenderDsdShellOptions {
   silent?: boolean;
   isProduction?: boolean;
   singleFile?: boolean;
+  basePath?: string;
+  pagesOrigin?: string;
 }
 
 const SHADOW_CLAW_TEMPLATE_START =
@@ -994,6 +998,8 @@ export function markNoSeedPrerenderHost(indexHtml: string): string {
 export interface InlineCriticalAssetsOptions {
   isProduction?: boolean;
   singleFile?: boolean;
+  basePath?: string;
+  pagesOrigin?: string;
 }
 
 export async function inlineCriticalAssets(
@@ -1572,15 +1578,35 @@ export async function prerenderDsdShell(
   );
   let htmlWithScripts = nextHtml;
   if (resolvedScripts.length > 0) {
+    const rawBasePath = singleFile
+      ? ""
+      : options.basePath || process.env.PAGES_BASE_PATH || "";
+    const basePath = isProduction
+      ? resolveSiteBasePath({
+          basePath: rawBasePath,
+          pagesOrigin: options.pagesOrigin || process.env.PAGES_ORIGIN,
+          siteUrl: siteConfig?.branding?.siteUrl,
+          defaultBasePath: "/",
+        })
+      : rawBasePath || "/";
+
     const headMatch = htmlWithScripts.match(/<head[^>]*>([\s\S]*?)<\/head>/i);
     const headContent = headMatch ? headMatch[1] : "";
-    const scriptsToInject = resolvedScripts.filter(
-      (s) =>
+    const scriptsToInject = resolvedScripts.filter((s) => {
+      const normSrc = normalizeCustomElementScriptSrc(s.src, basePath);
+      return (
         !headContent.includes(`src="${s.src}"`) &&
-        !headContent.includes(`src='${s.src}'`),
-    );
+        !headContent.includes(`src='${s.src}'`) &&
+        !headContent.includes(`src="${normSrc}"`) &&
+        !headContent.includes(`src='${normSrc}'`)
+      );
+    });
     if (scriptsToInject.length > 0) {
-      const scriptTags = buildCustomElementScriptTags(scriptsToInject);
+      const scriptTags = buildCustomElementScriptTags(
+        scriptsToInject,
+        undefined,
+        basePath,
+      );
       htmlWithScripts = insertBeforeClosingHead(
         htmlWithScripts,
         `  ${scriptTags.trim()}`,

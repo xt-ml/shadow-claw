@@ -91,6 +91,104 @@ describe("declarative tools", () => {
       });
     });
 
+    describe("annotations", () => {
+      const base = {
+        name: "annotated",
+        description: "Tool with WebMCP annotations.",
+        input_schema: { type: "object" },
+        execution: { type: "javascript", code: "return 1;" },
+      };
+
+      it("passes boolean WebMCP annotations through to the definition", () => {
+        const tool = parseDeclarativeTool(".agents/tools/annotated.json", {
+          ...base,
+          annotations: { readOnlyHint: true, consequentialHint: false },
+        });
+
+        expect(tool.annotations).toEqual({
+          readOnlyHint: true,
+          consequentialHint: false,
+        });
+      });
+
+      it("omits the annotations key entirely when none are declared", () => {
+        const tool = parseDeclarativeTool(".agents/tools/annotated.json", base);
+
+        expect(tool).not.toHaveProperty("annotations");
+      });
+
+      it("preserves unknown boolean hints so future WebMCP hints keep working", () => {
+        const tool = parseDeclarativeTool(".agents/tools/annotated.json", {
+          ...base,
+          annotations: { untrustedContentHint: false, idempotentHint: true },
+        });
+
+        expect(tool.annotations).toEqual({
+          untrustedContentHint: false,
+          idempotentHint: true,
+        });
+      });
+
+      it("drops non-boolean annotation values", () => {
+        const tool = parseDeclarativeTool(".agents/tools/annotated.json", {
+          ...base,
+          annotations: {
+            readOnlyHint: "yes",
+            consequentialHint: 1,
+            nested: { a: true },
+            debugging: true,
+          },
+        });
+
+        expect(tool.annotations).toEqual({ debugging: true });
+      });
+
+      it("ignores annotations that are not a plain object", () => {
+        for (const bad of ["readOnlyHint", 42, true, [true], null]) {
+          const tool = parseDeclarativeTool(".agents/tools/annotated.json", {
+            ...base,
+            annotations: bad,
+          });
+
+          expect(tool).not.toHaveProperty("annotations");
+        }
+      });
+
+      it("drops annotations that end up empty after validation", () => {
+        const tool = parseDeclarativeTool(".agents/tools/annotated.json", {
+          ...base,
+          annotations: { readOnlyHint: "nope" },
+        });
+
+        expect(tool).not.toHaveProperty("annotations");
+      });
+
+      it("rejects contradictory readOnlyHint and consequentialHint", () => {
+        expect(() =>
+          parseDeclarativeTool(".agents/tools/annotated.json", {
+            ...base,
+            annotations: { readOnlyHint: true, consequentialHint: true },
+          }),
+        ).toThrow("cannot be both readOnlyHint and consequentialHint");
+      });
+
+      it("keeps annotations for delegated tool and bash executions", () => {
+        const delegated = parseDeclarativeTool(".agents/tools/d.json", {
+          ...base,
+          execution: { type: "tool", name: "git_status" },
+          annotations: { readOnlyHint: true },
+        });
+        const bash = parseDeclarativeTool(".agents/tools/b.json", {
+          ...base,
+          execution: { type: "bash", command: "echo hi" },
+          annotations: { consequentialHint: true },
+        });
+
+        expect(delegated.annotations).toEqual({ readOnlyHint: true });
+        expect(bash.annotations).toEqual({ consequentialHint: true });
+      });
+    });
+
     it("rejects invalid value shapes", () => {
       expect(() => parseDeclarativeTool("test.json", null)).toThrow(
         "must be a JSON object",

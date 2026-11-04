@@ -424,6 +424,14 @@ A ready-to-fork starter template for publishing custom static sites, documentati
 
 [![ShadowClaw Template screenshot](https://xt-ml.github.io/shadow-claw/assets/screenshots/xt-ml.github.io_shadow-claw-template-1024x768.png)](https://xt-ml.github.io/shadow-claw-template/)
 
+### [Shadow Claw Light Meter](https://xt-ml.github.io/shadow-claw-light-meter/)
+
+[![Agent Skills](https://img.shields.io/badge/Agent_Skills-Discovery-8b5cf6?style=flat)](https://xt-ml.github.io/shadow-claw-light-meter/.well-known/agent-skills/index.json)
+
+A hardware sensory workbench and real-time telemetry engine for TinyDuino, Bluegiga BLE112, and KY-018 photoresistor hardware, featuring interactive `<tinyduino-control-panel>` custom elements, Web Bluetooth GATT streaming, declarative WebMCP tools, and autonomous agent skills.
+
+[![Shadow Claw Light Meter Screenshot](https://xt-ml.github.io/shadow-claw/assets/screenshots/xt-ml.github.io_shadow-claw-light-meter-1071x768.png)](https://xt-ml.github.io/shadow-claw-light-meter/)
+
 ### [Block Garden Knowledge Hub](https://kherrick.github.io/block-garden-knowledge-hub/)
 
 [![Agent Skills](https://img.shields.io/badge/Agent_Skills-Discovery-8b5cf6?style=flat)](https://kherrick.github.io/block-garden-knowledge-hub/.well-known/agent-skills/index.json)

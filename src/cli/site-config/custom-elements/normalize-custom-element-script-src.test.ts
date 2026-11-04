@@ -22,6 +22,22 @@ describe("normalizeCustomElementScriptSrc", () => {
     ).toBe("/.agents/scripts/main/block-garden-adapter.js");
   });
 
+  it("prefixes with basePath when provided or set via PAGES_BASE_PATH", () => {
+    expect(
+      normalizeCustomElementScriptSrc(
+        ".agents/scripts/tinyduino-element.js",
+        "/shadow-claw-light-meter/",
+      ),
+    ).toBe("/shadow-claw-light-meter/.agents/scripts/tinyduino-element.js");
+
+    expect(
+      normalizeCustomElementScriptSrc(
+        ".agents/scripts/tinyduino-element.js",
+        "/shadow-claw-light-meter",
+      ),
+    ).toBe("/shadow-claw-light-meter/.agents/scripts/tinyduino-element.js");
+  });
+
   it("keeps absolute remote URLs unchanged", () => {
     expect(normalizeCustomElementScriptSrc("https://example.com/x.mjs")).toBe(
       "https://example.com/x.mjs",

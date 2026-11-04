@@ -302,6 +302,12 @@ const restoreGlobals = applyGlobalShadows();
       ${allowFullInternetAccess ? "" : "const fetch = undefined;"}
       const $PIPE_DATA = ${JSON.stringify(data ?? "")};
       const data = $PIPE_DATA;
+      let input;
+      try {
+        input = typeof data === "string" && data ? JSON.parse(data) : (data ?? {});
+      } catch (_) {
+        input = data ?? {};
+      }
 
     ${code}
     })();

@@ -6,6 +6,7 @@ import { readGroupFile } from "../../storage/read-group-file.js";
 
 import type { ShadowClawDatabase } from "../../db/types.js";
 import type {
+  DeclarativeToolAnnotations,
   DeclarativeToolDefinition,
   DeclarativeToolExecution,
   ToolDefinition,
@@ -14,6 +15,39 @@ import type {
 export type { DeclarativeToolDefinition };
 
 const TOOL_NAME_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
+
+/**
+ * Normalize the optional `annotations` object of a declarative tool.
+ *
+ * - Non-object values (strings, numbers, arrays, null) are ignored.
+ * - Only boolean values are kept; every other value is dropped.
+ * - Unknown boolean hints are preserved (forward compatible with the spec).
+ * - An empty result is returned as `undefined` so the key is omitted.
+ * - A tool cannot declare itself both read-only and consequential.
+ */
+function parseDeclarativeAnnotations(
+  name: string,
+  value: unknown,
+): DeclarativeToolAnnotations | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const annotations: DeclarativeToolAnnotations = {};
+  for (const [hint, hintValue] of Object.entries(value)) {
+    if (typeof hintValue === "boolean") {
+      annotations[hint] = hintValue;
+    }
+  }
+
+  if (annotations.readOnlyHint && annotations.consequentialHint) {
+    throw new Error(
+      `Tool ${name} cannot be both readOnlyHint and consequentialHint`,
+    );
+  }
+
+  return Object.keys(annotations).length > 0 ? annotations : undefined;
+}
 
 export function parseDeclarativeTool(
   path: string,
@@ -45,6 +79,9 @@ export function parseDeclarativeTool(
     throw new Error(`Tool ${name} requires execution`);
   }
 
+  const annotations = parseDeclarativeAnnotations(name, candidate.annotations);
+  const annotationFields = annotations ? { annotations } : {};
+
   const parsedExecution = execution as Record<string, unknown>;
   const type = parsedExecution.type;
   if (type !== "bash" && type !== "javascript" && type !== "tool") {
@@ -71,6 +108,7 @@ export function parseDeclarativeTool(
           ? { input: parsedExecution.input as Record<string, unknown> }
           : {}),
       },
+      ...annotationFields,
       path,
     };
   }
@@ -88,6 +126,7 @@ export function parseDeclarativeTool(
       type,
       [sourceKey]: source,
     } as DeclarativeToolExecution,
+    ...annotationFields,
     path,
   };
 }

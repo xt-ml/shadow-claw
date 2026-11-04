@@ -25,6 +25,7 @@ function defaultEscapeHtml(str: string): string {
 export function buildCustomElementScriptTags(
   approvedEntries: CustomElementScriptEntry[] | any,
   escapeHtml: (str: string) => string = defaultEscapeHtml,
+  basePath?: string,
 ): string {
   if (!Array.isArray(approvedEntries) || approvedEntries.length === 0) {
     return "";
@@ -33,12 +34,12 @@ export function buildCustomElementScriptTags(
   return approvedEntries
     .map((entry) => {
       if (typeof entry === "string") {
-        const src = normalizeCustomElementScriptSrc(entry);
+        const src = normalizeCustomElementScriptSrc(entry, basePath);
         return `    <script type="module" src="${escapeHtml(src)}"></script>`;
       }
 
       if (entry && typeof entry === "object" && entry.src) {
-        const src = normalizeCustomElementScriptSrc(entry.src);
+        const src = normalizeCustomElementScriptSrc(entry.src, basePath);
         const type = entry.type
           ? ` type="${escapeHtml(entry.type)}"`
           : ' type="module"';

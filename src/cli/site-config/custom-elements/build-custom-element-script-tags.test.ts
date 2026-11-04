@@ -43,6 +43,25 @@ describe("buildCustomElementScriptTags", () => {
     expect(tags).toContain("m.init()");
   });
 
+  it("incorporates basePath when provided", () => {
+    const tags = buildCustomElementScriptTags(
+      [
+        {
+          src: ".agents/scripts/tinyduino-adapter.js",
+          hasInit: true,
+        },
+      ],
+      (s) => s,
+      "/shadow-claw-light-meter/",
+    );
+    expect(tags).toContain(
+      '<script type="module" src="/shadow-claw-light-meter/.agents/scripts/tinyduino-adapter.js"></script>',
+    );
+    expect(tags).toContain(
+      'import("/shadow-claw-light-meter/.agents/scripts/tinyduino-adapter.js")',
+    );
+  });
+
   it("returns empty output for non-array, empty, and invalid entries", () => {
     expect(buildCustomElementScriptTags([], (s) => s)).toBe("");
     expect(buildCustomElementScriptTags("not-an-array" as any, (s) => s)).toBe(

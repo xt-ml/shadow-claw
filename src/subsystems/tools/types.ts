@@ -16,8 +16,25 @@ export interface DeclarativeToolExecution {
   input?: Record<string, unknown>;
 }
 
+/**
+ * WebMCP tool annotations that a declarative tool may declare.
+ *
+ * Known hints (`readOnlyHint`, `consequentialHint`, `untrustedContentHint`,
+ * `debugging`) are typed; any other boolean-valued hint is preserved so that
+ * hints added to the WebMCP spec later keep working without a code change.
+ */
+export interface DeclarativeToolAnnotations {
+  readOnlyHint?: boolean;
+  consequentialHint?: boolean;
+  untrustedContentHint?: boolean;
+  debugging?: boolean;
+  [hint: string]: boolean | undefined;
+}
+
 export interface DeclarativeToolDefinition extends ToolDefinition {
   execution: DeclarativeToolExecution;
+  /** WebMCP annotations forwarded to `registerTool` (e.g. `readOnlyHint`). */
+  annotations?: DeclarativeToolAnnotations;
   path?: string;
 }
 

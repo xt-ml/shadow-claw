@@ -196,7 +196,8 @@
   max-width: 100%;
 }
 
-.pages__rendered a {
+.pages__rendered
+  a:not([class*="btn"]):not([class*="cta"]):not([role="button"]) {
   color: var(--shadow-claw-link, var(--shadow-claw-accent-primary));
 }
 

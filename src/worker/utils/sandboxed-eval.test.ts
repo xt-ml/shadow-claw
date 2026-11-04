@@ -309,4 +309,14 @@ describe("buildWorkerSource — generated code validity", () => {
     );
     expect(source).toContain('const $PIPE_DATA = "hello world";');
   });
+
+  it("injects parsed input parameter from data", () => {
+    const source = buildWorkerSource(
+      "return input;",
+      false,
+      JSON.stringify({ target: "test" }),
+    );
+    expect(source).toContain("let input;");
+    expect(source).toContain('input = typeof data === "string"');
+  });
 });

@@ -537,6 +537,52 @@ describe("apply-site-config", () => {
         patchBaseHref('<head><base href="/"></head>', "/shadow-claw/"),
       ).toBe('<head><base href="/shadow-claw/" /></head>');
     });
+
+    it("patches canonical URL, og:url, og:title, and twitter:title when siteUrl or site metadata is configured", () => {
+      const fullHtml = `<!doctype html>
+<html>
+  <head>
+    <title>ShadowClaw</title>
+    <meta name="description" content="Default Description" />
+    <link rel="canonical" href="https://xt-ml.github.io/shadow-claw/" />
+    <meta property="og:title" content="ShadowClaw" />
+    <meta property="og:description" content="Default Description" />
+    <meta property="og:url" content="https://xt-ml.github.io/shadow-claw/" />
+    <meta name="twitter:title" content="ShadowClaw" />
+    <meta name="twitter:description" content="Default Description" />
+  </head>
+  <body></body>
+</html>`;
+
+      const patched = patchIndexHtml(fullHtml, {
+        site: {
+          title: "TinyDuino LightMeter",
+          description: "Web Bluetooth sensory workbench",
+        },
+        branding: {
+          siteUrl: "https://xt-ml.github.io/shadow-claw-light-meter/",
+        },
+      });
+
+      expect(patched).toContain(
+        '<link rel="canonical" href="https://xt-ml.github.io/shadow-claw-light-meter/" />',
+      );
+      expect(patched).toContain(
+        '<meta property="og:url" content="https://xt-ml.github.io/shadow-claw-light-meter/" />',
+      );
+      expect(patched).toContain(
+        '<meta property="og:title" content="TinyDuino LightMeter" />',
+      );
+      expect(patched).toContain(
+        '<meta property="og:description" content="Web Bluetooth sensory workbench" />',
+      );
+      expect(patched).toContain(
+        '<meta name="twitter:title" content="TinyDuino LightMeter" />',
+      );
+      expect(patched).toContain(
+        '<meta name="twitter:description" content="Web Bluetooth sensory workbench" />',
+      );
+    });
   });
 
   describe("patchManifest", () => {

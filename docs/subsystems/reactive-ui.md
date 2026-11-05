@@ -290,6 +290,10 @@ native `window.confirm()`. This keeps confirmation UX and keyboard behavior cons
 Dialogs support optional `autoCloseSeconds` (used for provider errors and fatal dialogs), which renders
 a 1-second countdown on the confirm button and an ARIA live region (`role="status"`, `aria-live="polite"`, `aria-atomic="true"`)
 to auto-close the dialog and resolve the promise without blocking unattended agent loops.
+Action links supplied to `requestDialog` (`links: [{ href, label }]`) automatically resolve relative and internal paths
+under the active application base path via `applyBasePath(rawHref)`, ensuring links to documentation, troubleshooting, or
+internal guides route correctly on subpath deployments while external protocols (`http://`, `https://`, `mailto:`, `tel:`)
+and anchor fragments (`#`) remain untouched.
 
 When activity-log disk logging is enabled from Settings, server-side log entries
 are persisted under `<cacheDir>/logs` (defaults to `.cache/logs`) in the app or server directory.

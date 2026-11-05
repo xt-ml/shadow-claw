@@ -22,6 +22,7 @@ import {
   insertBeforeClosingHead,
 } from "../prerender/utils/insert-before-closing-head.js";
 import { applySidebarVisibilityToTemplate } from "../prerender/dsd-shell/prerender-dsd-shell.js";
+import { patchHtmlHeadMetadata } from "../../utils/seo.js";
 
 export interface SiteConfigSite {
   title?: string;
@@ -324,19 +325,23 @@ export function patchIndexHtml(
   let next = html;
 
   const site = config.site || {};
+  const branding = config.branding || {};
+  const isProd = options?.isProduction ?? process.env.NODE_ENV === "production";
 
-  if (site.title) {
-    next = next.replace(
-      /<title>[^<]*<\/title>/iu,
-      `<title>${escapeHtml(site.title)}</title>`,
-    );
+  let defaultImageUrl: string | undefined;
+  if (branding.siteUrl) {
+    try {
+      defaultImageUrl = new URL("assets/icons/512.png", branding.siteUrl).href;
+    } catch {}
   }
 
-  if (site.description) {
-    next = next.replace(
-      /<meta\s+name="description"\s+content="[^"]*"\s*\/?>/iu,
-      `<meta name="description" content="${escapeHtml(site.description)}" />`,
-    );
+  if (site.title || site.description || branding.siteUrl) {
+    next = patchHtmlHeadMetadata(next, {
+      title: site.title,
+      description: site.description,
+      canonicalUrl: branding.siteUrl,
+      image: defaultImageUrl,
+    });
   }
 
   if (site.themeColor) {
@@ -349,9 +354,6 @@ export function patchIndexHtml(
   if (site.lang) {
     next = next.replace(/<html\s+lang="[^"]*"/iu, `<html lang="${site.lang}"`);
   }
-
-  const branding = config.branding || {};
-  const isProd = options?.isProduction ?? process.env.NODE_ENV === "production";
 
   if (options?.basePath && options.basePath.trim()) {
     next = patchBaseHref(next, options.basePath);

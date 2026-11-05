@@ -868,6 +868,29 @@ export function applySidebarVisibilityToTemplate(
   return next;
 }
 
+function addClassToTagAttrs(attrs: string, className: string): string {
+  if (/class="([^"]*)"/i.test(attrs)) {
+    return attrs.replace(/class="([^"]*)"/i, (_m, cls) => {
+      const list = cls.split(/\s+/).filter(Boolean);
+      if (!list.includes(className)) {
+        list.push(className);
+      }
+      return `class="${list.join(" ")}"`;
+    });
+  }
+  return ` class="${className}"${attrs}`;
+}
+
+function removeClassFromTagAttrs(attrs: string, className: string): string {
+  if (/class="([^"]*)"/i.test(attrs)) {
+    return attrs.replace(/class="([^"]*)"/i, (_m, cls) => {
+      const list = cls.split(/\s+/).filter((c: string) => c && c !== className);
+      return `class="${list.join(" ")}"`;
+    });
+  }
+  return attrs;
+}
+
 export function buildShadowClawDsdTemplate(
   shadowClawTemplateContent: string,
   pagesDsdHost: string,
@@ -878,12 +901,24 @@ export function buildShadowClawDsdTemplate(
     /<shadow-claw-pages><\/shadow-claw-pages>/iu,
     () => pagesDsdHost,
   );
-  if (withPages === shadowClawTemplateContent) {
-    withPages = shadowClawTemplateContent.replace(
-      /(<div\s+class="page(?:\s+active)?"\s+data-page-id="pages">)[\s\S]*?(<\/div>)/iu,
-      `$1\n          ${pagesDsdHost}\n        $2`,
+
+  const pagesDivRegex =
+    /(<div\b)([^>]*\bdata-page-id="pages"[^>]*)>([\s\S]*?)<\/div>/iu;
+
+  if (pagesDivRegex.test(withPages)) {
+    withPages = withPages.replace(
+      pagesDivRegex,
+      (_match, tagStart, attrs, inner) => {
+        let updatedAttrs = addClassToTagAttrs(attrs, "page");
+        updatedAttrs = addClassToTagAttrs(updatedAttrs, "active");
+        const content = inner.includes(pagesDsdHost)
+          ? inner
+          : `\n          ${pagesDsdHost}\n        `;
+        return `${tagStart}${updatedAttrs}>${content}</div>`;
+      },
     );
   }
+
   withPages = applySidebarVisibilityToTemplate(withPages, sidebarConfig);
   const content = wrapShadowClawDialogContentInTemplate(withPages);
 
@@ -902,17 +937,22 @@ export function buildShadowClawDsdTemplateWithoutPages(
 ): string {
   let next = shadowClawTemplateContent;
 
+  // Remove "active" from nav-item data-page="pages"
   next = next.replace(
-    /(<li\s+class="nav-item)\s+active(\s*"\s+data-page="pages">)/iu,
-    "$1$2",
+    /(<li\b)([^>]*\bdata-page="pages"[^>]*)>/iu,
+    (_m, tagStart, attrs) =>
+      `${tagStart}${removeClassFromTagAttrs(attrs, "active")}>`,
   );
+
+  // Remove "active" from page div data-page-id="pages"
   next = next.replace(
-    /(<div\s+class="page)\s+active("\s+data-page-id="pages">)/iu,
-    "$1$2",
+    /(<div\b)([^>]*\bdata-page-id="pages"[^>]*)>/iu,
+    (_m, tagStart, attrs) =>
+      `${tagStart}${removeClassFromTagAttrs(attrs, "active")}>`,
   );
 
   next = next.replace(
-    /(<li\s+class="nav-item[^"]*"\s+data-page="pages")>/iu,
+    /(<li\s+class="[^"]*nav-item[^"]*"\s+data-page="pages")>/iu,
     '$1 hidden aria-hidden="true">',
   );
 
@@ -924,20 +964,18 @@ export function buildShadowClawDsdTemplateWithoutPages(
         ? "files"
         : "chat";
 
+  // Add "active" to fallback nav-item
   next = next.replace(
-    new RegExp(
-      `(<li\\s+class="nav-item)(\\s*"\\s+data-page="${fallbackPage}">)`,
-      "iu",
-    ),
-    "$1 active$2",
+    new RegExp(`(<li\\b)([^>]*\\bdata-page="${fallbackPage}"[^>]*)>`, "iu"),
+    (_m, tagStart, attrs) =>
+      `${tagStart}${addClassToTagAttrs(attrs, "active")}>`,
   );
 
+  // Add "active" to fallback page div
   next = next.replace(
-    new RegExp(
-      `(<div\\s+class="page\\s+${fallbackPage}-page)("\\s+data-page-id="${fallbackPage}">)`,
-      "iu",
-    ),
-    "$1 active$2",
+    new RegExp(`(<div\\b)([^>]*\\bdata-page-id="${fallbackPage}"[^>]*)>`, "iu"),
+    (_m, tagStart, attrs) =>
+      `${tagStart}${addClassToTagAttrs(attrs, "active")}>`,
   );
 
   next = applySidebarVisibilityToTemplate(next, sidebarConfig);

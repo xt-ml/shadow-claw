@@ -1,6 +1,7 @@
 import { jest } from "@jest/globals";
 
 import { requestDialog } from "./request-dialog.js";
+import { resetAppBasePathCache } from "../../../core/app-routes.js";
 
 describe("requestDialog", () => {
   let doc: Document;
@@ -14,6 +15,7 @@ describe("requestDialog", () => {
   let cancelBtn: HTMLButtonElement;
 
   beforeEach(() => {
+    resetAppBasePathCache();
     doc = document;
     shadowRoot = doc.createElement("div").attachShadow({ mode: "open" });
 
@@ -61,6 +63,7 @@ describe("requestDialog", () => {
   });
 
   afterEach(() => {
+    resetAppBasePathCache();
     jest.useRealTimers();
   });
 
@@ -230,5 +233,43 @@ describe("requestDialog", () => {
     dialog.returnValue = "confirm";
     dialog.dispatchEvent(new Event("close"));
     await p;
+  });
+
+  it("should resolve internal dialog link hrefs under application base path", async () => {
+    const baseEl = doc.createElement("base");
+    baseEl.setAttribute("href", "/shadow-claw-light-meter/");
+    doc.head.appendChild(baseEl);
+
+    try {
+      const p = requestDialog(doc, shadowRoot, {
+        title: "Connection Notice",
+        message: "Hardware guidance",
+        links: [
+          {
+            href: "/main/troubleshooting/",
+            label: "Hardware Troubleshooting Guide",
+          },
+          {
+            href: "https://github.com/WebBluetoothCG/web-bluetooth",
+            label: "Web Bluetooth Status",
+          },
+        ],
+      });
+
+      const links = linksEl.querySelectorAll("a");
+      expect(links.length).toBe(2);
+      expect(links[0].getAttribute("href")).toBe(
+        "/shadow-claw-light-meter/main/troubleshooting/",
+      );
+      expect(links[1].getAttribute("href")).toBe(
+        "https://github.com/WebBluetoothCG/web-bluetooth",
+      );
+
+      dialog.returnValue = "confirm";
+      dialog.dispatchEvent(new Event("close"));
+      await p;
+    } finally {
+      baseEl.remove();
+    }
   });
 });

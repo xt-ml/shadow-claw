@@ -1,3 +1,4 @@
+import { applyBasePath } from "../../../core/app-routes.js";
 import type { AppDialogOptions } from "../../../ui/types.js";
 
 export async function requestDialog(
@@ -75,7 +76,15 @@ export async function requestDialog(
   for (const link of links) {
     const anchor = doc.createElement("a");
     anchor.className = "app-dialog__link";
-    anchor.href = link.href;
+    const rawHref = link.href || "";
+    const isExternal =
+      rawHref.startsWith("http://") ||
+      rawHref.startsWith("https://") ||
+      rawHref.startsWith("//") ||
+      rawHref.startsWith("mailto:") ||
+      rawHref.startsWith("tel:") ||
+      rawHref.startsWith("#");
+    anchor.setAttribute("href", isExternal ? rawHref : applyBasePath(rawHref));
     anchor.rel = "noreferrer";
     anchor.target = "_blank";
     anchor.textContent = link.label;

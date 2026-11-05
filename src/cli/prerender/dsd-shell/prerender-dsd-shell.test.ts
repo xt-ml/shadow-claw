@@ -1,6 +1,8 @@
 import {
   applySidebarVisibilityToTemplate,
   applyStaticPagesContent,
+  buildShadowClawDsdTemplate,
+  buildShadowClawDsdTemplateWithoutPages,
   collectPageSources,
   escapeJsonForHtmlScript,
   extractTemplateContent,
@@ -262,6 +264,65 @@ describe("pages DSD prerender parity", () => {
     expect(next).toContain(
       '<div class="pages__rendered" data-pages-rendered data-initial-path="index.html"><div>Home Content</div></div>',
     );
+  });
+
+  it("ensures data-page-id='pages' container has the active class in DSD template so it renders without JavaScript", () => {
+    const rawTemplate = [
+      '<div class="main-content">',
+      '  <div class="page" data-page-id="pages"></div>',
+      '  <div class="page chat-page" data-page-id="chat"></div>',
+      "</div>",
+    ].join("\n");
+
+    const host = "<shadow-claw-pages><p>SSR Content</p></shadow-claw-pages>";
+    const dsd = buildShadowClawDsdTemplate(rawTemplate, host);
+
+    expect(dsd).toContain('<div class="page active" data-page-id="pages">');
+    expect(dsd).toContain(
+      "<shadow-claw-pages><p>SSR Content</p></shadow-claw-pages>",
+    );
+  });
+
+  it("handles minified class order (active page) and injects host content reliably", () => {
+    const minifiedTemplate = [
+      '<div class="main-content">',
+      '  <div class="active page" data-page-id="pages"></div>',
+      '  <div class="chat-page page" data-page-id="chat"></div>',
+      "</div>",
+    ].join("\n");
+
+    const host = "<shadow-claw-pages><p>SSR Content</p></shadow-claw-pages>";
+    const dsd = buildShadowClawDsdTemplate(minifiedTemplate, host);
+
+    expect(dsd).toMatch(/<div\b[^>]*\bdata-page-id="pages"[^>]*>/i);
+    expect(dsd).toContain(
+      "<shadow-claw-pages><p>SSR Content</p></shadow-claw-pages>",
+    );
+    // Check both page and active classes are present
+    const pagesDivMatch = dsd.match(/<div\b[^>]*\bdata-page-id="pages"[^>]*>/i);
+    expect(pagesDivMatch?.[0]).toMatch(/class="[^"]*\bpage\b[^"]*"/i);
+    expect(pagesDivMatch?.[0]).toMatch(/class="[^"]*\bactive\b[^"]*"/i);
+  });
+
+  it("buildShadowClawDsdTemplateWithoutPages removes active from pages regardless of class order", () => {
+    const template = [
+      '<nav><li class="active nav-item" data-page="pages">Pages</li><li class="nav-item" data-page="chat">Chat</li></nav>',
+      '<div class="main-content">',
+      '  <div class="active page" data-page-id="pages"></div>',
+      '  <div class="chat-page page" data-page-id="chat"></div>',
+      "</div>",
+    ].join("\n");
+
+    const dsd = buildShadowClawDsdTemplateWithoutPages(template);
+    const pagesNavMatch = dsd.match(/<li\b[^>]*\bdata-page="pages"[^>]*>/i);
+    expect(pagesNavMatch?.[0]).not.toMatch(/\bactive\b/);
+    const pagesDivMatch = dsd.match(/<div\b[^>]*\bdata-page-id="pages"[^>]*>/i);
+    expect(pagesDivMatch?.[0]).not.toMatch(/\bactive\b/);
+
+    const chatNavMatch = dsd.match(/<li\b[^>]*\bdata-page="chat"[^>]*>/i);
+    expect(chatNavMatch?.[0]).toMatch(/\bactive\b/);
+    const chatDivMatch = dsd.match(/<div\b[^>]*\bdata-page-id="chat"[^>]*>/i);
+    expect(chatDivMatch?.[0]).toMatch(/\bactive\b/);
   });
 });
 

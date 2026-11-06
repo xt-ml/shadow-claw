@@ -264,6 +264,14 @@ describe("buildWorkerSource — generated code validity", () => {
     }).not.toThrow();
   });
 
+  it("isolates tool declarations from the injected input binding", () => {
+    const source = buildWorkerSource("let input = {}; return input;");
+    expect(() => {
+      // eslint-disable-next-line no-new-func
+      new Function(source);
+    }).not.toThrow();
+  });
+
   it("includes blocked globals metadata in generated source", () => {
     const source = buildWorkerSource("return 1;");
     const blockedMatch = source.match(/const blocked = (\[.*?\]);/s);

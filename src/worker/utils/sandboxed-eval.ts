@@ -309,7 +309,9 @@ const restoreGlobals = applyGlobalShadows();
         input = data ?? {};
       }
 
+      return (async () => {
     ${code}
+      })();
     })();
 
     serializeAndSend(result);

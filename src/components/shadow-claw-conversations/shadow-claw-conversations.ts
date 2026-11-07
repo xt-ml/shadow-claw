@@ -13,6 +13,7 @@ import { setSanitizedHtml } from "../../security/trusted-types.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { toolsStore } from "../../stores/tools.js";
 import { ChannelRegistry } from "../../subsystems/channels/channel-registry.js";
+import { modelRegistry } from "../../subsystems/providers/model-registry.js";
 import { loadDeclarativeTools } from "../../subsystems/tools/declarative.js";
 import { TOOL_DEFINITIONS } from "../../subsystems/tools/tools.js";
 
@@ -1713,7 +1714,11 @@ export class ShadowClawConversations extends ShadowClawElement {
   private async _loadProviderModels(
     provider: LLMProvider,
   ): Promise<ProviderModelItem[]> {
-    if (Array.isArray(provider.models) && provider.models.length > 0) {
+    if (
+      !provider.modelsUrl &&
+      Array.isArray(provider.models) &&
+      provider.models.length > 0
+    ) {
       return provider.models as ProviderModelItem[];
     }
 
@@ -1793,6 +1798,15 @@ export class ShadowClawConversations extends ShadowClawElement {
         },
       );
       items = [...staticItems, ...items];
+    }
+
+    modelRegistry.registerModelsFromList(items);
+    if (
+      typeof orchestratorStore.orchestrator?.refreshContextUsage ===
+        "function" &&
+      this.db
+    ) {
+      void orchestratorStore.orchestrator.refreshContextUsage(this.db);
     }
 
     return items;

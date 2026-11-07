@@ -563,6 +563,7 @@ export async function handleInvoke(
           model,
           rateLimitConfig,
           abortSignal,
+          contextLimit,
         );
       } else {
         result = await callApi(
@@ -581,13 +582,7 @@ export async function handleInvoke(
 
       // Emit token usage
       if (result.usage) {
-        post(
-          createTokenUsageMessage(
-            groupId,
-            result.usage,
-            getContextLimit(model),
-          ),
-        );
+        post(createTokenUsageMessage(groupId, result.usage, contextLimit));
       }
 
       // Log text blocks
@@ -894,6 +889,7 @@ async function callWithStreaming(
   model: string,
   rateLimitConfig: RateLimitConfig,
   abortSignal?: AbortSignal,
+  contextLimit?: number,
 ): Promise<any> {
   // Add stream flag to the request body
   const streamBody = {
@@ -988,7 +984,13 @@ async function callWithStreaming(
         post(createToolActivityMessage(groupId, name, "running"));
       },
       onUsage: (usage) => {
-        post(createTokenUsageMessage(groupId, usage, getContextLimit(model)));
+        post(
+          createTokenUsageMessage(
+            groupId,
+            usage,
+            contextLimit ?? getContextLimit(model),
+          ),
+        );
       },
       onThinking: (text) => {
         pendingReasoning += text;

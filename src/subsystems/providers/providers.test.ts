@@ -129,7 +129,18 @@ describe("providers.js", () => {
       expect(getContextLimit("qwen3.5-9b")).toBe(262144);
       expect(getContextLimit("qwen3-0.6b")).toBe(40960);
       expect(getContextLimit("qwen3-8b")).toBe(128000);
+      expect(getContextLimit("qwen-2.5-72b")).toBe(128000);
       expect(getContextLimit("mesh")).toBe(242144);
+      expect(getContextLimit("openrouter/free")).toBe(200000);
+      expect(getContextLimit("openrouter/auto")).toBe(200000);
+      expect(getContextLimit("llama-3.2-3b")).toBe(128000);
+      expect(getContextLimit("deepseek-r1-distill-qwen-1.5b")).toBe(128000);
+      expect(getContextLimit("onnx-community/gemma-3-1b-it-ONNX-GQA")).toBe(
+        128000,
+      );
+      expect(getContextLimit("gpt-oss-20b")).toBe(128000);
+      expect(getContextLimit("lfm2-1.2b")).toBe(32768);
+      expect(getContextLimit("smollm2-360m")).toBe(8192);
     });
 
     it("should return default limit for unknown models", () => {

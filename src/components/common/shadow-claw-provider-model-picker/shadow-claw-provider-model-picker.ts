@@ -144,7 +144,7 @@ export class ShadowClawProviderModelPicker extends ShadowClawElement {
       providerId: value.providerId || null,
       modelId: value.modelId || null,
     };
-    this.customModelSelected = !!value.modelId;
+    this.customModelSelected = false;
     this.render();
   }
 

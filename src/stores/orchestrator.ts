@@ -2347,6 +2347,12 @@ export class OrchestratorStore {
       pinnedMaxTokens,
     );
     await this.loadGroups(db);
+    if (
+      groupId === this._activeGroupId.get() &&
+      typeof this.orchestrator?.refreshContextUsage === "function"
+    ) {
+      await this.orchestrator.refreshContextUsage(db, groupId);
+    }
   }
 
   /**
@@ -2393,6 +2399,12 @@ export class OrchestratorStore {
   ): Promise<void> {
     await updateGroupToolTags(db, groupId, tags);
     await this.loadGroups(db);
+    if (
+      groupId === this._activeGroupId.get() &&
+      typeof this.orchestrator?.refreshContextUsage === "function"
+    ) {
+      await this.orchestrator.refreshContextUsage(db, groupId);
+    }
   }
 
   /**
@@ -2824,12 +2836,17 @@ export class OrchestratorStore {
       installCustomElementDomGuard();
 
       const customElConfig = config.customElements;
+      const isSeededRaw = await getConfig(db, CONFIG_KEYS.SITE_CONFIG_SEEDED);
+      const alreadySeeded = isTruthyConfigValue(isSeededRaw);
 
       // Clear any erroneous group-level toolTags override on DEFAULT_GROUP_ID
-      const groups = await listGroups(db);
-      const defaultGroup = groups.find((g) => g.groupId === DEFAULT_GROUP_ID);
-      if (defaultGroup?.toolTags) {
-        await updateGroupToolTags(db, DEFAULT_GROUP_ID, undefined);
+      // during initial site-config seeding only (preserve user-pinned tools on subsequent loads)
+      if (!alreadySeeded) {
+        const groups = await listGroups(db);
+        const defaultGroup = groups.find((g) => g.groupId === DEFAULT_GROUP_ID);
+        if (defaultGroup?.toolTags) {
+          await updateGroupToolTags(db, DEFAULT_GROUP_ID, undefined);
+        }
       }
 
       // If site configuration declares internet access, ensure it is honored
@@ -3137,7 +3154,7 @@ export class OrchestratorStore {
         await this.setDefaultPinnedPage(db, null);
       }
 
-      if (Array.isArray(config.enabledTools)) {
+      if (!alreadySeeded && Array.isArray(config.enabledTools)) {
         const enabledTools = config.enabledTools.filter(
           (name: unknown): name is string =>
             typeof name === "string" && name.trim().length > 0,

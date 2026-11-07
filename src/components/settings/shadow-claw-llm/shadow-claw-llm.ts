@@ -12,6 +12,7 @@ import { getConfig } from "../../../db/get-config.js";
 import { setConfig } from "../../../db/set-config.js";
 import { setSanitizedHtml } from "../../../security/trusted-types.js";
 import { orchestratorStore } from "../../../stores/orchestrator.js";
+import { modelRegistry } from "../../../subsystems/providers/model-registry.js";
 import { showError, showSuccess, showWarning } from "../../../ui/toast.js";
 import { getRecommendedMaxTokens } from "./utils/get-recommended-max-tokens.js";
 import { fetchTokenizerConfig } from "../../../subsystems/providers/utils/chat-template.js";
@@ -1168,8 +1169,17 @@ export class ShadowClawLlm extends ShadowClawElement {
                 .filter(Boolean);
             }
 
+            modelRegistry.registerModelsFromList(items);
+
             modelSelect.disabled = false;
             renderOptions(items);
+            this.updateMaxTokensUI();
+            if (
+              typeof this.orchestrator?.refreshContextUsage === "function" &&
+              this.db
+            ) {
+              void this.orchestrator.refreshContextUsage(this.db);
+            }
           })
           .catch((err) => {
             if (fetchToken !== this.modelFetchToken) {

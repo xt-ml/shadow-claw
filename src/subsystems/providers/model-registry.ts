@@ -105,6 +105,111 @@ class ModelRegistry {
   }
 
   /**
+   * Register an array of raw model objects returned by a provider's models endpoint.
+   * Returns the number of models registered.
+   */
+  registerModelsFromList(items: any[]): number {
+    if (!Array.isArray(items)) {
+      return 0;
+    }
+
+    let registeredCount = 0;
+
+    for (const model of items) {
+      if (!model || typeof model !== "object" || !model.id) {
+        continue;
+      }
+
+      let contextLength = model.context_length ?? model.context_window ?? 0;
+      const maxOutput =
+        model.max_completion_tokens ||
+        model.per_request_limits?.completion_tokens ||
+        model.top_provider?.max_completion_tokens ||
+        null;
+      const supportsTools =
+        typeof model.supports_tools === "boolean"
+          ? model.supports_tools
+          : typeof model.supportsTools === "boolean"
+            ? model.supportsTools
+            : undefined;
+      const inputModalities = this.extractModalities(model, "input");
+      const outputModalities = this.extractModalities(model, "output");
+      const supportsImageInput = this.modalitiesInclude(
+        inputModalities,
+        "image",
+        "vision",
+      );
+      const supportsAudioInput = this.modalitiesInclude(
+        inputModalities,
+        "audio",
+        "voice",
+        "hearing",
+      );
+      const supportsVideoInput = this.modalitiesInclude(
+        inputModalities,
+        "video",
+      );
+      const supportsDocumentInput =
+        this.modalitiesInclude(inputModalities, "document", "pdf", "file") ||
+        (typeof model.supports_document_input === "boolean"
+          ? model.supports_document_input
+          : typeof model.supportsDocumentInput === "boolean"
+            ? model.supportsDocumentInput
+            : undefined);
+      const routesByRequestFeatures =
+        model.id === "openrouter/free" ||
+        this.supportedParametersInclude(
+          model,
+          "image",
+          "vision",
+          "audio",
+          "tool",
+          "structured",
+        );
+      const reasoning = this.extractReasoning(model);
+      const supportsPromptCaching =
+        typeof model.supports_prompt_caching === "boolean"
+          ? model.supports_prompt_caching
+          : typeof model.supportsPromptCaching === "boolean"
+            ? model.supportsPromptCaching
+            : this.supportedParametersInclude(
+                  model,
+                  "cache_control",
+                  "prompt_caching",
+                )
+              ? true
+              : undefined;
+
+      // HuggingFace Router structure nests info inside `providers` array
+      if (
+        !contextLength &&
+        Array.isArray(model.providers) &&
+        model.providers.length > 0
+      ) {
+        contextLength = model.providers[0]?.context_length || 0;
+      }
+
+      this.registerModelInfo(model.id, {
+        contextWindow: contextLength,
+        maxOutput,
+        ...(supportsTools !== undefined && { supportsTools }),
+        ...(inputModalities.length > 0 && { inputModalities }),
+        ...(outputModalities.length > 0 && { outputModalities }),
+        ...(supportsImageInput !== undefined && { supportsImageInput }),
+        ...(supportsAudioInput !== undefined && { supportsAudioInput }),
+        ...(supportsVideoInput !== undefined && { supportsVideoInput }),
+        ...(supportsDocumentInput !== undefined && { supportsDocumentInput }),
+        ...(reasoning && { reasoning }),
+        ...(routesByRequestFeatures && { routesByRequestFeatures }),
+        ...(supportsPromptCaching !== undefined && { supportsPromptCaching }),
+      });
+      registeredCount += 1;
+    }
+
+    return registeredCount;
+  }
+
+  /**
    * Fetch model info from a provider's modelsUrl and populate the registry.
    * Handles OpenRouter and any OpenAI-compatible provider that returns
    * {data: [{id, context_length, top_provider: {max_completion_tokens}}]}
@@ -163,95 +268,7 @@ class ModelRegistry {
           ? data.models
           : [];
 
-      for (const model of items) {
-        if (!model.id) {
-          continue;
-        }
-
-        let contextLength = model.context_length ?? model.context_window ?? 0;
-        let maxOutput =
-          model.max_completion_tokens ||
-          model.per_request_limits?.completion_tokens ||
-          model.top_provider?.max_completion_tokens ||
-          null;
-        const supportsTools =
-          typeof model.supports_tools === "boolean"
-            ? model.supports_tools
-            : typeof model.supportsTools === "boolean"
-              ? model.supportsTools
-              : undefined;
-        const inputModalities = this.extractModalities(model, "input");
-        const outputModalities = this.extractModalities(model, "output");
-        const supportsImageInput = this.modalitiesInclude(
-          inputModalities,
-          "image",
-          "vision",
-        );
-        const supportsAudioInput = this.modalitiesInclude(
-          inputModalities,
-          "audio",
-          "voice",
-          "hearing",
-        );
-        const supportsVideoInput = this.modalitiesInclude(
-          inputModalities,
-          "video",
-        );
-        const supportsDocumentInput =
-          this.modalitiesInclude(inputModalities, "document", "pdf", "file") ||
-          (typeof model.supports_document_input === "boolean"
-            ? model.supports_document_input
-            : typeof model.supportsDocumentInput === "boolean"
-              ? model.supportsDocumentInput
-              : undefined);
-        const routesByRequestFeatures =
-          model.id === "openrouter/free" ||
-          this.supportedParametersInclude(
-            model,
-            "image",
-            "vision",
-            "audio",
-            "tool",
-            "structured",
-          );
-        const reasoning = this.extractReasoning(model);
-        const supportsPromptCaching =
-          typeof model.supports_prompt_caching === "boolean"
-            ? model.supports_prompt_caching
-            : typeof model.supportsPromptCaching === "boolean"
-              ? model.supportsPromptCaching
-              : this.supportedParametersInclude(
-                    model,
-                    "cache_control",
-                    "prompt_caching",
-                  )
-                ? true
-                : undefined;
-
-        // HuggingFace Router structure nests info inside `providers` array
-        if (
-          !contextLength &&
-          Array.isArray(model.providers) &&
-          model.providers.length > 0
-        ) {
-          contextLength = model.providers[0]?.context_length || 0;
-        }
-
-        this.registerModelInfo(model.id, {
-          contextWindow: contextLength,
-          maxOutput,
-          ...(supportsTools !== undefined && { supportsTools }),
-          ...(inputModalities.length > 0 && { inputModalities }),
-          ...(outputModalities.length > 0 && { outputModalities }),
-          ...(supportsImageInput !== undefined && { supportsImageInput }),
-          ...(supportsAudioInput !== undefined && { supportsAudioInput }),
-          ...(supportsVideoInput !== undefined && { supportsVideoInput }),
-          ...(supportsDocumentInput !== undefined && { supportsDocumentInput }),
-          ...(reasoning && { reasoning }),
-          ...(routesByRequestFeatures && { routesByRequestFeatures }),
-          ...(supportsPromptCaching !== undefined && { supportsPromptCaching }),
-        });
-      }
+      this.registerModelsFromList(items);
 
       if (items.length > 0) {
         console.log(

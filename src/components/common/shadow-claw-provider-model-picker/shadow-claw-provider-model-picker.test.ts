@@ -131,12 +131,17 @@ describe("shadow-claw-provider-model-picker", () => {
     let modelSelect = el.shadowRoot?.querySelector(
       '[data-role="model-select"]',
     ) as HTMLSelectElement | null;
+    const customInput = el.shadowRoot?.querySelector(
+      '[data-role="custom-model-input"]',
+    ) as HTMLInputElement | null;
 
     expect(
       Array.from(modelSelect?.options || []).some(
         (option) => option.value === "model-a",
       ),
     ).toBe(true);
+    expect(modelSelect?.value).toBe("model-a");
+    expect(customInput?.style.display).toBe("none");
 
     el.setValue({ providerId: "openrouter", modelId: "gpt-4.1" });
     await el.render();
@@ -155,6 +160,8 @@ describe("shadow-claw-provider-model-picker", () => {
         (option) => option.value === "gpt-4.1",
       ),
     ).toBe(true);
+    expect(modelSelect?.value).toBe("gpt-4.1");
+    expect(customInput?.style.display).toBe("none");
 
     el.remove();
   });

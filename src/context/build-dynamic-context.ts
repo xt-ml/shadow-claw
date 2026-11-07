@@ -54,9 +54,17 @@ export function buildDynamicContext(
     };
   }
 
+  // Cap reserved output tokens to at most half the context window so an
+  // oversized maxOutputTokens setting (e.g. 32,768 against a 4,096 fallback
+  // window) never starves message history down to zero available budget.
+  const reservedOutputTokens = Math.min(
+    maxOutputTokens,
+    Math.floor(contextLimit * 0.5),
+  );
+
   const availableBudget = Math.max(
     0,
-    contextLimit - systemPromptTokens - maxOutputTokens,
+    contextLimit - systemPromptTokens - reservedOutputTokens,
   );
 
   // Determine a safe maximum character limit for tool outputs based on the budget.

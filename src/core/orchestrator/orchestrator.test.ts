@@ -1868,7 +1868,7 @@ describe("Orchestrator", () => {
       // Create group first
       await createGroup(db, "Test Group", "", "group-pinned-usage");
 
-      // Pin a model with a small context limit (Llama-3 model context limit is 8192)
+      // Pin a model with a 128k context limit (Llama-3.2 model context limit is 128000)
       await updateGroupPinnedProvider(
         db,
         "group-pinned-usage",
@@ -1884,7 +1884,7 @@ describe("Orchestrator", () => {
 
       await o.refreshContextUsage(db, "group-pinned-usage");
 
-      expect(contextLimitResult).toBe(8192); // context limit of Llama-3 model is 8192
+      expect(contextLimitResult).toBe(128000); // context limit of Llama-3.2 model is 128000
     });
   });
 

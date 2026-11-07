@@ -147,6 +147,21 @@ describe("buildDynamicContext", () => {
     expect(result.usagePercent).toBe(0);
   });
 
+  it("caps reserved maxOutputTokens to half of contextLimit so oversized output limits do not starve message history", () => {
+    const messages = [
+      makeMsg("user", "First message"),
+      makeMsg("assistant", "First reply"),
+      makeMsg("user", "what tools do you have available?"),
+    ];
+    const result = buildDynamicContext(messages, {
+      contextLimit: 4096,
+      systemPromptTokens: 1500,
+      maxOutputTokens: 32768,
+    });
+    expect(result.messages).toHaveLength(3);
+    expect(result.truncatedCount).toBe(0);
+  });
+
   describe("skimTop option", () => {
     it("keeps top user message when older messages exceed budget and are truncated", () => {
       const topMsg = makeMsg("user", "Initial prompt");

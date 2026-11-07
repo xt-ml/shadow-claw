@@ -3057,6 +3057,51 @@ describe("OrchestratorStore", () => {
       }
     });
 
+    it("preserves user-saved toolTags on DEFAULT_GROUP_ID on subsequent reloads after site-config is seeded", async () => {
+      const store = new OrchestratorStore();
+      const events = createEvents();
+      const orch: any = {
+        events,
+        getUseProxy: () => false,
+        getProxyUrl: () => "",
+        getGitProxyUrl: () => "",
+        getVMBashFullInternetAccess: () => false,
+        getTaskServerUrl: () => "/schedule",
+        taskServerEnabled: true,
+      };
+
+      const configElement = document.createElement("script");
+      configElement.id = "shadow-claw-site-config";
+      configElement.type = "application/json";
+      configElement.textContent = JSON.stringify({});
+      document.head.appendChild(configElement);
+
+      mockGetConfig.mockImplementation(async (_db: any, key: string) => {
+        if (key === CONFIG_KEYS.SITE_CONFIG_SEEDED) {
+          return "true";
+        }
+        return undefined;
+      });
+      mockListGroups.mockResolvedValue([
+        {
+          groupId: DEFAULT_GROUP_ID,
+          name: "Main",
+          toolTags: ["get_current_time"],
+        },
+      ]);
+
+      try {
+        await store.init({} as any, orch);
+        expect(mockUpdateGroupToolTags).not.toHaveBeenCalledWith(
+          expect.anything(),
+          DEFAULT_GROUP_ID,
+          undefined,
+        );
+      } finally {
+        configElement.remove();
+      }
+    });
+
     it("handles sendMessage with and without a2uiAction", async () => {
       const store = new OrchestratorStore();
       const mockSubmit = jest.fn();

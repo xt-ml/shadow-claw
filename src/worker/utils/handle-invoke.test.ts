@@ -1621,4 +1621,39 @@ describe("handleInvoke.js", () => {
       setNodeTransformersCompletionExecutor(null);
     }
   });
+
+  it("passes payload.contextLimit to createTokenUsageMessage instead of re-querying getContextLimit", async () => {
+    (mockGetContextLimit as any).mockReturnValue(4096);
+    (mockGetProvider as any).mockReturnValue({
+      name: "OpenRouter",
+      baseUrl: "https://openrouter.ai/api/v1/chat/completions",
+    });
+    (mockFormatRequest as any).mockReturnValue({ body: "req" });
+    (mockParseResponse as any).mockReturnValueOnce({
+      stop_reason: "end_turn",
+      content: [{ type: "text", text: "Hello!" }],
+      usage: { input_tokens: 120, output_tokens: 30 },
+    });
+    (global as any).fetch = (jest.fn() as any).mockResolvedValue({
+      ok: true,
+      json: (jest.fn() as any).mockResolvedValue({}),
+    });
+
+    await handleInvoke(
+      {} as any,
+      {
+        groupId: "g1",
+        model: "openrouter/free",
+        contextLimit: 200000,
+        messages: [{ role: "user", content: "hi" }],
+        provider: "openrouter",
+      } as any,
+    );
+
+    expect(mockCreateTokenUsageMessage).toHaveBeenCalledWith(
+      "g1",
+      { input_tokens: 120, output_tokens: 30 },
+      200000,
+    );
+  });
 });

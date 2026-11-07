@@ -548,4 +548,23 @@ describe("ModelRegistry", () => {
       (globalThis as any).fetch = originalFetch;
     }
   });
+
+  it("registers models directly from a fetched model list via registerModelsFromList", () => {
+    const count = (modelRegistry as any).registerModelsFromList([
+      {
+        id: "openrouter/free",
+        context_length: 200000,
+        top_provider: { max_completion_tokens: 32768 },
+      },
+      "string-only-model",
+      null,
+    ]);
+
+    expect(count).toBe(1);
+    expect(modelRegistry.getModelInfo("openrouter/free")).toEqual({
+      contextWindow: 200000,
+      maxOutput: 32768,
+      routesByRequestFeatures: true,
+    });
+  });
 });

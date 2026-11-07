@@ -1336,7 +1336,19 @@ export function getContextLimit(model: string): number {
   }
 
   // Meta Llama
-  if (m.includes("llama-3.1") || m.includes("llama-3-1")) {
+  if (
+    m.includes("llama-3.1") ||
+    m.includes("llama-3-1") ||
+    m.includes("llama-3.2") ||
+    m.includes("llama-3-2") ||
+    m.includes("llama-3.3") ||
+    m.includes("llama-3-3") ||
+    m.includes("llama3.1") ||
+    m.includes("llama3.2") ||
+    m.includes("llama3.3") ||
+    m.includes("llama-4") ||
+    m.includes("llama4")
+  ) {
     return 128_000;
   }
 
@@ -1364,6 +1376,7 @@ export function getContextLimit(model: string): number {
   }
 
   if (
+    m.includes("gemma-3-1b-it-onnx-gqa") ||
     m.includes("gemma-3-4b") ||
     m.includes("gemma-3-12b") ||
     m.includes("gemma-3-27b")
@@ -1385,6 +1398,11 @@ export function getContextLimit(model: string): number {
 
   if (m.includes("gemma")) {
     return 8_192;
+  }
+
+  // DeepSeek family
+  if (m.includes("deepseek-r1") || m.includes("deepseek-v3")) {
+    return 128_000;
   }
 
   // Mistral
@@ -1438,7 +1456,19 @@ export function getContextLimit(model: string): number {
     return 4_096;
   }
 
-  // Qwen3 / Qwen3.5 (covers Mesh LLM unsloth GGUF variants)
+  if (m.includes("gpt-oss")) {
+    return 128_000;
+  }
+
+  if (m.includes("lfm2")) {
+    return 32_768;
+  }
+
+  if (m.includes("smollm")) {
+    return 8_192;
+  }
+
+  // Qwen 2.5 / Qwen3 / Qwen3.5 (covers Mesh LLM unsloth GGUF variants)
   // native_context_length from Mesh LLM API:
   //   Qwen3.5-9B-MTP: 262 144   Qwen3-0.6B/8B: 40 960   Qwen3-4B: 32 768
   if (m.includes("qwen3.5")) {
@@ -1449,8 +1479,13 @@ export function getContextLimit(model: string): number {
     return 40_960;
   }
 
-  if (m.includes("qwen3")) {
+  if (m.includes("qwen3") || m.includes("qwen-2.5") || m.includes("qwen2.5")) {
     return 128_000;
+  }
+
+  // OpenRouter dynamic routing meta-models (openrouter/free, openrouter/auto)
+  if (m === "openrouter/free" || m === "openrouter/auto") {
+    return 200_000;
   }
 
   // Mesh LLM "mesh" routing model (MoA) — reported context_length 242 144

@@ -132,6 +132,33 @@ function injectGlobalShimPlugin() {
   };
 }
 
+export function promptApiFirebaseAiCompatPlugin() {
+  const moduleId = "\0shadow-claw-prompt-api-firebase-ai";
+  return {
+    name: "prompt-api-firebase-ai-compat",
+    resolveId(source, importer) {
+      const path = importer?.replaceAll("\\", "/").split("?")[0];
+      if (
+        source === "firebase/ai" &&
+        path?.endsWith(
+          "/node_modules/prompt-api-polyfill/dist/backends/firebase.js",
+        )
+      ) {
+        return moduleId;
+      }
+      return null;
+    },
+    load(id) {
+      if (id !== moduleId) return null;
+      return `export * from "firebase/ai";
+import { AgentPlatformBackend } from "firebase/ai";
+export class VertexAIBackend extends AgentPlatformBackend {
+  constructor() { super("us-central1"); }
+}`;
+    },
+  };
+}
+
 function patchGrayMatterEvalPlugin() {
   return {
     name: "patch-gray-matter-direct-eval",
@@ -236,6 +263,7 @@ const commonResolve = (platform = "browser", extraPlugins = []) => {
     resolve: resolveConfig,
     commonjs: true,
     plugins: [
+      promptApiFirebaseAiCompatPlugin(),
       ...(platform === "browser" ? [injectGlobalShimPlugin()] : []),
       replacePrerenderMainMemoryPlugin(),
       patchGrayMatterEvalPlugin(),

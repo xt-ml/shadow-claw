@@ -113,6 +113,63 @@ describe("builtin-ai worker tools", () => {
   });
 
   describe("executeWriteText", () => {
+    it("explains how to prepare a model when a user gesture is required", async () => {
+      mockMainThreadReject(
+        new Error(
+          'Requires a user gesture when availability is "downloadable".',
+        ),
+      );
+
+      const result = await executeWriteText({ prompt: "Draft" });
+
+      expect(result).toContain("Download Local AI Model");
+      expect(result).toContain("Settings");
+    });
+
+    it("removes the abort listener when a main-thread task completes", async () => {
+      const controller = new AbortController();
+      mockMainThreadResponse("Draft complete");
+      const result = await executeWriteText({ prompt: "Draft" }, "group-1", {
+        invokeContext: { abortSignal: controller.signal },
+      });
+
+      controller.abort();
+      expect(result).toBe("Draft complete");
+      expect(mockPost).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not start a main-thread task for an already aborted invocation", async () => {
+      const controller = new AbortController();
+      controller.abort();
+      const result = await executeWriteText({ prompt: "Draft" }, "group-1", {
+        invokeContext: { abortSignal: controller.signal },
+      });
+
+      expect(result).toMatch(/Error writing text:/);
+      expect(mockPost).not.toHaveBeenCalled();
+    });
+
+    it("cancels the main-thread task when the invocation is aborted", async () => {
+      const controller = new AbortController();
+      const result = executeWriteText({ prompt: "Draft" }, "group-1", {
+        invokeContext: { abortSignal: controller.signal },
+      });
+      const request = mockPost.mock.calls[0][0] as any;
+      controller.abort();
+      (globalThis as any).pendingNativeAiResolvers?.[
+        request.payload.id
+      ]?.resolve("Done");
+      await result;
+
+      expect(mockPost).toHaveBeenCalledWith({
+        type: "cancel-native-ai-task",
+        payload: { id: request.payload.id, groupId: "group-1" },
+      });
+      expect(
+        (globalThis as any).pendingNativeAiResolvers?.[request.payload.id],
+      ).toBeUndefined();
+    });
+
     it("returns error message when prompt is missing", async () => {
       const res = await executeWriteText({});
       expect(res).toBe("Error: prompt is required for write_text");
@@ -162,6 +219,14 @@ describe("builtin-ai worker tools", () => {
   });
 
   describe("executeRewriteText", () => {
+    it("explains how to prepare a model when activation is required", async () => {
+      mockMainThreadReject(new Error("Requires user activation"));
+
+      const result = await executeRewriteText({ text: "Draft" });
+
+      expect(result).toContain("Download Local AI Model");
+    });
+
     it("returns error message when text is missing", async () => {
       const res = await executeRewriteText({});
       expect(res).toBe("Error: text is required for rewrite_text");

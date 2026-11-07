@@ -98,6 +98,22 @@ describe("executeNativeAiTask", () => {
       expect(prompt).toContain("Rough draft");
     });
 
+    it.each([
+      ["write", { prompt: "Draft an invite" }],
+      ["rewrite", { text: "Rough draft" }],
+    ])("includes language and both contexts for %s", (taskType, input) => {
+      const prompt = buildTaskPrompt(taskType, {
+        ...input,
+        outputLanguage: "fr",
+        sharedContext: "Company style guide",
+        context: "For a customer",
+      });
+
+      expect(prompt).toContain("fr");
+      expect(prompt).toContain("Company style guide");
+      expect(prompt).toContain("For a customer");
+    });
+
     it("generates correct prompt for proofread task", () => {
       const prompt = buildTaskPrompt("proofread", {
         text: "Teh cat sat on teh mat",
@@ -130,6 +146,22 @@ describe("executeNativeAiTask", () => {
   });
 
   describe("local tools backend", () => {
+    it("forwards cancellation to local writing tasks", async () => {
+      const signal = new AbortController().signal;
+      mockWriteText.mockResolvedValue("Draft");
+
+      await executeNativeAiTask({
+        taskType: "write",
+        input: { prompt: "Draft" },
+        toolsBackendPref: "local",
+        abortSignal: signal,
+      });
+      expect(mockWriteText).toHaveBeenCalledWith(
+        "Draft",
+        expect.objectContaining({ signal }),
+      );
+    });
+
     it("calls rewriteText with extended options when toolsBackendPref is local", async () => {
       mockRewriteText.mockResolvedValue("Happy day greeting!");
 
@@ -278,6 +310,35 @@ describe("executeNativeAiTask", () => {
   });
 
   describe("active provider backend", () => {
+    it("forwards cancellation to active-provider HTTP requests", async () => {
+      const signal = new AbortController().signal;
+      mockGetProvider.mockReturnValue({
+        baseUrl: "https://example.test",
+        format: "openai",
+        requiresApiKey: false,
+      });
+      mockBuildHeaders.mockReturnValue({});
+      mockFormatRequest.mockReturnValue({});
+      mockParseResponse.mockReturnValue({
+        content: [{ type: "text", text: "Result" }],
+      });
+      const fetch = jest
+        .fn<any>()
+        .mockResolvedValue({ ok: true, json: async () => ({}) });
+      globalThis.fetch = fetch;
+
+      await executeNativeAiTask({
+        taskType: "rewrite",
+        input: { text: "Draft" },
+        providerId: "custom",
+        abortSignal: signal,
+      });
+      expect(fetch).toHaveBeenCalledWith(
+        "https://example.test",
+        expect.objectContaining({ signal }),
+      );
+    });
+
     it("calls active provider HTTP endpoint with formatted request for rewrite task", async () => {
       mockGetProvider.mockReturnValue({
         name: "OpenRouter",

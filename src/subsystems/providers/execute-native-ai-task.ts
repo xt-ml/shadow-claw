@@ -94,10 +94,10 @@ export function buildTaskPrompt(
     return `Summarize the following text (type: ${input.type || "tldr"}, format: ${input.format || "plain-text"}, length: ${input.length || "medium"}). Provide ONLY the summary:\n\n${input.text}`;
   }
   if (taskType === "write") {
-    return `Draft content for the following request (tone: ${input.tone || "neutral"}, format: ${input.format || "plain-text"}, length: ${input.length || "short"}, context: ${input.context || "none"}):\n\n${input.prompt}`;
+    return `Draft content for the following request (tone: ${input.tone || "neutral"}, format: ${input.format || "plain-text"}, length: ${input.length || "short"}, context: ${input.context || "none"}${input.outputLanguage ? `, output language: ${input.outputLanguage}` : ""}${input.sharedContext ? `, shared context: ${input.sharedContext}` : ""}):\n\n${input.prompt}`;
   }
   if (taskType === "rewrite") {
-    return `Rewrite the following text (tone: ${input.tone || "as-is"}, format: ${input.format || "as-is"}, length: ${input.length || "as-is"}, context: ${input.context || "none"}):\n\n${input.text}`;
+    return `Rewrite the following text (tone: ${input.tone || "as-is"}, format: ${input.format || "as-is"}, length: ${input.length || "as-is"}, context: ${input.context || "none"}${input.outputLanguage ? `, output language: ${input.outputLanguage}` : ""}${input.sharedContext ? `, shared context: ${input.sharedContext}` : ""}):\n\n${input.text}`;
   }
   if (taskType === "proofread") {
     return `Proofread and correct grammar, spelling, and style in the following text. Provide ONLY the corrected text:\n\n${input.text}`;
@@ -184,6 +184,7 @@ export async function executeNativeAiTask(
   options: ExecuteNativeAiTaskOptions,
 ): Promise<any> {
   const { taskType, input, onProgress } = options;
+  options.abortSignal?.throwIfAborted();
   const toolsBackendPref = await resolveToolsBackendPref(options);
 
   if (toolsBackendPref === "local") {
@@ -191,10 +192,18 @@ export async function executeNativeAiTask(
       return await summarizeText(input.text, { ...input, onProgress });
     }
     if (taskType === "write") {
-      return await writeText(input.prompt, { ...input, onProgress });
+      return await writeText(input.prompt, {
+        ...input,
+        onProgress,
+        signal: options.abortSignal,
+      });
     }
     if (taskType === "rewrite") {
-      return await rewriteText(input.text, { ...input, onProgress });
+      return await rewriteText(input.text, {
+        ...input,
+        onProgress,
+        signal: options.abortSignal,
+      });
     }
     if (taskType === "proofread") {
       return await proofreadText(input.text, { ...input, onProgress });
@@ -244,8 +253,11 @@ export async function executeNativeAiTask(
     if (LanguageModelApi && typeof LanguageModelApi.create === "function") {
       let session;
       try {
-        session = await LanguageModelApi.create();
-      } catch (err) {
+        session = await LanguageModelApi.create(
+          options.abortSignal ? { signal: options.abortSignal } : undefined,
+        );
+      } catch (err: any) {
+        if (err?.name !== "NotSupportedError") throw err;
         console.warn(
           "Prompt API session creation failed in active provider task:",
           err,
@@ -253,7 +265,9 @@ export async function executeNativeAiTask(
       }
       if (session) {
         try {
-          const raw = await session.prompt(prompt);
+          const raw = await (options.abortSignal
+            ? session.prompt(prompt, { signal: options.abortSignal })
+            : session.prompt(prompt));
           const textResult = String(raw || "").trim();
           if (taskType === "detect-language") {
             try {
@@ -286,10 +300,18 @@ export async function executeNativeAiTask(
       return await summarizeText(input.text, input);
     }
     if (taskType === "write") {
-      return await writeText(input.prompt, input);
+      return await writeText(input.prompt, {
+        ...input,
+        signal: options.abortSignal,
+        onProgress,
+      });
     }
     if (taskType === "rewrite") {
-      return await rewriteText(input.text, input);
+      return await rewriteText(input.text, {
+        ...input,
+        signal: options.abortSignal,
+        onProgress,
+      });
     }
     if (taskType === "proofread") {
       return await proofreadText(input.text, input);
@@ -417,6 +439,7 @@ export async function executeNativeAiTask(
     body: JSON.stringify(body),
     headers,
     method: "POST",
+    ...(options.abortSignal ? { signal: options.abortSignal } : {}),
   });
 
   if (!res.ok) {

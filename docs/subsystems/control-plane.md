@@ -155,8 +155,8 @@ Users can toggle between transports in **Settings $\rightarrow$ Integrations $\r
 - `send-message`: Submits message/prompt into Orchestrator queue (supports optional `groupId` e.g. `br:main` or `peer:<peerId>`).
 - `list-tasks`: Queries scheduled tasks from IndexedDB.
 - `read-state`: Returns current active conversation group and state.
-- `invoke-tool`: Invokes WebMCP (`document.modelContext`) tools directly.
-- `list-tools`: Discovers available WebMCP and worker tools on the connected client.
+- `invoke-tool`: Invokes WebMCP (`document.modelContext`) tools directly, validating results against tool output schemas when defined.
+- `list-tools`: Discovers available WebMCP and worker tools on the connected client, including normalized `inputSchema` and optional `outputSchema`.
 - `trigger-backup`: Initiates workspace upload via `BackupController`.
 
 ---

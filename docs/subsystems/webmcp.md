@@ -101,6 +101,12 @@ Returns `true` on success, `false` if the ModelContext API is unavailable.
 Registration is **idempotent** — tools already in `registeredToolNames` are skipped on
 subsequent calls. The event loop is yielded between each registration to avoid blocking.
 
+If a tool definition declares `output_schema`, registration also supplies it as
+`outputSchema`. ShadowClaw validates that tool's worker result before returning it;
+JSON-serialized results are decoded for structured output. Tools without an output
+schema retain their existing return values. Native Chrome 159+ exposes the schema
+to consumers; older browsers and the current polyfill may ignore it.
+
 Each tool is registered with annotations resolved by `resolveWebMcpToolAnnotations(toolName)`:
 
 - `consequentialHint`: `true` for high-stakes, irreversible, or real-world actions requiring user confirmation (Chrome 154.0.8017.0+ / Issue #176). E.g. `bash`, `delete_file`, `delete_task`, `git_delete_repo`, `git_delete_branch`, `git_reset`, `git_push`, `email_send_message`, `clear_chat`.
@@ -137,7 +143,7 @@ Queries tools registered on `document.modelContext.getTools()` while practicing 
 1. Feature-detects `getTools()` on `modelContext`.
 2. If `getTools()` is absent (older browser builds or basic polyfills), returns an empty array `[]` without throwing.
 3. Supports optional `fromOrigins` filtering to discover cross-frame/cross-origin tools (Chrome 155+).
-4. Normalizes `inputSchema` and returns tool metadata including `name`, `title`, `description`, and `annotations`.
+4. Normalizes `inputSchema` and optional object or JSON-string `outputSchema`, and returns tool metadata including `name`, `title`, `description`, and `annotations`. If the browser does not expose an output schema, the field is omitted.
 
 ### `executeWebMcpTool(modelContext, tool, input?, options?): Promise<unknown>`
 
@@ -146,6 +152,7 @@ Executes a tool on a WebMCP `ModelContext` instance with backwards compatibility
 1. Accepts an optional JavaScript object directly or a JSON string.
 2. Calls `modelContext.executeTool(tool, inputObject, options)` first.
 3. If the host environment rejects with an error starting with `"Failed to parse input"` (Chrome < 155 / `@mcp-b/webmcp-polyfill`) or a WebIDL `TypeError`, it retries with `JSON.stringify(inputObject)`.
+4. When a tool exposes `outputSchema`, validates the result with a CSP-compatible JSON Schema validator. JSON-serialized results are decoded for validation. A mismatch or unusable schema raises a descriptive error, without retrying the tool; successful results are returned unchanged. With no available schema, results pass through unchanged.
 
 ### `getWebMcpEventTarget(type?): WebMcpEventTarget | null`
 

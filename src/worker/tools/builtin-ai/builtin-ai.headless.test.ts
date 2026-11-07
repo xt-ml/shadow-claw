@@ -85,6 +85,18 @@ describe("builtin-ai in headless mode", () => {
     );
   });
 
+  it("forwards the invocation abort signal to headless task execution", async () => {
+    const signal = new AbortController().signal;
+    mockExecuteNativeAiTask.mockResolvedValue("Draft");
+
+    await executeWriteText({ prompt: "Draft" }, "server:main", {
+      invokeContext: { abortSignal: signal },
+    });
+    expect(mockExecuteNativeAiTask).toHaveBeenCalledWith(
+      expect.objectContaining({ abortSignal: signal }),
+    );
+  });
+
   it("handles errors gracefully in headless mode and returns an error string", async () => {
     mockExecuteNativeAiTask.mockRejectedValue(
       new Error("Provider openrouter requires an API key"),

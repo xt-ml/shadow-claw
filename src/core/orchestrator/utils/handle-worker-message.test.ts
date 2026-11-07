@@ -1051,6 +1051,38 @@ describe("handleWorkerMessage", () => {
   });
 
   describe("request-native-ai-task", () => {
+    it("aborts an in-flight task when the worker cancels its request", async () => {
+      mockGetConfig.mockResolvedValue("local");
+      let signal: AbortSignal | undefined;
+      mockWriteText.mockImplementation(
+        async (_prompt: unknown, options: unknown) => {
+          signal = (options as { signal?: AbortSignal }).signal;
+          return await new Promise((_resolve, reject) => {
+            signal?.addEventListener("abort", () => reject(signal?.reason), {
+              once: true,
+            });
+          });
+        },
+      );
+
+      await send({
+        type: "request-native-ai-task",
+        payload: {
+          id: "cancel-task",
+          groupId: "g1",
+          taskType: "write",
+          input: { prompt: "Draft" },
+        },
+      });
+      await new Promise(process.nextTick);
+      expect(signal).toBeDefined();
+      await send({
+        type: "cancel-native-ai-task",
+        payload: { id: "cancel-task", groupId: "g1" },
+      });
+      expect(signal?.aborted).toBe(true);
+    });
+
     it("handles local backend preference and resolves pendingNativeAiResolvers on globalThis", async () => {
       mockGetConfig.mockResolvedValue("local");
       mockTranslateText.mockResolvedValue("tres");
@@ -1171,6 +1203,7 @@ describe("handleWorkerMessage", () => {
       expect(mockCreate).toHaveBeenCalled();
       expect(mockPrompt).toHaveBeenCalledWith(
         expect.stringContaining("Translate the following text"),
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
       );
       expect(mockDestroy).toHaveBeenCalled();
       expect(localResolve).toHaveBeenCalledWith("tres");

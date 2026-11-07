@@ -1,7 +1,7 @@
 /**
  * Built-in AI Prompt Builders
- * Generates exact system-prompt and user-prompt templates matching Chrome's
- * internal implementations (Gemini Nano) for Writer, Rewriter, and Summarizer tasks.
+ * Generates task prompts inspired by Chrome's Writer, Rewriter, and Summarizer
+ * implementations. These templates are maintained independently.
  */
 
 export interface PromptResult {

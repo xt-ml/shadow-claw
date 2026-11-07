@@ -56,6 +56,69 @@ describe("builtin-ai-tasks subsystem", () => {
     }
   });
 
+  describe("Google writing adapter compatibility", () => {
+    it.each([
+      ["writer-rewriter-polyfills/writer", "Writer"],
+      ["writer-rewriter-polyfills/rewriter", "Rewriter"],
+    ])(
+      "uses current Prompt API context measurement in %s",
+      async (moduleName, exportName) => {
+        const measureContextUsage = jest.fn<any>().mockResolvedValue(17);
+        (globalThis as any).LanguageModel = {
+          availability: jest.fn<any>().mockResolvedValue("available"),
+          create: jest.fn<any>().mockResolvedValue({
+            measureContextUsage,
+            contextWindow: 2048,
+            destroy: jest.fn<any>(),
+          }),
+        };
+
+        const module = await import(moduleName);
+        const instance = await module[exportName].create();
+        try {
+          await expect(instance.measureInputUsage("text")).resolves.toBe(17);
+          expect(instance.inputQuota).toBe(2048);
+        } finally {
+          instance.destroy();
+        }
+      },
+    );
+  });
+
+  describe("native writing fallback", () => {
+    it.each([
+      ["Writer", "writer", writeText],
+      ["Rewriter", "rewriter", rewriteText],
+    ])(
+      "tries the Google adapter after unsupported native %s",
+      async (name, key, execute) => {
+        const create = jest
+          .fn<any>()
+          .mockRejectedValue(
+            new DOMException("Unavailable", "NotSupportedError"),
+          );
+        const legacyCreate = jest.fn<any>();
+        (globalThis as any)[name] = { create };
+        setCustomLegacyTaskFactories({ [key]: { create: legacyCreate } });
+        (globalThis as any).LanguageModel = {
+          availability: jest.fn<any>().mockResolvedValue("available"),
+          create: jest.fn<any>().mockResolvedValue({
+            clone: jest.fn<any>().mockResolvedValue({
+              prompt: jest.fn<any>().mockResolvedValue("Adapter result"),
+              destroy: jest.fn<any>(),
+            }),
+            destroy: jest.fn<any>(),
+          }),
+        };
+
+        await expect(execute("Private content")).resolves.toBe(
+          "Adapter result",
+        );
+        expect(legacyCreate).not.toHaveBeenCalled();
+      },
+    );
+  });
+
   describe("isWebGpuAdapterAvailable", () => {
     it("returns false when navigator.gpu is absent or requestAdapter fails", async () => {
       const originalNavigator = globalThis.navigator;
@@ -187,6 +250,21 @@ describe("builtin-ai-tasks subsystem", () => {
   });
 
   describe("createTaskInstanceWithFallback", () => {
+    it.each(["AbortError", "QuotaExceededError", "NotAllowedError"])(
+      "does not retry %s even when its message mentions WebGPU",
+      async (name) => {
+        (globalThis as any).TRANSFORMERS_CONFIG = { device: "webgpu" };
+        const error = new DOMException("WebGPU operation failed", name);
+        const create = jest.fn<any>().mockRejectedValue(error);
+
+        await expect(
+          createTaskInstanceWithFallback({ create }, {}),
+        ).rejects.toBe(error);
+        expect(create).toHaveBeenCalledTimes(1);
+        expect((globalThis as any).TRANSFORMERS_CONFIG.device).toBe("webgpu");
+      },
+    );
+
     it("retries with wasm CPU fallback when WebGPU backend fails during creation", async () => {
       (globalThis as any).TRANSFORMERS_CONFIG = {
         device: "webgpu",
@@ -373,6 +451,28 @@ describe("builtin-ai-tasks subsystem", () => {
   });
 
   describe("ensureBuiltinAiPolyfills", () => {
+    it("does not fabricate user activation when the browser is inactive", async () => {
+      const originalNavigator = globalThis.navigator;
+      const userActivation = { isActive: false, hasBeenActive: false };
+      try {
+        Object.defineProperty(globalThis, "navigator", {
+          value: { userActivation },
+          configurable: true,
+        });
+        (globalThis as any).LanguageModel = class {};
+
+        await ensureBuiltinAiPolyfills();
+
+        expect(globalThis.navigator.userActivation).toBe(userActivation);
+        expect(globalThis.navigator.userActivation.isActive).toBe(false);
+      } finally {
+        Object.defineProperty(globalThis, "navigator", {
+          value: originalNavigator,
+          configurable: true,
+        });
+      }
+    });
+
     it("runs without error and attempts polyfill load when globals are absent", async () => {
       await expect(ensureBuiltinAiPolyfills()).resolves.not.toThrow();
     });
@@ -451,6 +551,27 @@ describe("builtin-ai-tasks subsystem", () => {
   });
 
   describe("summarizeText", () => {
+    it("uses the custom prompt instead of a native summarizer when overridePrompt is supplied", async () => {
+      const createSummarizer = jest.fn<any>();
+      const prompt = jest.fn<any>().mockResolvedValue("Custom summary");
+      const destroy = jest.fn<any>();
+      (globalThis as any).Summarizer = { create: createSummarizer };
+      const create = jest.fn<any>().mockResolvedValue({ prompt, destroy });
+      (globalThis as any).LanguageModel = { create };
+
+      await expect(
+        summarizeText("Contract", { overridePrompt: "Custom instructions" }),
+      ).resolves.toBe("Custom summary");
+      expect(createSummarizer).not.toHaveBeenCalled();
+      expect(create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          initialPrompts: [{ role: "system", content: "Custom instructions" }],
+        }),
+      );
+      expect(prompt).toHaveBeenCalledWith("TEXT: Contract");
+      expect(destroy).toHaveBeenCalled();
+    });
+
     it("calls Summarizer.create and summarizer.summarize (Tier 1)", async () => {
       const mockSummarize = jest.fn<any>().mockResolvedValue("Short summary.");
       const mockDestroy = jest.fn<any>();
@@ -531,7 +652,9 @@ describe("builtin-ai-tasks subsystem", () => {
       expect(result).toBe("Prompt API generated summary.");
       expect((globalThis as any).LanguageModel.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          systemPrompt: expect.stringMatching(/headline/i),
+          initialPrompts: [
+            { role: "system", content: expect.stringMatching(/headline/i) },
+          ],
         }),
       );
       expect(mockPrompt).toHaveBeenCalledWith("TEXT: Important briefing");
@@ -563,7 +686,7 @@ describe("builtin-ai-tasks subsystem", () => {
       expect(result).toBe("Custom prompt summary.");
       expect((globalThis as any).LanguageModel.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          systemPrompt: customPrompt,
+          initialPrompts: [{ role: "system", content: customPrompt }],
         }),
       );
     });
@@ -586,6 +709,37 @@ describe("builtin-ai-tasks subsystem", () => {
   });
 
   describe("writeText", () => {
+    it("forwards cancellation to writer creation and execution", async () => {
+      const signal = new AbortController().signal;
+      const write = jest.fn<any>().mockResolvedValue("Draft");
+      const create = jest
+        .fn<any>()
+        .mockResolvedValue({ write, destroy: jest.fn<any>() });
+      (globalThis as any).Writer = { create };
+
+      await writeText("Draft", { signal, context: "Context" });
+      expect(create).toHaveBeenCalledWith(expect.objectContaining({ signal }));
+      expect(write).toHaveBeenCalledWith("Draft", {
+        context: "Context",
+        signal,
+      });
+    });
+
+    it.each(["AbortError", "QuotaExceededError", "TypeError"])(
+      "does not fall back after a writer %s",
+      async (name) => {
+        const error = new DOMException("Writer failed", name);
+        const legacyCreate = jest.fn<any>();
+        (globalThis as any).Writer = {
+          create: jest.fn<any>().mockRejectedValue(error),
+        };
+        setCustomLegacyTaskFactories({ writer: { create: legacyCreate } });
+
+        await expect(writeText("Draft an email")).rejects.toBe(error);
+        expect(legacyCreate).not.toHaveBeenCalled();
+      },
+    );
+
     it("calls Writer.create and writer.write (Tier 1)", async () => {
       const mockWrite = jest.fn<any>().mockResolvedValue("Generated output.");
       const mockDestroy = jest.fn<any>();
@@ -640,12 +794,20 @@ describe("builtin-ai-tasks subsystem", () => {
     });
 
     it("falls back to Tier 3 (Prompt API session) when Tier 1 and Tier 2 both fail", async () => {
-      delete (globalThis as any).Writer;
+      (globalThis as any).Writer = {
+        create: jest
+          .fn<any>()
+          .mockRejectedValue(
+            new DOMException("Unavailable", "NotSupportedError"),
+          ),
+      };
       setCustomLegacyTaskFactories({
         writer: {
           create: jest
             .fn<any>()
-            .mockRejectedValue(new Error("Legacy polyfill unavailable")),
+            .mockRejectedValue(
+              new DOMException("Unavailable", "NotSupportedError"),
+            ),
         },
       });
 
@@ -669,23 +831,90 @@ describe("builtin-ai-tasks subsystem", () => {
       expect(result).toBe("Prompt API generated writing.");
       expect((globalThis as any).LanguageModel.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          systemPrompt: expect.stringContaining("casual"),
+          initialPrompts: [
+            { role: "system", content: expect.stringContaining("casual") },
+          ],
         }),
       );
       expect(mockPrompt).toHaveBeenCalledWith("TEXT: Write a blog post");
       expect(mockDestroy).toHaveBeenCalled();
     });
 
-    it("throws clear error when all three tiers fail", async () => {
-      delete (globalThis as any).Writer;
+    it("does not retry a failed Prompt API session without task instructions", async () => {
+      (globalThis as any).Writer = {
+        create: jest
+          .fn<any>()
+          .mockRejectedValue(
+            new DOMException("Unavailable", "NotSupportedError"),
+          ),
+      };
       setCustomLegacyTaskFactories({
         writer: {
           create: jest
             .fn<any>()
-            .mockRejectedValue(new Error("Legacy polyfill failed")),
+            .mockRejectedValue(
+              new DOMException("Unavailable", "NotSupportedError"),
+            ),
         },
       });
-      delete (globalThis as any).LanguageModel;
+      const create = jest
+        .fn<any>()
+        .mockRejectedValue(new Error("Create failed"));
+      (globalThis as any).LanguageModel = { create };
+
+      await expect(writeText("Draft an email")).rejects.toThrow(
+        "Create failed",
+      );
+      expect(create).toHaveBeenCalledTimes(1);
+      expect(create).toHaveBeenCalledWith(
+        expect.objectContaining({ initialPrompts: expect.any(Array) }),
+      );
+    });
+
+    it("forwards cancellation to the direct Prompt API fallback", async () => {
+      const signal = new AbortController().signal;
+      const unsupported = jest
+        .fn<any>()
+        .mockRejectedValue(
+          new DOMException("Unavailable", "NotSupportedError"),
+        );
+      (globalThis as any).Writer = { create: unsupported };
+      setCustomLegacyTaskFactories({ writer: { create: unsupported } });
+      const prompt = jest.fn<any>().mockResolvedValue("Draft");
+      const create = jest
+        .fn<any>()
+        .mockResolvedValue({ prompt, destroy: jest.fn<any>() });
+      (globalThis as any).LanguageModel = { create };
+
+      await expect(writeText("Draft", { signal })).resolves.toBe("Draft");
+      expect(create).toHaveBeenCalledWith(expect.objectContaining({ signal }));
+      expect(prompt).toHaveBeenCalledWith("TEXT: Draft", { signal });
+    });
+
+    it("throws clear error when all three tiers fail", async () => {
+      (globalThis as any).Writer = {
+        create: jest
+          .fn<any>()
+          .mockRejectedValue(
+            new DOMException("Unavailable", "NotSupportedError"),
+          ),
+      };
+      setCustomLegacyTaskFactories({
+        writer: {
+          create: jest
+            .fn<any>()
+            .mockRejectedValue(
+              new DOMException("Unavailable", "NotSupportedError"),
+            ),
+        },
+      });
+      (globalThis as any).LanguageModel = {
+        create: jest
+          .fn<any>()
+          .mockRejectedValue(
+            new DOMException("Unavailable", "NotSupportedError"),
+          ),
+      };
 
       await expect(writeText("Write something")).rejects.toThrow(
         /Writer task failed across all tiers/i,
@@ -694,6 +923,34 @@ describe("builtin-ai-tasks subsystem", () => {
   });
 
   describe("rewriteText", () => {
+    it("forwards cancellation to rewriter creation and execution", async () => {
+      const signal = new AbortController().signal;
+      const rewrite = jest.fn<any>().mockResolvedValue("Rewritten");
+      const create = jest
+        .fn<any>()
+        .mockResolvedValue({ rewrite, destroy: jest.fn<any>() });
+      (globalThis as any).Rewriter = { create };
+
+      await rewriteText("Draft", { signal });
+      expect(create).toHaveBeenCalledWith(expect.objectContaining({ signal }));
+      expect(rewrite).toHaveBeenCalledWith("Draft", { signal });
+    });
+
+    it.each(["AbortError", "QuotaExceededError", "TypeError"])(
+      "does not fall back after a rewriter %s",
+      async (name) => {
+        const error = new DOMException("Rewriter failed", name);
+        const legacyCreate = jest.fn<any>();
+        (globalThis as any).Rewriter = {
+          create: jest.fn<any>().mockRejectedValue(error),
+        };
+        setCustomLegacyTaskFactories({ rewriter: { create: legacyCreate } });
+
+        await expect(rewriteText("Rough draft")).rejects.toBe(error);
+        expect(legacyCreate).not.toHaveBeenCalled();
+      },
+    );
+
     it("calls Rewriter.create and rewriter.rewrite (Tier 1)", async () => {
       const mockRewrite = jest.fn<any>().mockResolvedValue("Rewritten text.");
       const mockDestroy = jest.fn<any>();
@@ -720,7 +977,9 @@ describe("builtin-ai-tasks subsystem", () => {
       (globalThis as any).Rewriter = {
         create: jest
           .fn<any>()
-          .mockRejectedValue(new Error("Native Rewriter unavailable")),
+          .mockRejectedValue(
+            new DOMException("Unavailable", "NotSupportedError"),
+          ),
       };
 
       const mockLegacyRewrite = jest
@@ -741,12 +1000,20 @@ describe("builtin-ai-tasks subsystem", () => {
     });
 
     it("falls back to Tier 3 (Prompt API session) when Tier 1 and Tier 2 both fail", async () => {
-      delete (globalThis as any).Rewriter;
+      (globalThis as any).Rewriter = {
+        create: jest
+          .fn<any>()
+          .mockRejectedValue(
+            new DOMException("Unavailable", "NotSupportedError"),
+          ),
+      };
       setCustomLegacyTaskFactories({
         rewriter: {
           create: jest
             .fn<any>()
-            .mockRejectedValue(new Error("Legacy polyfill unavailable")),
+            .mockRejectedValue(
+              new DOMException("Unavailable", "NotSupportedError"),
+            ),
         },
       });
 
@@ -769,7 +1036,12 @@ describe("builtin-ai-tasks subsystem", () => {
       expect(result).toBe("Prompt API rewritten text.");
       expect((globalThis as any).LanguageModel.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          systemPrompt: expect.stringMatching(/Distinguished Senior Editor/i),
+          initialPrompts: [
+            {
+              role: "system",
+              content: expect.stringMatching(/Distinguished Senior Editor/i),
+            },
+          ],
         }),
       );
       expect(mockPrompt).toHaveBeenCalledWith("TEXT: Original draft");
@@ -777,15 +1049,29 @@ describe("builtin-ai-tasks subsystem", () => {
     });
 
     it("throws clear error when all three tiers fail", async () => {
-      delete (globalThis as any).Rewriter;
+      (globalThis as any).Rewriter = {
+        create: jest
+          .fn<any>()
+          .mockRejectedValue(
+            new DOMException("Unavailable", "NotSupportedError"),
+          ),
+      };
       setCustomLegacyTaskFactories({
         rewriter: {
           create: jest
             .fn<any>()
-            .mockRejectedValue(new Error("Legacy polyfill failed")),
+            .mockRejectedValue(
+              new DOMException("Unavailable", "NotSupportedError"),
+            ),
         },
       });
-      delete (globalThis as any).LanguageModel;
+      (globalThis as any).LanguageModel = {
+        create: jest
+          .fn<any>()
+          .mockRejectedValue(
+            new DOMException("Unavailable", "NotSupportedError"),
+          ),
+      };
 
       await expect(rewriteText("Rewrite this")).rejects.toThrow(
         /Rewriter task failed across all tiers/i,
@@ -1003,8 +1289,14 @@ describe("builtin-ai-tasks subsystem", () => {
 
     it("throws error when both Proofreader and Rewriter fail", async () => {
       delete (globalThis as any).Proofreader;
-      delete (globalThis as any).Rewriter;
-      delete (globalThis as any).LanguageModel;
+      const create = jest
+        .fn<any>()
+        .mockRejectedValue(
+          new DOMException("Unavailable", "NotSupportedError"),
+        );
+      (globalThis as any).Rewriter = { create };
+      (globalThis as any).LanguageModel = { create };
+      setCustomLegacyTaskFactories({ rewriter: { create } });
 
       await expect(
         proofreadText("Bad text", { context: "Email" }),

@@ -24,6 +24,18 @@ describe("declarative tools", () => {
   });
 
   describe("parseDeclarativeTool", () => {
+    it("preserves a declarative output schema", () => {
+      const outputSchema = { type: "object", required: ["temperature"] };
+      const tool = parseDeclarativeTool("weather.json", {
+        name: "weather",
+        description: "Weather",
+        input_schema: { type: "object" },
+        output_schema: outputSchema,
+        execution: { type: "javascript", code: "return {};" },
+      });
+      expect(tool.output_schema).toEqual(outputSchema);
+    });
+
     it("parses a sandboxed javascript tool definition", () => {
       expect(
         parseDeclarativeTool(".agents/tools/main/echo.json", {

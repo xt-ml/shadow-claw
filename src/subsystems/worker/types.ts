@@ -25,6 +25,10 @@ export type WorkerInbound =
     }
   | { type: "invoke"; payload: InvokePayload }
   | {
+      type: "native-ai-task-response";
+      payload: { id: string; response?: unknown; error?: string };
+    }
+  | {
       type: "set-vm-mode";
       payload: {
         mode?: VMBootMode;
@@ -46,6 +50,16 @@ export type WorkerOutbound =
         id: string;
         options?: string[];
         question: string;
+      };
+    }
+  | { type: "cancel-native-ai-task"; payload: { id: string; groupId?: string } }
+  | {
+      type: "request-native-ai-task";
+      payload: {
+        id: string;
+        groupId?: string;
+        taskType: string;
+        input: Record<string, any>;
       };
     }
   | { type: "compact-done"; payload: CompactDonePayload }

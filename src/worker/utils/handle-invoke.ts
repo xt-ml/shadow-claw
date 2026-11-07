@@ -372,6 +372,7 @@ export async function handleInvoke(
 
     // Build the invoke context for spawn_subagent to inherit
     const invokeContext: SubagentInvokeContext = {
+      abortSignal,
       apiKey,
       assistantName: assistantName ?? "",
       db,

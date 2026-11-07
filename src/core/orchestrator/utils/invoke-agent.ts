@@ -260,6 +260,7 @@ export async function invokeAgent(
     o.promptControllers.set(executionGroupId, controller);
 
     const transformersInvokeContext: SubagentInvokeContext = {
+      abortSignal: controller.signal,
       apiKey: "",
       assistantName: o.assistantName,
       db,
@@ -340,6 +341,7 @@ export async function invokeAgent(
     o.promptControllers.set(executionGroupId, controller);
 
     const promptApiInvokeContext: SubagentInvokeContext = {
+      abortSignal: controller.signal,
       apiKey: "",
       assistantName: o.assistantName,
       db,
@@ -416,6 +418,7 @@ export async function invokeAgent(
     o.promptControllers.set(executionGroupId, controller);
 
     const liteRtInvokeContext: SubagentInvokeContext = {
+      abortSignal: controller.signal,
       apiKey: "",
       assistantName: o.assistantName,
       db,

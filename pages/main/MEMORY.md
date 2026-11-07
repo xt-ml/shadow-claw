@@ -33,6 +33,6 @@ slug: "agent-memory"
   <Overview and description of what the skill does, parameters, and usage instructions.>
   ```
 
-- **Declarative Tool Format**: JSON with `"name"`, `"description"`, `"executor": "javascript"`, `"inputSchema"`, and `"code"`.
+- **Declarative Tool Format**: JSON with `"name"`, `"description"`, `"execution"` (e.g. `{ "type": "javascript", "code": "..." }`), `"input_schema"`, and optional `"output_schema"` (validated against tool execution results).
 - **Open Agent Skills & Discovery**: Install community skills from [skills.sh](https://skills.sh) via `npx shadow-claw skills add <owner/repo>` (or `npx skills add`), search via `npx shadow-claw skills find <term>`, and publish RFC v0.2.0 discovery indexes via `npx shadow-claw skills:index` (`.well-known/agent-skills/index.json`).
 - **Authoring**: Use `create_directory` before writing new directories, then `write_file`.

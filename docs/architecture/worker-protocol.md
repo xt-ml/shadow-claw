@@ -39,35 +39,37 @@ All communication uses `postMessage()` with typed payloads defined in `src/subsy
 
 ### Worker → Main
 
-| Type                      | Payload                         | Purpose                                                  |
-| ------------------------- | ------------------------------- | -------------------------------------------------------- |
-| `response`                | `{ groupId, text }`             | Final text response                                      |
-| `intermediate-response`   | `{ groupId, text }`             | Text emitted before tool calls                           |
-| `streaming-start`         | `{ groupId }`                   | SSE stream beginning                                     |
-| `streaming-chunk`         | `{ groupId, text }`             | Incremental text (throttled 50ms)                        |
-| `streaming-end`           | `{ groupId }`                   | Stream paused for tool calls                             |
-| `streaming-done`          | `{ groupId, text }`             | Final streamed text                                      |
-| `streaming-error`         | `{ groupId, error }`            | Stream failed                                            |
-| `error`                   | `{ groupId, error }`            | Error payload                                            |
-| `typing`                  | `{ groupId, typing }`           | Typing indicator                                         |
-| `tool-activity`           | `{ groupId, tool, status }`     | Tool execution status                                    |
-| `token-usage`             | per payload                     | Token consumption stats                                  |
-| `thinking-log`            | `ThinkingLogEntry`              | Debug/reasoning log                                      |
-| `compact-done`            | `{ groupId, summary }`          | Compaction complete                                      |
-| `model-download-progress` | `ModelDownloadProgressPayload`  | In-browser model download (Transformers.js / Prompt API) |
-| `vm-status`               | `VMStatus`                      | VM ready/booting/error                                   |
-| `vm-terminal-opened`      | `{ ok: true }`                  | Terminal session ready                                   |
-| `vm-terminal-output`      | `{ chunk: string }`             | Terminal stdout bytes                                    |
-| `vm-terminal-closed`      | `{ ok: true }`                  | Terminal session closed                                  |
-| `vm-terminal-error`       | `{ error: string }`             | Terminal error                                           |
-| `vm-workspace-synced`     | `{ groupId }`                   | Workspace sync complete                                  |
-| `show-toast`              | `{ message, type?, duration? }` | UI toast notification                                    |
-| `send-notification`       | `{ title, body, groupId }`      | OS-level push notification                               |
-| `open-file`               | `{ groupId, path }`             | Open file in UI viewer                                   |
-| `manage-tools`            | `ManageToolsPayload`            | Agent-driven tool reconfiguration                        |
-| `task-created`            | `{ task }`                      | New task created by agent                                |
-| `update-task`             | `{ task }`                      | Task updated by agent                                    |
-| `delete-task`             | `{ id, groupId }`               | Task deleted by agent                                    |
+| Type                      | Payload                             | Purpose                                                  |
+| ------------------------- | ----------------------------------- | -------------------------------------------------------- |
+| `response`                | `{ groupId, text }`                 | Final text response                                      |
+| `intermediate-response`   | `{ groupId, text }`                 | Text emitted before tool calls                           |
+| `streaming-start`         | `{ groupId }`                       | SSE stream beginning                                     |
+| `streaming-chunk`         | `{ groupId, text }`                 | Incremental text (throttled 50ms)                        |
+| `streaming-end`           | `{ groupId }`                       | Stream paused for tool calls                             |
+| `streaming-done`          | `{ groupId, text }`                 | Final streamed text                                      |
+| `streaming-error`         | `{ groupId, error }`                | Stream failed                                            |
+| `error`                   | `{ groupId, error }`                | Error payload                                            |
+| `typing`                  | `{ groupId, typing }`               | Typing indicator                                         |
+| `tool-activity`           | `{ groupId, tool, status }`         | Tool execution status                                    |
+| `request-native-ai-task`  | `{ id, groupId?, taskType, input }` | Execute a built-in AI task on the main thread            |
+| `cancel-native-ai-task`   | `{ id, groupId? }`                  | Abort a pending main-thread built-in AI task             |
+| `token-usage`             | per payload                         | Token consumption stats                                  |
+| `thinking-log`            | `ThinkingLogEntry`                  | Debug/reasoning log                                      |
+| `compact-done`            | `{ groupId, summary }`              | Compaction complete                                      |
+| `model-download-progress` | `ModelDownloadProgressPayload`      | In-browser model download (Transformers.js / Prompt API) |
+| `vm-status`               | `VMStatus`                          | VM ready/booting/error                                   |
+| `vm-terminal-opened`      | `{ ok: true }`                      | Terminal session ready                                   |
+| `vm-terminal-output`      | `{ chunk: string }`                 | Terminal stdout bytes                                    |
+| `vm-terminal-closed`      | `{ ok: true }`                      | Terminal session closed                                  |
+| `vm-terminal-error`       | `{ error: string }`                 | Terminal error                                           |
+| `vm-workspace-synced`     | `{ groupId }`                       | Workspace sync complete                                  |
+| `show-toast`              | `{ message, type?, duration? }`     | UI toast notification                                    |
+| `send-notification`       | `{ title, body, groupId }`          | OS-level push notification                               |
+| `open-file`               | `{ groupId, path }`                 | Open file in UI viewer                                   |
+| `manage-tools`            | `ManageToolsPayload`                | Agent-driven tool reconfiguration                        |
+| `task-created`            | `{ task }`                          | New task created by agent                                |
+| `update-task`             | `{ task }`                          | Task updated by agent                                    |
+| `delete-task`             | `{ id, groupId }`                   | Task deleted by agent                                    |
 
 ## Worker Startup
 
@@ -168,6 +170,8 @@ Cancellation flows through `AbortController`:
 3. `fetch()` throws `AbortError`
 4. Worker catches, cleans up state, becomes ready for next task
 5. Orchestrator tracks via `orchestratorStore.stopCurrentRequest()`
+
+Built-in AI tool requests carry their own request ID. When their invocation is aborted, the worker sends `cancel-native-ai-task`, removes its pending resolver, and the orchestrator aborts the matching task controller. The controller's signal reaches writing sessions and active-provider HTTP requests; completed tasks remove their controller and abort listener.
 
 Each `groupId` has its own `AbortController` in `inFlightControllers` Map. Starting a new invocation for the same group automatically aborts the previous one.
 

@@ -15,6 +15,10 @@ import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { showError, showSuccess, showWarning } from "../../../ui/toast.js";
 import { getRecommendedMaxTokens } from "./utils/get-recommended-max-tokens.js";
 import { fetchTokenizerConfig } from "../../../subsystems/providers/utils/chat-template.js";
+import {
+  ensureBuiltinAiPolyfills,
+  retainPreparedPromptApiSession,
+} from "../../../subsystems/providers/builtin-ai-tasks.js";
 
 import {
   buildLlamafileHelpDialogOptions,
@@ -103,6 +107,7 @@ export class ShadowClawLlm extends ShadowClawElement {
     this.bindEventListeners();
 
     this.setupEffects();
+    void this.initializeBuiltinAiModelAction();
   }
 
   applyRecommendedMaxTokens() {
@@ -258,6 +263,16 @@ export class ShadowClawLlm extends ShadowClawElement {
       .querySelector('[data-action="save-builtin-ai-settings"]')
       ?.addEventListener("click", () => this.saveBuiltinAiSettings());
 
+    const prepareButton = root.querySelector<HTMLButtonElement>(
+      '[data-action="prepare-builtin-ai-model"]',
+    );
+    if (prepareButton && !prepareButton.hasAttribute("data-bound")) {
+      prepareButton.setAttribute("data-bound", "true");
+      prepareButton.addEventListener("click", () => {
+        void this.prepareBuiltinAiModel();
+      });
+    }
+
     root
       .querySelector('[data-setting="llamafile-mode"]')
       ?.addEventListener("change", () => {
@@ -265,6 +280,66 @@ export class ShadowClawLlm extends ShadowClawElement {
         this.updateLlamafileModelSectionVisibility();
         this.updateModelSelector();
       });
+  }
+
+  async initializeBuiltinAiModelAction(): Promise<void> {
+    const button = this.shadowRoot?.querySelector<HTMLButtonElement>(
+      '[data-action="prepare-builtin-ai-model"]',
+    );
+    const status = this.shadowRoot?.querySelector<HTMLElement>(
+      '[data-info="builtin-ai-model-status"]',
+    );
+    if (!button || !status) return;
+    try {
+      await ensureBuiltinAiPolyfills();
+      const global = globalThis as any;
+      const languageModel = global.LanguageModel || global.ai?.languageModel;
+      if (typeof languageModel?.create !== "function") {
+        throw new Error("Local AI is unavailable in this browser.");
+      }
+      button.disabled = false;
+    } catch (error) {
+      status.textContent =
+        error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  async prepareBuiltinAiModel(): Promise<void> {
+    const button = this.shadowRoot?.querySelector<HTMLButtonElement>(
+      '[data-action="prepare-builtin-ai-model"]',
+    );
+    const status = this.shadowRoot?.querySelector<HTMLElement>(
+      '[data-info="builtin-ai-model-status"]',
+    );
+    if (!button || !status) return;
+    const global = globalThis as any;
+    const languageModel = global.LanguageModel || global.ai?.languageModel;
+    button.disabled = true;
+    status.textContent = "Preparing local AI model...";
+    try {
+      const session = await languageModel.create({
+        monitor(target: any) {
+          target.addEventListener("downloadprogress", (event: any) => {
+            const loaded = Number(event.loaded);
+            const total = Number(event.total);
+            if (
+              Number.isFinite(loaded) &&
+              Number.isFinite(total) &&
+              total > 0
+            ) {
+              status.textContent = `Downloading local AI model: ${Math.round(Math.max(0, Math.min(1, loaded / total)) * 100)}%`;
+            }
+          });
+        },
+      });
+      retainPreparedPromptApiSession(session);
+      status.textContent = "Local AI model is ready.";
+    } catch (error) {
+      status.textContent =
+        error instanceof Error ? error.message : String(error);
+    } finally {
+      button.disabled = false;
+    }
   }
 
   renderBedrockSettings() {

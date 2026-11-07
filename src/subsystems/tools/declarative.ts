@@ -64,6 +64,7 @@ export function parseDeclarativeTool(
       ? candidate.description.trim()
       : "";
   const inputSchema = candidate.input_schema ?? candidate.parameters;
+  const outputSchema = candidate.output_schema ?? candidate.outputSchema;
   const execution = candidate.execution ?? candidate.evaluation;
 
   if (!TOOL_NAME_PATTERN.test(name)) {
@@ -74,6 +75,14 @@ export function parseDeclarativeTool(
   }
   if (!inputSchema || typeof inputSchema !== "object") {
     throw new Error(`Tool ${name} requires input_schema`);
+  }
+  if (
+    outputSchema !== undefined &&
+    (!outputSchema ||
+      typeof outputSchema !== "object" ||
+      Array.isArray(outputSchema))
+  ) {
+    throw new Error(`Tool ${name} output_schema must be an object`);
   }
   if (!execution || typeof execution !== "object") {
     throw new Error(`Tool ${name} requires execution`);
@@ -101,6 +110,9 @@ export function parseDeclarativeTool(
       name,
       description,
       input_schema: inputSchema as ToolDefinition["input_schema"],
+      ...(outputSchema !== undefined
+        ? { output_schema: outputSchema as Record<string, unknown> }
+        : {}),
       execution: {
         type,
         name: parsedExecution.name,
@@ -122,6 +134,9 @@ export function parseDeclarativeTool(
     name,
     description,
     input_schema: inputSchema as ToolDefinition["input_schema"],
+    ...(outputSchema !== undefined
+      ? { output_schema: outputSchema as Record<string, unknown> }
+      : {}),
     execution: {
       type,
       [sourceKey]: source,

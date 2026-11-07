@@ -23,6 +23,14 @@ export interface BuiltinToolContext {
   invokeContext?: any;
 }
 
+function writingTaskErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/user (?:gesture|activation)|transient activation/i.test(message)) {
+    return `${message} Open Settings > AI and select Download Local AI Model, then retry.`;
+  }
+  return message;
+}
+
 async function requestNativeTask(
   groupId: string | undefined,
   taskType: string,
@@ -45,20 +53,45 @@ async function requestNativeTask(
       maxTokens: invokeContext?.maxTokens,
       headers: invokeContext?.providerHeaders,
       db: context?.db || invokeContext?.db,
+      abortSignal: invokeContext?.abortSignal,
     });
   }
 
   const id = ulid();
-  post({
-    type: "request-native-ai-task",
-    payload: { id, groupId, taskType, input },
-  });
-
+  const signal: AbortSignal | undefined = context?.invokeContext?.abortSignal;
   return await new Promise<any>((resolve, reject) => {
-    (globalThis as any).pendingNativeAiResolvers =
-      (globalThis as any).pendingNativeAiResolvers || {};
+    const global = globalThis as any;
+    global.pendingNativeAiResolvers = global.pendingNativeAiResolvers || {};
+    const cleanup = () => {
+      signal?.removeEventListener("abort", onAbort);
+      delete global.pendingNativeAiResolvers[id];
+    };
+    const onAbort = () => {
+      cleanup();
+      post({ type: "cancel-native-ai-task", payload: { id, groupId } });
+      reject(signal?.reason || new DOMException("Aborted", "AbortError"));
+    };
 
-    (globalThis as any).pendingNativeAiResolvers[id] = { resolve, reject };
+    if (signal?.aborted) {
+      reject(signal.reason || new DOMException("Aborted", "AbortError"));
+      return;
+    }
+
+    global.pendingNativeAiResolvers[id] = {
+      resolve: (value: any) => {
+        cleanup();
+        resolve(value);
+      },
+      reject: (error: any) => {
+        cleanup();
+        reject(error);
+      },
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+    post({
+      type: "request-native-ai-task",
+      payload: { id, groupId, taskType, input },
+    });
   });
 }
 
@@ -120,7 +153,7 @@ export async function executeWriteText(
       context,
     );
   } catch (err) {
-    return `Error writing text: ${err instanceof Error ? err.message : String(err)}`;
+    return `Error writing text: ${writingTaskErrorMessage(err)}`;
   }
 }
 
@@ -150,7 +183,7 @@ export async function executeRewriteText(
       context,
     );
   } catch (err) {
-    return `Error rewriting text: ${err instanceof Error ? err.message : String(err)}`;
+    return `Error rewriting text: ${writingTaskErrorMessage(err)}`;
   }
 }
 

@@ -27,6 +27,7 @@ export interface ToolDefinition {
   name: string; // Unique tool name (snake_case)
   description: string; // LLM-facing description
   input_schema: object; // JSON Schema for parameters
+  output_schema?: object; // Optional JSON Schema for WebMCP results
 }
 ```
 
@@ -222,16 +223,15 @@ The utility in `src/worker/utils/wrap-untrusted-content.ts` wraps externally-sou
 - **`detect_language`** — Identifies the primary language of a text snippet (returns BCP 47 language codes with confidence scores).
 - **`translate_text`** — Translates text from source to target language via configured Task Tools Backend.
 
-#### 3-Tier Fallback Architecture for Task APIs
+#### Task API Compatibility
 
-To adapt to Chrome Built-in AI's evolution and deprecation of experimental Writer and Rewriter task APIs in favor of the foundational Prompt API (`window.LanguageModel`), ShadowClaw implements a robust 3-tier progressive degradation ladder:
+Chrome has proposed removing its experimental Writer and Rewriter APIs. ShadowClaw retains `write_text` and `rewrite_text` independently of those browser APIs. The default active-provider backend prompts the configured provider; the local backend prefers an available native task API, then the Chrome Labs `writer-rewriter-polyfills` adapter, the older task polyfill, and finally a direct Prompt API session. The newer adapter uses the `LanguageModel` exposed in the current environment, which ShadowClaw may itself provide through `prompt-api-polyfill`.
 
-1. **Tier 1 (Native / Direct Polyfill)**: Attempts native task APIs (`ai.writer`, `ai.rewriter`, `ai.summarizer`) or Chrome Labs `writer-rewriter-polyfills` (which maps directly onto `window.LanguageModel`).
-2. **Tier 2 (Legacy Task Polyfill)**: If Tier 1 is unavailable or throws `NotSupportedError`, falls back to `built-in-ai-task-apis-polyfills` backed by `prompt-api-polyfill` (WASM / WebGPU / Transformers.js).
-3. **Tier 3 (Prompt API Direct with Chrome-Internal Prompt Builders)**: If Tier 2 fails or is unsupported, directly creates a `LanguageModel` session (`window.LanguageModel.create()`) using Chrome's exact internal system prompt builders:
-   - `WriterPromptBuilder`: Formats persona, shared context, tone, length, format, and task prompt with strict formatting rules.
-   - `RewriterPromptBuilder`: Formats tone/length/format transformations while preserving original meaning.
-   - `SummarizerPromptBuilder`: Formats summary types (TLDR, key points, teaser, headline), length constraints, format, or applies a custom `overridePrompt` system prompt.
+Writing-task fallback occurs only for `NotSupportedError`; cancellation, quota, validation, and other failures are surfaced instead of switching backends. Direct Prompt API sessions use `initialPrompts` and do not retry without their task instructions. Writing sessions and provider requests receive the invocation abort signal, including through the worker-to-main task bridge.
+
+Native Summarizer remains preferred for normal summaries. An explicit `overridePrompt` instead selects a Prompt API session, because native Summarizer does not accept a replacement system prompt. The local prompt builders are independently maintained approximations, not exact copies of Chrome's templates. Some upstream task polyfills log prompt content to the browser console; avoid exposing console logs containing sensitive input.
+
+Native and polyfilled model availability, download requirements, and output quality vary by browser, language, device, and configured backend. Users can explicitly trigger local model preparation and monitor download progress via **Download Local AI Model** in Settings > AI to satisfy browser user activation requirements before running writing tasks.
 
 ### Agentic tools
 
@@ -353,6 +353,12 @@ stdin. JavaScript runs through the isolated JavaScript worker and receives the
 JSON arguments in `data`. The `tool` executor delegates to an existing
 allowlisted ShadowClaw tool and may provide an `input` object to merge with the
 call input.
+
+Definitions may optionally include `output_schema` (or `outputSchema`) as a
+JSON Schema object. WebMCP registration forwards it to supported browsers and
+validates worker results against it; JSON-serialized results are returned as
+their decoded values. Leave it out for existing unstructured text results. See
+[WebMCP Integration](webmcp.md) for compatibility and validation behavior.
 
 Declarative tools are loaded from the conversation's OPFS workspace (`loadDeclarativeTools`), scanning `.agents/tools/` within the requested conversation workspace and falling back to `DEFAULT_GROUP_ID` so non-default rooms inherit main group declarative tools. The published `.agents/tools/main/` tree is seeded into the Main conversation, and normal runtime tool allowlists still apply to delegated tools. Built-in tool names cannot be shadowed, and declarative delegation is capped at eight nested calls to prevent cycles and runaway execution.
 

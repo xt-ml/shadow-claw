@@ -1,4 +1,5 @@
 import { installWebMCP } from "@mcp-b/webmcp-polyfill";
+import { Validator } from "@cfworker/json-schema";
 export type { WebMCP } from "webmcp-types";
 
 import { DEFAULT_GROUP_ID } from "../../config/config.js";
@@ -204,6 +205,7 @@ export interface WebMcpRegisteredTool {
   title?: string;
   description?: string;
   inputSchema?: unknown;
+  outputSchema?: unknown;
   annotations?: Record<string, unknown>;
   execute?: (
     input: Record<string, unknown>,
@@ -216,6 +218,7 @@ export interface NormalizedWebMcpRegisteredTool {
   title?: string;
   description?: string;
   inputSchema: Record<string, unknown>;
+  outputSchema?: unknown;
   annotations?: Record<string, unknown>;
   execute?: (
     input: Record<string, unknown>,
@@ -286,6 +289,9 @@ export async function getWebMcpTools(options?: {
       ...(tool.title ? { title: tool.title } : {}),
       ...(tool.description ? { description: tool.description } : {}),
       inputSchema: parseWebMcpInputSchema(tool.inputSchema),
+      ...(tool.outputSchema !== undefined
+        ? { outputSchema: parseWebMcpOutputSchema(tool.outputSchema) }
+        : {}),
       ...(tool.annotations ? { annotations: tool.annotations } : {}),
       ...(tool.execute ? { execute: tool.execute } : {}),
     }));
@@ -293,6 +299,57 @@ export async function getWebMcpTools(options?: {
     console.warn("Failed to retrieve WebMCP tools via getTools():", err);
 
     return [];
+  }
+}
+
+function parseWebMcpOutputSchema(schema: unknown): unknown {
+  if (typeof schema !== "string") return schema;
+  try {
+    return JSON.parse(schema);
+  } catch {
+    return schema;
+  }
+}
+
+export class WebMcpOutputSchemaError extends Error {}
+
+export function validateWebMcpOutput(result: unknown, tool: any): void {
+  if (
+    tool?.outputSchema === undefined ||
+    tool.outputSchema === null ||
+    tool.outputSchema === ""
+  )
+    return;
+  const schema = parseWebMcpOutputSchema(tool.outputSchema);
+  if (!schema || typeof schema !== "object" || Array.isArray(schema)) {
+    throw new WebMcpOutputSchemaError(
+      `Invalid output schema for tool "${tool.name}"`,
+    );
+  }
+
+  let instance = result;
+  if (typeof result === "string") {
+    try {
+      instance = JSON.parse(result);
+    } catch {}
+  }
+
+  let errors;
+  try {
+    ({ errors } = new Validator(schema, "2020-12").validate(instance));
+  } catch (error) {
+    throw new WebMcpOutputSchemaError(
+      `Invalid output schema for tool "${tool.name}": ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (errors.length) {
+    const details = errors
+      .slice(0, 3)
+      .map(({ instanceLocation, error }) => `${instanceLocation}: ${error}`)
+      .join("; ");
+    throw new WebMcpOutputSchemaError(
+      `Tool "${tool.name}" result does not match its output schema: ${details}`,
+    );
   }
 }
 
@@ -346,8 +403,9 @@ export async function executeWebMcpTool(
     inputStr = "{}";
   }
 
+  let result: unknown;
   try {
-    return await modelContext.executeTool(tool, inputObject, options);
+    result = await modelContext.executeTool(tool, inputObject, options);
   } catch (err: any) {
     const isParseError =
       typeof err?.message === "string" &&
@@ -355,11 +413,13 @@ export async function executeWebMcpTool(
     const isTypeError = err instanceof TypeError;
 
     if (isParseError || isTypeError) {
-      return await modelContext.executeTool(tool, inputStr, options);
+      result = await modelContext.executeTool(tool, inputStr, options);
+    } else {
+      throw err;
     }
-
-    throw err;
   }
+  validateWebMcpOutput(result, tool);
+  return result;
 }
 
 /**
@@ -800,6 +860,9 @@ export async function registerWebMcpTools(
         title: (def as any).title || def.name,
         description: def.description,
         inputSchema: parseWebMcpInputSchema(def.input_schema),
+        ...(def.output_schema !== undefined
+          ? { outputSchema: def.output_schema }
+          : {}),
         annotations: resolveWebMcpToolAnnotations(
           def.name,
           (def as any).annotations,
@@ -861,7 +924,24 @@ export async function registerWebMcpTools(
                 if (data.error) {
                   reject(new Error(data.error));
                 } else {
-                  resolve(data.result);
+                  try {
+                    validateWebMcpOutput(data.result, {
+                      name: def.name,
+                      outputSchema: def.output_schema,
+                    });
+                    let result = data.result;
+                    if (
+                      def.output_schema !== undefined &&
+                      typeof result === "string"
+                    ) {
+                      try {
+                        result = JSON.parse(result);
+                      } catch {}
+                    }
+                    resolve(result);
+                  } catch (error) {
+                    reject(error);
+                  }
                 }
               }
             };

@@ -123,6 +123,31 @@ describe("webmcp integration", () => {
   });
 
   describe("getWebMcpTools", () => {
+    it("preserves optional output schemas in object and JSON string form", async () => {
+      const { getWebMcpTools } = await import("./webmcp.js");
+      const schema = {
+        type: "object",
+        properties: { temperature: { type: "number" } },
+      };
+
+      Object.defineProperty((globalThis as any).document, "modelContext", {
+        configurable: true,
+        value: {
+          registerTool: mockRegisterTool,
+          getTools: jest.fn(async () => [
+            { name: "modern", outputSchema: schema },
+            { name: "legacy", outputSchema: JSON.stringify(schema) },
+            { name: "unspecified" },
+          ]),
+        },
+      });
+
+      const tools = await getWebMcpTools();
+      expect(tools[0].outputSchema).toEqual(schema);
+      expect(tools[1].outputSchema).toEqual(schema);
+      expect(tools[2]).not.toHaveProperty("outputSchema");
+    });
+
     it("returns normalized tools with object inputSchema on Chrome 154+ (native object)", async () => {
       const { getWebMcpTools } = await import("./webmcp.js");
 
@@ -309,6 +334,75 @@ describe("webmcp integration", () => {
       expect(options).toBeDefined();
       expect(options.signal).toBeInstanceOf(AbortSignal);
     }
+  });
+
+  it("registers declared output schemas without changing schema-free tools", async () => {
+    const schema = { type: "object", required: ["temperature"] };
+    await registerWebMcpTools(null, jest.fn(), "group-webmcp", [
+      {
+        name: "weather",
+        description: "Weather",
+        input_schema: { type: "object" },
+        output_schema: schema,
+      },
+      {
+        name: "legacy",
+        description: "Legacy",
+        input_schema: { type: "object" },
+      },
+    ]);
+    expect(mockRegisterTool.mock.calls[0][0].outputSchema).toEqual(schema);
+    expect(mockRegisterTool.mock.calls[1][0]).not.toHaveProperty(
+      "outputSchema",
+    );
+  });
+
+  it("rejects registered tool results that violate their declared output schema", async () => {
+    const worker: any = {
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+      postMessage: jest.fn(),
+    };
+    await registerWebMcpTools(worker, jest.fn(), "group-webmcp", [
+      {
+        name: "weather",
+        description: "Weather",
+        input_schema: { type: "object" },
+        output_schema: { type: "object", required: ["temperature"] },
+      },
+    ]);
+    const promise = mockRegisterTool.mock.calls[0][0].execute({});
+    const handler = worker.addEventListener.mock.calls[0][1];
+    const callId = worker.postMessage.mock.calls[0][0].callId;
+    handler({ data: { type: "execute-tool-result", callId, result: "{}" } });
+    await expect(promise).rejects.toThrow(/output schema.*temperature/i);
+  });
+
+  it("returns parsed JSON from registered tools that declare structured output", async () => {
+    const worker: any = {
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+      postMessage: jest.fn(),
+    };
+    await registerWebMcpTools(worker, jest.fn(), "group-webmcp", [
+      {
+        name: "weather",
+        description: "Weather",
+        input_schema: { type: "object" },
+        output_schema: { type: "object", required: ["temperature"] },
+      },
+    ]);
+    const promise = mockRegisterTool.mock.calls[0][0].execute({});
+    const handler = worker.addEventListener.mock.calls[0][1];
+    const callId = worker.postMessage.mock.calls[0][0].callId;
+    handler({
+      data: {
+        type: "execute-tool-result",
+        callId,
+        result: '{"temperature":21}',
+      },
+    });
+    await expect(promise).resolves.toEqual({ temperature: 21 });
   });
 
   it("registers tools and delegates execute through postMessage", async () => {
@@ -515,6 +609,72 @@ describe("webmcp integration", () => {
   });
 
   describe("executeWebMcpTool", () => {
+    it("enforces nested constraints and reports unusable schemas", async () => {
+      const { executeWebMcpTool } = await import("./webmcp.js");
+      const executeTool = jest.fn(async () => ({ status: "unknown" }));
+      await expect(
+        executeWebMcpTool(
+          { executeTool },
+          {
+            name: "weather",
+            outputSchema: {
+              type: "object",
+              properties: { status: { enum: ["sunny", "rainy"] } },
+            },
+          },
+        ),
+      ).rejects.toThrow(/output schema.*status/i);
+      await expect(
+        executeWebMcpTool(
+          { executeTool },
+          {
+            name: "weather",
+            outputSchema: "{broken",
+          },
+        ),
+      ).rejects.toThrow(/invalid output schema/i);
+      expect(executeTool).toHaveBeenCalledTimes(2);
+    });
+
+    it("validates modern and legacy results without retrying a schema violation", async () => {
+      const { executeWebMcpTool } = await import("./webmcp.js");
+      const tool = {
+        name: "weather",
+        outputSchema: {
+          type: "object",
+          properties: { temperature: { type: "number" } },
+          required: ["temperature"],
+        },
+      };
+      const executeTool = jest.fn(async (_tool: any, input: any) => {
+        if (typeof input !== "string") throw new Error("Failed to parse input");
+        return JSON.stringify({ temperature: "warm" });
+      });
+
+      await expect(
+        executeWebMcpTool({ executeTool }, tool, {}),
+      ).rejects.toThrow(/output schema.*temperature/i);
+      expect(executeTool).toHaveBeenCalledTimes(2);
+    });
+
+    it("passes valid structured and schema-free results through unchanged", async () => {
+      const { executeWebMcpTool } = await import("./webmcp.js");
+      const result = JSON.stringify({ temperature: 21 });
+      const executeTool = jest.fn(async () => result);
+      const outputSchema = JSON.stringify({
+        type: "object",
+        required: ["temperature"],
+        properties: { temperature: { type: "number" } },
+      });
+
+      await expect(
+        executeWebMcpTool({ executeTool }, { name: "weather", outputSchema }),
+      ).resolves.toBe(result);
+      await expect(
+        executeWebMcpTool({ executeTool }, { name: "legacy" }),
+      ).resolves.toBe(result);
+    });
+
     it("executes tool passing JavaScript object directly on Chrome 155+ (PR #246/#251)", async () => {
       const { executeWebMcpTool } = await import("./webmcp.js");
 

@@ -44,6 +44,10 @@ export type WorkerMessageHandler = (
 ) => Promise<void> | void;
 
 export const WORKER_MESSAGE_HANDLERS = new Map<string, WorkerMessageHandler>();
+const nativeAiTaskControllers = new WeakMap<
+  Orchestrator,
+  Map<string, AbortController>
+>();
 
 // ── Streaming & Responses ───────────────────────────────────────────────────
 
@@ -527,6 +531,13 @@ WORKER_MESSAGE_HANDLERS.set("render-component", (o, _db, payload) => {
 
 WORKER_MESSAGE_HANDLERS.set("request-native-ai-task", (o, db, payload) => {
   const { id, groupId, taskType, input } = payload;
+  let controllers = nativeAiTaskControllers.get(o);
+  if (!controllers) {
+    controllers = new Map();
+    nativeAiTaskControllers.set(o, controllers);
+  }
+  const controller = new AbortController();
+  controllers.set(id, controller);
 
   (async () => {
     try {
@@ -562,6 +573,7 @@ WORKER_MESSAGE_HANDLERS.set("request-native-ai-task", (o, db, payload) => {
         headers,
         maxTokens: o.maxTokens,
         onProgress,
+        abortSignal: controller.signal,
       });
 
       if (groupId) {
@@ -604,8 +616,14 @@ WORKER_MESSAGE_HANDLERS.set("request-native-ai-task", (o, db, payload) => {
         type: "native-ai-task-response",
         payload: { id, error: err?.message || String(err) },
       });
+    } finally {
+      if (controllers.get(id) === controller) controllers.delete(id);
     }
   })();
+});
+
+WORKER_MESSAGE_HANDLERS.set("cancel-native-ai-task", (o, _db, payload) => {
+  nativeAiTaskControllers.get(o)?.get(payload.id)?.abort();
 });
 
 WORKER_MESSAGE_HANDLERS.set("ask-user", (o, _db, payload) => {

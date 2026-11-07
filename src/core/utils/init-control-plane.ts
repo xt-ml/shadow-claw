@@ -321,6 +321,9 @@ export async function executeClientControlCommand(
               name: t.name,
               description: t.description,
               inputSchema: t.inputSchema,
+              ...(t.outputSchema !== undefined
+                ? { outputSchema: t.outputSchema }
+                : {}),
               annotations: t.annotations,
             })),
           };
@@ -434,8 +437,13 @@ export async function executeClientControlCommand(
         (typeof document !== "undefined" && (document as any).modelContext) ||
         (typeof navigator !== "undefined" && (navigator as any).modelContext);
 
+      let matchedTool: any;
       if (ctx) {
-        let matchedTool: any;
+        const {
+          executeWebMcpTool,
+          validateWebMcpOutput,
+          WebMcpOutputSchemaError,
+        } = await import("../../subsystems/mcp/webmcp.js");
         if (typeof ctx.getTools === "function") {
           try {
             const tools = await ctx.getTools();
@@ -457,17 +465,18 @@ export async function executeClientControlCommand(
                   ? JSON.parse(args.input)
                   : args.input || {},
               );
+              validateWebMcpOutput(res, matchedTool);
               return { result: res };
             }
           } catch (err: any) {
-            if (err.message && err.message.includes("is not enabled")) {
+            if (
+              err instanceof WebMcpOutputSchemaError ||
+              (err.message && err.message.includes("is not enabled"))
+            ) {
               throw err;
             }
           }
         }
-
-        const { executeWebMcpTool } =
-          await import("../../subsystems/mcp/webmcp.js");
 
         if (typeof ctx.executeTool === "function") {
           // 1. Pass the actual ModelContextTool object from getTools() if available (required by native Chromium)
@@ -475,7 +484,9 @@ export async function executeClientControlCommand(
             try {
               const res = await executeWebMcpTool(ctx, matchedTool, args.input);
               return { result: res };
-            } catch (_) {}
+            } catch (error) {
+              if (error instanceof WebMcpOutputSchemaError) throw error;
+            }
           }
 
           // 2. Pass { name: toolName } object (accepted by polyfill / mocks)
@@ -485,14 +496,20 @@ export async function executeClientControlCommand(
               { name: args.toolName },
               args.input,
             );
+            validateWebMcpOutput(res, matchedTool);
             return { result: res };
-          } catch (_) {}
+          } catch (error) {
+            if (error instanceof WebMcpOutputSchemaError) throw error;
+          }
 
           // 3. Pass toolName string directly (accepted by some preview shims)
           try {
             const res = await executeWebMcpTool(ctx, args.toolName, args.input);
+            validateWebMcpOutput(res, matchedTool);
             return { result: res };
-          } catch (_) {}
+          } catch (error) {
+            if (error instanceof WebMcpOutputSchemaError) throw error;
+          }
         }
 
         const inputStr =
@@ -511,8 +528,11 @@ export async function executeClientControlCommand(
             const res = await (
               navigator as any
             ).modelContextTesting.executeTool(args.toolName, inputStr);
+            validateWebMcpOutput(res, matchedTool);
             return { result: res };
-          } catch (_) {}
+          } catch (error) {
+            if (error instanceof WebMcpOutputSchemaError) throw error;
+          }
         }
 
         // 5. Check callTool (MCP-B / extension runtime)
@@ -525,8 +545,11 @@ export async function executeClientControlCommand(
                   ? JSON.parse(args.input)
                   : args.input || {},
             });
+            validateWebMcpOutput(res, matchedTool);
             return { result: res };
-          } catch (_) {}
+          } catch (error) {
+            if (error instanceof WebMcpOutputSchemaError) throw error;
+          }
         }
 
         // 6. Check invoke
@@ -538,8 +561,11 @@ export async function executeClientControlCommand(
                 ? JSON.parse(args.input)
                 : args.input || {},
             );
+            validateWebMcpOutput(res, matchedTool);
             return { result: res };
-          } catch (_) {}
+          } catch (error) {
+            if (error instanceof WebMcpOutputSchemaError) throw error;
+          }
         }
       }
 
@@ -596,6 +622,11 @@ export async function executeClientControlCommand(
             },
           });
         });
+        if (matchedTool) {
+          const { validateWebMcpOutput } =
+            await import("../../subsystems/mcp/webmcp.js");
+          validateWebMcpOutput(result, matchedTool);
+        }
         return { result };
       }
 

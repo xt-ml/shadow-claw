@@ -34,6 +34,23 @@ export interface CustomLegacyTaskFactories {
 }
 
 let customLegacyTaskFactories: CustomLegacyTaskFactories | null = null;
+let preparedPromptApiSession: { destroy?: () => unknown } | null = null;
+
+export async function releasePreparedPromptApiSession(): Promise<void> {
+  const session = preparedPromptApiSession;
+  preparedPromptApiSession = null;
+  if (session?.destroy) await Promise.resolve(session.destroy());
+}
+
+export function retainPreparedPromptApiSession(session: {
+  destroy?: () => unknown;
+}): void {
+  const previous = preparedPromptApiSession;
+  preparedPromptApiSession = session;
+  if (previous && previous !== session && previous.destroy) {
+    void Promise.resolve(previous.destroy()).catch(() => {});
+  }
+}
 
 export function setCustomLegacyTaskFactories(
   factories: CustomLegacyTaskFactories | null,
@@ -76,6 +93,7 @@ export interface SummarizeOptions extends BaseBuiltinTaskOptions {
 }
 
 export interface WriteOptions extends BaseBuiltinTaskOptions {
+  signal?: AbortSignal;
   context?: string;
   sharedContext?: string;
   tone?: "formal" | "neutral" | "casual";
@@ -85,6 +103,7 @@ export interface WriteOptions extends BaseBuiltinTaskOptions {
 }
 
 export interface RewriteOptions extends BaseBuiltinTaskOptions {
+  signal?: AbortSignal;
   context?: string;
   sharedContext?: string;
   tone?: "as-is" | "more-formal" | "more-casual";
@@ -301,6 +320,14 @@ export async function createTaskInstanceWithFallback<T = any>(
   try {
     return await factory.create(createOpts);
   } catch (err: any) {
+    if (
+      createOpts?.signal?.aborted ||
+      ["AbortError", "QuotaExceededError", "NotAllowedError"].includes(
+        err?.name,
+      )
+    ) {
+      throw err;
+    }
     const errMsg = String(err?.message || err);
     const g = globalThis as any;
     const currentDevice: string = g.TRANSFORMERS_CONFIG?.device ?? "";
@@ -363,22 +390,6 @@ export async function ensureBuiltinAiPolyfills(): Promise<void> {
       takeRecords() {
         return [];
       }
-    };
-  }
-
-  if (typeof navigator !== "undefined") {
-    try {
-      if (!navigator.userActivation || !navigator.userActivation.isActive) {
-        Object.defineProperty(navigator, "userActivation", {
-          value: { isActive: true, hasBeenActive: true },
-          configurable: true,
-          writable: true,
-        });
-      }
-    } catch {}
-  } else if (!("navigator" in g)) {
-    g.navigator = {
-      userActivation: { isActive: true, hasBeenActive: true },
     };
   }
 
@@ -634,6 +645,28 @@ export async function summarizeText(
     ...(monitor ? { monitor } : {}),
   };
 
+  if (options?.overridePrompt) {
+    const global = globalThis as any;
+    const languageModel = global.LanguageModel || global.ai?.languageModel;
+    if (!languageModel || typeof languageModel.create !== "function") {
+      throw new Error(
+        "Prompt API is required for a custom summarization prompt",
+      );
+    }
+    const { systemPrompt, userPrompt } = new SummarizerPromptBuilder(
+      options,
+    ).buildPrompt(text, options);
+    const session = await languageModel.create({
+      initialPrompts: [{ role: "system", content: systemPrompt }],
+      ...(monitor ? { monitor } : {}),
+    });
+    try {
+      return await session.prompt(userPrompt);
+    } finally {
+      session?.destroy?.();
+    }
+  }
+
   const errors: string[] = [];
 
   // Tier 1: Native Summarizer API (Chrome expert model)
@@ -704,15 +737,10 @@ export async function summarizeText(
         options,
       );
 
-      let session;
-      try {
-        session = await LanguageModel.create({
-          systemPrompt,
-          ...(monitor ? { monitor } : {}),
-        });
-      } catch {
-        session = await LanguageModel.create();
-      }
+      const session = await LanguageModel.create({
+        initialPrompts: [{ role: "system", content: systemPrompt }],
+        ...(monitor ? { monitor } : {}),
+      });
 
       if (session) {
         try {
@@ -745,12 +773,20 @@ export async function writeText(
   prompt: string,
   options?: WriteOptions,
 ): Promise<string> {
+  options?.signal?.throwIfAborted();
   await ensureBuiltinAiPolyfills();
   const monitor = createMonitorHandler("Writer", options?.onProgress);
   const createOpts = {
     ...(options || {}),
     ...(monitor ? { monitor } : {}),
   };
+  const taskOptions =
+    options?.context || options?.signal
+      ? {
+          ...(options.context ? { context: options.context } : {}),
+          ...(options.signal ? { signal: options.signal } : {}),
+        }
+      : undefined;
 
   const errors: string[] = [];
 
@@ -770,20 +806,45 @@ export async function writeText(
         createOpts,
       );
       try {
-        return await writer.write(
-          prompt,
-          options?.context ? { context: options.context } : undefined,
-        );
+        return await writer.write(prompt, taskOptions);
       } finally {
         if (typeof writer?.destroy === "function") {
           writer.destroy();
         }
       }
     } catch (err: any) {
+      if (err?.name !== "NotSupportedError") throw err;
       errors.push(`Tier 1 (Writer): ${err?.message || err}`);
     }
   } else {
     errors.push("Tier 1 (Writer): Factory not available");
+  }
+
+  if (
+    tier1Factory &&
+    !tier1Factory.__isPolyfill &&
+    typeof (globalThis as any).LanguageModel?.availability === "function"
+  ) {
+    let adapter: TaskFactory | undefined;
+    try {
+      adapter = (await import("writer-rewriter-polyfills/writer")).Writer;
+    } catch {}
+    if (adapter && adapter !== tier1Factory) {
+      try {
+        const writer = await createTaskInstanceWithFallback(
+          adapter,
+          createOpts,
+        );
+        try {
+          return await writer.write(prompt, taskOptions);
+        } finally {
+          writer?.destroy?.();
+        }
+      } catch (err: any) {
+        if (err?.name !== "NotSupportedError") throw err;
+        errors.push(`Writer polyfill: ${err?.message || err}`);
+      }
+    }
   }
 
   // Tier 2: Existing task polyfill (built-in-ai-task-apis-polyfills)
@@ -802,16 +863,14 @@ export async function writeText(
         createOpts,
       );
       try {
-        return await writer.write(
-          prompt,
-          options?.context ? { context: options.context } : undefined,
-        );
+        return await writer.write(prompt, taskOptions);
       } finally {
         if (typeof writer?.destroy === "function") {
           writer.destroy();
         }
       }
     } catch (err: any) {
+      if (err?.name !== "NotSupportedError") throw err;
       errors.push(`Tier 2 (Legacy Task Polyfill): ${err?.message || err}`);
     }
   } else {
@@ -829,19 +888,17 @@ export async function writeText(
         options,
       );
 
-      let session;
-      try {
-        session = await LanguageModel.create({
-          systemPrompt,
-          ...(monitor ? { monitor } : {}),
-        });
-      } catch {
-        session = await LanguageModel.create();
-      }
+      const session = await LanguageModel.create({
+        initialPrompts: [{ role: "system", content: systemPrompt }],
+        ...(monitor ? { monitor } : {}),
+        ...(options?.signal ? { signal: options.signal } : {}),
+      });
 
       if (session) {
         try {
-          return await session.prompt(userPrompt);
+          return await (options?.signal
+            ? session.prompt(userPrompt, { signal: options.signal })
+            : session.prompt(userPrompt));
         } finally {
           if (typeof session?.destroy === "function") {
             session.destroy();
@@ -849,6 +906,7 @@ export async function writeText(
         }
       }
     } catch (err: any) {
+      if (err?.name !== "NotSupportedError") throw err;
       errors.push(`Tier 3 (Prompt API): ${err?.message || err}`);
     }
   } else {
@@ -870,12 +928,20 @@ export async function rewriteText(
   text: string,
   options?: RewriteOptions,
 ): Promise<string> {
+  options?.signal?.throwIfAborted();
   await ensureBuiltinAiPolyfills();
   const monitor = createMonitorHandler("Rewriter", options?.onProgress);
   const createOpts = {
     ...(options || {}),
     ...(monitor ? { monitor } : {}),
   };
+  const taskOptions =
+    options?.context || options?.signal
+      ? {
+          ...(options.context ? { context: options.context } : {}),
+          ...(options.signal ? { signal: options.signal } : {}),
+        }
+      : undefined;
 
   const errors: string[] = [];
 
@@ -895,20 +961,45 @@ export async function rewriteText(
         createOpts,
       );
       try {
-        return await rewriter.rewrite(
-          text,
-          options?.context ? { context: options.context } : undefined,
-        );
+        return await rewriter.rewrite(text, taskOptions);
       } finally {
         if (typeof rewriter?.destroy === "function") {
           rewriter.destroy();
         }
       }
     } catch (err: any) {
+      if (err?.name !== "NotSupportedError") throw err;
       errors.push(`Tier 1 (Rewriter): ${err?.message || err}`);
     }
   } else {
     errors.push("Tier 1 (Rewriter): Factory not available");
+  }
+
+  if (
+    tier1Factory &&
+    !tier1Factory.__isPolyfill &&
+    typeof (globalThis as any).LanguageModel?.availability === "function"
+  ) {
+    let adapter: TaskFactory | undefined;
+    try {
+      adapter = (await import("writer-rewriter-polyfills/rewriter")).Rewriter;
+    } catch {}
+    if (adapter && adapter !== tier1Factory) {
+      try {
+        const rewriter = await createTaskInstanceWithFallback(
+          adapter,
+          createOpts,
+        );
+        try {
+          return await rewriter.rewrite(text, taskOptions);
+        } finally {
+          rewriter?.destroy?.();
+        }
+      } catch (err: any) {
+        if (err?.name !== "NotSupportedError") throw err;
+        errors.push(`Rewriter polyfill: ${err?.message || err}`);
+      }
+    }
   }
 
   // Tier 2: Existing task polyfill (built-in-ai-task-apis-polyfills)
@@ -927,16 +1018,14 @@ export async function rewriteText(
         createOpts,
       );
       try {
-        return await rewriter.rewrite(
-          text,
-          options?.context ? { context: options.context } : undefined,
-        );
+        return await rewriter.rewrite(text, taskOptions);
       } finally {
         if (typeof rewriter?.destroy === "function") {
           rewriter.destroy();
         }
       }
     } catch (err: any) {
+      if (err?.name !== "NotSupportedError") throw err;
       errors.push(`Tier 2 (Legacy Task Polyfill): ${err?.message || err}`);
     }
   } else {
@@ -954,19 +1043,17 @@ export async function rewriteText(
         options,
       );
 
-      let session;
-      try {
-        session = await LanguageModel.create({
-          systemPrompt,
-          ...(monitor ? { monitor } : {}),
-        });
-      } catch {
-        session = await LanguageModel.create();
-      }
+      const session = await LanguageModel.create({
+        initialPrompts: [{ role: "system", content: systemPrompt }],
+        ...(monitor ? { monitor } : {}),
+        ...(options?.signal ? { signal: options.signal } : {}),
+      });
 
       if (session) {
         try {
-          return await session.prompt(userPrompt);
+          return await (options?.signal
+            ? session.prompt(userPrompt, { signal: options.signal })
+            : session.prompt(userPrompt));
         } finally {
           if (typeof session?.destroy === "function") {
             session.destroy();
@@ -974,6 +1061,7 @@ export async function rewriteText(
         }
       }
     } catch (err: any) {
+      if (err?.name !== "NotSupportedError") throw err;
       errors.push(`Tier 3 (Prompt API): ${err?.message || err}`);
     }
   } else {

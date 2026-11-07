@@ -428,6 +428,115 @@ describe("initControlPlane", () => {
       }
     });
 
+    it.each([true, false])(
+      "rejects invalid WebMCP output without re-executing (direct=%s)",
+      async (direct) => {
+        const execute = jest.fn(async () => ({ temperature: "warm" }));
+        const executeTool = jest.fn(async () => ({ temperature: "warm" }));
+        const tool = {
+          name: "weather_custom",
+          outputSchema: {
+            type: "object",
+            properties: { temperature: { type: "number" } },
+            required: ["temperature"],
+          },
+          ...(direct ? { execute } : {}),
+        };
+        const original = Object.getOwnPropertyDescriptor(
+          document,
+          "modelContext",
+        );
+        Object.defineProperty(document, "modelContext", {
+          configurable: true,
+          value: { getTools: async () => [tool], executeTool },
+        });
+        try {
+          await expect(
+            executeClientControlCommand("invoke-tool", { toolName: tool.name }),
+          ).rejects.toThrow(/output schema/i);
+          expect(execute).toHaveBeenCalledTimes(direct ? 1 : 0);
+          expect(executeTool).toHaveBeenCalledTimes(direct ? 0 : 1);
+        } finally {
+          if (original)
+            Object.defineProperty(document, "modelContext", original);
+          else delete (document as any).modelContext;
+        }
+      },
+    );
+
+    it("validates results from legacy callTool when a discovered schema is available", async () => {
+      const callTool = jest.fn(async () => ({ temperature: "warm" }));
+      const tool = {
+        name: "weather_custom",
+        outputSchema: {
+          type: "object",
+          properties: { temperature: { type: "number" } },
+        },
+      };
+      const original = Object.getOwnPropertyDescriptor(
+        document,
+        "modelContext",
+      );
+      Object.defineProperty(document, "modelContext", {
+        configurable: true,
+        value: { getTools: async () => [tool], callTool },
+      });
+      try {
+        await expect(
+          executeClientControlCommand("invoke-tool", { toolName: tool.name }),
+        ).rejects.toThrow(/output schema/i);
+        expect(callTool).toHaveBeenCalledTimes(1);
+      } finally {
+        if (original) Object.defineProperty(document, "modelContext", original);
+        else delete (document as any).modelContext;
+      }
+    });
+
+    it("validates worker fallback results against a discovered schema", async () => {
+      const original = Object.getOwnPropertyDescriptor(
+        document,
+        "modelContext",
+      );
+      Object.defineProperty(document, "modelContext", {
+        configurable: true,
+        value: {
+          getTools: async () => [
+            {
+              name: "weather_custom",
+              outputSchema: { type: "object", required: ["temperature"] },
+            },
+          ],
+        },
+      });
+      let handler: (event: any) => void;
+      const worker = {
+        addEventListener: (_event: string, callback: (event: any) => void) => {
+          handler = callback;
+        },
+        removeEventListener: jest.fn(),
+        postMessage: (message: any) =>
+          handler({
+            data: {
+              type: "execute-tool-result",
+              callId: message.callId,
+              result: {},
+            },
+          }),
+      };
+      try {
+        await expect(
+          executeClientControlCommand(
+            "invoke-tool",
+            { toolName: "weather_custom" },
+            { orchestrator: { agentWorker: worker } as any },
+          ),
+        ).rejects.toThrow(/output schema/i);
+      } finally {
+        if (original) Object.defineProperty(document, "modelContext", original);
+        else delete (document as any).modelContext;
+      }
+    });
+
     it("handles executeClientControlCommand send-message and validation", async () => {
       const mockSubmit = jest.fn();
       const mockSubmitMessage = jest.fn();

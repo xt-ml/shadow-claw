@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { execFileSync } from "node:child_process";
 import path, { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
@@ -22,6 +23,9 @@ const rolldownConfigUrl = pathToFileURL(
 const rolldownLibConfigUrl = pathToFileURL(
   path.resolve(projectRoot, "configs/rolldown/rolldown.lib.config.mjs"),
 ).href;
+const rolldownCliConfigUrl = pathToFileURL(
+  path.resolve(projectRoot, "configs/rolldown/rolldown.cli.config.mjs"),
+).href;
 
 const {
   default: config,
@@ -29,6 +33,7 @@ const {
   libraryEntries,
 } = await import(rolldownConfigUrl);
 const libConfig = (await import(rolldownLibConfigUrl)).default;
+const cliConfig = (await import(rolldownCliConfigUrl)).default;
 
 describe("rolldown.config.mjs", () => {
   describe("library build config", () => {
@@ -77,6 +82,89 @@ describe("rolldown.config.mjs", () => {
   });
 
   describe("bundle configurations and splitting", () => {
+    it("applies Firebase AI compatibility only to the Prompt API polyfill", () => {
+      const frontend = (config as any[]).find(
+        (entry) => entry.input === "src/core/index.ts",
+      );
+      const plugin = frontend?.plugins?.find(
+        (entry: any) => entry?.name === "prompt-api-firebase-ai-compat",
+      );
+      expect(plugin).toBeDefined();
+      const importer = path.join(
+        projectRoot,
+        "node_modules/prompt-api-polyfill/dist/backends/firebase.js",
+      );
+      const resolved = plugin.resolveId("firebase/ai", importer);
+      expect(resolved).toBeTruthy();
+      expect(
+        plugin.resolveId("firebase/ai", "/other/package/index.js"),
+      ).toBeNull();
+      const code = plugin.load(resolved);
+      expect(code).toContain('export * from "firebase/ai"');
+      expect(code).toContain("AgentPlatformBackend");
+      expect(code).toContain('super("us-central1")');
+    });
+
+    it("uses the same Firebase compatibility adapter in the CLI build", () => {
+      expect(
+        cliConfig.plugins?.some(
+          (entry: any) => entry?.name === "prompt-api-firebase-ai-compat",
+        ),
+      ).toBe(true);
+    });
+
+    it("bundles and executes both Firebase backend modes without network access", () => {
+      const script = `
+        import { rolldown } from "rolldown";
+        import configs from "./configs/rolldown/rolldown.config.mjs";
+        const plugin = configs.find(config => config.input === "src/core/index.ts")
+          .plugins.find(item => item.name === "prompt-api-firebase-ai-compat");
+        const bundle = await rolldown({
+          input: "node_modules/prompt-api-polyfill/dist/backends/firebase.js",
+          platform: "browser",
+          plugins: [plugin],
+        });
+        try {
+          const output = await bundle.generate({ format: "esm" });
+          const code = output.output.find(item => item.type === "chunk").code;
+          const requests = [];
+          globalThis.fetch = async (url) => {
+            requests.push(String(url));
+            return new Response(JSON.stringify({
+              candidates: [{ content: { role: "model", parts: [{ text: "test response" }] }, finishReason: "STOP" }],
+              usageMetadata: { promptTokenCount: 1 },
+            }), { status: 200, headers: { "content-type": "application/json" } });
+          };
+          const { default: Backend } = await import(
+            "data:text/javascript;base64," + Buffer.from(code).toString("base64")
+          );
+          for (const provider of ["developer", "vertex"]) {
+            const backend = new Backend({
+              apiKey: "test-key", projectId: "test-project", appId: "test-app",
+              geminiApiProvider: provider,
+            });
+            backend.createSession({}, { model: "test-model" });
+            const result = await backend.generateContent([{ role: "user", parts: [{ text: "test" }] }]);
+            if (result.text !== "test response") throw new Error("Unexpected Firebase response");
+          }
+          if (!requests[0].includes("/projects/test-project/models/test-model:generateContent")) {
+            throw new Error("Unexpected Developer API endpoint");
+          }
+          if (!requests[1].includes("/locations/us-central1/publishers/google/models/test-model:generateContent")) {
+            throw new Error("Vertex API did not preserve the original region");
+          }
+        } finally {
+          await bundle.close();
+        }
+      `;
+      expect(() =>
+        execFileSync(process.execPath, ["--input-type=module", "-e", script], {
+          cwd: projectRoot,
+          stdio: "pipe",
+        }),
+      ).not.toThrow();
+    });
+
     it("exports an array of build configs", () => {
       expect(Array.isArray(config)).toBe(true);
       expect((config as any[]).length).toBeGreaterThanOrEqual(8);

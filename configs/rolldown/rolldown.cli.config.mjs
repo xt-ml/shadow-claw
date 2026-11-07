@@ -1,6 +1,7 @@
 import { defineConfig } from "rolldown";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promptApiFirebaseAiCompatPlugin } from "./rolldown.config.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, "../..");
@@ -13,6 +14,7 @@ const isProduction = process.env.NODE_ENV === "production";
  * compiled output can be run directly by Node without bundling them.
  */
 export default defineConfig({
+  plugins: [promptApiFirebaseAiCompatPlugin()],
   input: {
     cli: "src/cli/cli.ts",
     "build/build": "src/cli/build/build.ts",

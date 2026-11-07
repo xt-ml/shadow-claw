@@ -16,6 +16,7 @@ import type { InvokePayload } from "../../../subsystems/worker/types.js";
  * a valid InvokePayload without access to the full orchestrator state.
  */
 export interface SubagentInvokeContext {
+  abortSignal?: AbortSignal;
   db: any;
   apiKey: string;
   model: string;

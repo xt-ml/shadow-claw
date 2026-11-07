@@ -6,6 +6,7 @@ export interface ToolDefinition {
     required?: string[];
     type?: string;
   };
+  output_schema?: Record<string, unknown>;
 }
 
 export interface DeclarativeToolExecution {

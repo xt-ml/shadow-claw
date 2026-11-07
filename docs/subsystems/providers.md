@@ -130,6 +130,8 @@ Used by direct Google Gemini API integrations (`format: "google"`). Note that th
 
 Backed by the `builtin-ai-tasks` subsystem with dynamic polyfill loading and a Main-Thread RPC bridge (`request-native-ai-task`) to execute native browser Task APIs (`window.ai.*` / `window.translation.*` and global constructors for Summarizer, Writer, Rewriter, Proofreader, Language Detector, and Translator) off the Web Worker thread. When manually selected, polyfill fallback for `prompt_api` is transparently enabled for provider invocations and context compaction.
 
+The Prompt API polyfill's Firebase backend currently imports the removed `VertexAIBackend` name. The Rolldown builds provide a compatibility export backed by Firebase's `AgentPlatformBackend` with the original `us-central1` region; other Firebase imports remain unchanged. This adapter can be removed when the upstream polyfill supports Firebase 13 directly. Firebase is a cloud backend: configure it deliberately, restrict its API key, and enforce Firebase App Check with a production attestation provider. Never embed privileged credentials or App Check debug tokens in published assets. The polyfill prioritizes a configured Firebase backend over its Transformers.js backend, so configuring Firebase may send prompts to the cloud.
+
 - **Manual Selection**: Available when selected in Settings or workspace configuration for native Chrome Built-in AI execution.
 - **Zero Configuration**: Keyless, zero-cost execution with zero network requirements once models are cached.
 - **Dynamic Fallback Architecture**:
@@ -150,7 +152,7 @@ Backed by the `builtin-ai-tasks` subsystem with dynamic polyfill loading and a M
   - Model download progress is aggregated via `promptApiProgressAggregator`, dynamically calculating model sizes and suppressing initial false 0% states.
 - **Configurable Task Tools Backend**:
   - `BUILTIN_AI_TOOLS_BACKEND` setting defaults to **Active Conversation LLM** (`active_provider`) so native tasks (summarize, rewrite, translate) route to the main LLM provider, with option to select local browser WebGPU/WASM polyfills (`local`).
-  - When executing task APIs locally or via Prompt API, ShadowClaw employs a 3-tier fallback architecture: Tier 1 (Native / `writer-rewriter-polyfills`), Tier 2 (Legacy `built-in-ai-task-apis-polyfills`), and Tier 3 (Direct `window.LanguageModel` with Chrome-internal prompt builders `WriterPromptBuilder`, `RewriterPromptBuilder`, `SummarizerPromptBuilder`).
+  - Local writing tasks prefer the native API or `writer-rewriter-polyfills`, followed by the legacy task polyfill and a direct `LanguageModel` session. Only unsupported-capability errors trigger writing-task fallback. Prompt builders are locally maintained approximations; see [Task API Compatibility](./tools.md#task-api-compatibility) for cancellation, download, and privacy limitations.
 - **Sampling Parameters**:
   - Supports sampling parameters (`samplingMode`, `temperature`, `topK`) passed to model session initialization per Chrome Built-in AI / W3C Prompt API explainer.
 

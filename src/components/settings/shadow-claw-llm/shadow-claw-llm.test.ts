@@ -285,6 +285,83 @@ describe("shadow-claw-llm", () => {
     expect(customElements.get("shadow-claw-llm")).toBe(ShadowClawLlm);
   });
 
+  it("starts local model preparation only from the download action and reports progress", async () => {
+    const originalLanguageModel = (globalThis as any).LanguageModel;
+    let finish: (value: any) => void = () => {};
+    let onProgress: ((event: any) => void) | undefined;
+    const destroy = jest.fn();
+    const create = jest.fn<any>().mockImplementation(({ monitor }: any) => {
+      monitor({
+        addEventListener: (_name: string, handler: any) => {
+          onProgress = handler;
+        },
+      });
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    });
+    (globalThis as any).LanguageModel = { create };
+
+    try {
+      const el = new ShadowClawLlm();
+      el.bindEventListeners();
+      const button = el.shadowRoot?.querySelector<HTMLButtonElement>(
+        '[data-action="prepare-builtin-ai-model"]',
+      );
+      const status = el.shadowRoot?.querySelector<HTMLElement>(
+        '[data-info="builtin-ai-model-status"]',
+      );
+      expect(button).not.toBeNull();
+      expect(create).not.toHaveBeenCalled();
+      button!.disabled = false;
+      button!.click();
+      expect(create).toHaveBeenCalledTimes(1);
+      expect(button!.disabled).toBe(true);
+      onProgress?.({ loaded: 0.5, total: 1 });
+      expect(status?.textContent).toContain("50%");
+      finish({ destroy });
+      await new Promise(process.nextTick);
+      expect(destroy).not.toHaveBeenCalled();
+      expect(button!.disabled).toBe(false);
+      expect(status?.textContent).toMatch(/ready/i);
+      const { releasePreparedPromptApiSession } =
+        await import("../../../subsystems/providers/builtin-ai-tasks.js");
+      await releasePreparedPromptApiSession();
+      expect(destroy).toHaveBeenCalledTimes(1);
+    } finally {
+      (globalThis as any).LanguageModel = originalLanguageModel;
+    }
+  });
+
+  it("reports model preparation failure and re-enables the action", async () => {
+    const originalLanguageModel = (globalThis as any).LanguageModel;
+    (globalThis as any).LanguageModel = {
+      create: jest
+        .fn<any>()
+        .mockRejectedValue(
+          new DOMException("User gesture required", "NotAllowedError"),
+        ),
+    };
+    try {
+      const el = new ShadowClawLlm();
+      el.bindEventListeners();
+      const button = el.shadowRoot?.querySelector<HTMLButtonElement>(
+        '[data-action="prepare-builtin-ai-model"]',
+      );
+      const status = el.shadowRoot?.querySelector<HTMLElement>(
+        '[data-info="builtin-ai-model-status"]',
+      );
+      expect(button).not.toBeNull();
+      button!.disabled = false;
+      button!.click();
+      await new Promise(process.nextTick);
+      expect(status?.textContent).toMatch(/user gesture required/i);
+      expect(button!.disabled).toBe(false);
+    } finally {
+      (globalThis as any).LanguageModel = originalLanguageModel;
+    }
+  });
+
   it("renders selectors correctly", async () => {
     const orch = createOrchestratorStub();
     (orchestratorStore as any).orchestrator = orch;

@@ -288,7 +288,7 @@ The `<shadow-claw-tools>` component includes interactive controls for managing t
   - Options for automatic enablement of imported tools (`#toolsImportAutoEnable`) and destination overwrite toggle (`#toolsImportOverwrite`).
   - Executes batch downloading, SHA-256 integrity verification, and OPFS persistence to `.agents/tools/`, `.agents/skills/`, and `.agents/scripts/` (with backward-compatible `main/` reads).
   - Testing considerations: mock remote manifest endpoints via Playwright route interception (`page.route('**/.well-known/agent-skills/index.json', ...)`) and verify OPFS persistence via the `__SHADOWCLAW_E2E__` bridge.
-- **WebMCP Toggle** (`.tools__webmcp-toggle`): Toggles integration with browser's Model Context Protocol.
+- **WebMCP Toggle** (`.tools__webmcp-toggle`): Toggles integration with browser's Model Context Protocol (supporting normalized input and output schemas, and output schema result validation).
 - **WebMCP Mode selector** (`.tools__webmcp-mode`): Selects the WebMCP execution mode.
 
 ## Page Object Guide
@@ -334,7 +334,7 @@ Behavior notes:
 - Chat can show a transient model download progress panel when using Prompt API or Transformers.js Browser providers.
 - Assertions around that panel should be state-based (present/hidden) and not rely on fixed timing.
 - **Transformers.js Testing**: ShadowClaw defaults out-of-the-box in the browser to Transformers.js (`transformers_js_browser` with `onnx-community/Qwen3-0.6B-ONNX`). Verify onboarding dialog interactions (including when first browsing directly to static deployment routes such as `/chat`), chunked model download progress estimation (via Hugging Face tree API), local inference (defaulting to `q4f16`), and dynamic Jinja chat-template parsing when using local models.
-- **Prompt API Testing**: When testing the optional native browser Prompt API (`prompt_api`), verify that requests route through `invokeWithPromptApi()`, ensure native hardware API detection functions when available, and verify graceful degradation to local Transformers.js polyfills when native Prompt API is unavailable. Note that the onboarding dialog routes users to Transformers.js by default and does not assert Prompt API as default.
+- **Prompt API Testing**: When testing the optional native browser Prompt API (`prompt_api`), verify that requests route through `invokeWithPromptApi()`, ensure native hardware API detection functions when available, and verify graceful degradation to local Transformers.js polyfills when native Prompt API is unavailable. Note that the onboarding dialog routes users to Transformers.js by default and does not assert Prompt API as default. Settings > AI also provides a "Download Local AI Model" button (`prepare-builtin-ai-model`) to trigger user-activation and model preparation with real-time download progress.
 - **Provider Help Dialogs**: When a provider request fails, the application may display a contextual help dialog. Use `app.navigateToWithOpenDialog()` to test flows that interrupt navigation with dialogs, or verify dialog content via standard locators on the `.app-dialog` component.
 - **Attachment Capabilities**: When testing file attachments, keep in mind that the application dynamically selects native vs. fallback delivery based on model capabilities (`src/content/attachment-capabilities.ts`).
 - **Confirmation Flows**: Destructive chat actions (for example message delete and compact) use app-level dialogs, so tests should assert dialog behavior rather than native `window.confirm()`.

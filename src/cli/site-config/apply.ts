@@ -971,6 +971,12 @@ export async function copyCustomSiteFiles(
     try {
       const entries = await readdir(resDir, { withFileTypes: true });
       for (const entry of entries) {
+        if (entry.isFile()) {
+          const lowerName = entry.name.toLowerCase();
+          if (lowerName === "readme.md" || lowerName === "agents.md") {
+            continue;
+          }
+        }
         const srcPath = path.join(resDir, entry.name);
         const destPath = path.join(distPublicDir, entry.name);
         if (entry.isDirectory()) {
@@ -980,6 +986,37 @@ export async function copyCustomSiteFiles(
           await copyFile(srcPath, destPath);
         }
       }
+    } catch {}
+  }
+
+  const rootCandidates = [repoRootDir, configDir, templateRootDir];
+  const rootReadmeCandidates: string[] = [];
+  const rootAgentsCandidates: string[] = [];
+  for (const dir of rootCandidates) {
+    if (!dir) continue;
+    rootReadmeCandidates.push(
+      path.resolve(dir, "README.md"),
+      path.resolve(dir, "README.MD"),
+    );
+    rootAgentsCandidates.push(
+      path.resolve(dir, "AGENTS.md"),
+      path.resolve(dir, "AGENTS.MD"),
+    );
+  }
+
+  const foundReadme = await findFirstExisting(rootReadmeCandidates);
+  if (foundReadme) {
+    try {
+      await copyFile(foundReadme, path.join(distPublicDir, "README.md"));
+      await copyFile(foundReadme, path.join(distPublicDir, "README.MD"));
+    } catch {}
+  }
+
+  const foundAgents = await findFirstExisting(rootAgentsCandidates);
+  if (foundAgents) {
+    try {
+      await copyFile(foundAgents, path.join(distPublicDir, "AGENTS.md"));
+      await copyFile(foundAgents, path.join(distPublicDir, "AGENTS.MD"));
     } catch {}
   }
 

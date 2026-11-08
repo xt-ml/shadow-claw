@@ -930,8 +930,12 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
             rel.startsWith("llms.txt.") ||
             rel === "README.md" ||
             rel.startsWith("README.md.") ||
+            rel === "README.MD" ||
+            rel.startsWith("README.MD.") ||
             rel === "AGENTS.md" ||
-            rel.startsWith("AGENTS.md.")
+            rel.startsWith("AGENTS.md.") ||
+            rel === "AGENTS.MD" ||
+            rel.startsWith("AGENTS.MD.")
           ) {
             return false;
           }

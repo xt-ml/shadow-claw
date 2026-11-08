@@ -884,6 +884,79 @@ https://example.com/about`;
       expect(copiedAsset).toBe("PNG_RESOURCE");
     });
 
+    it("copies README.md and AGENTS.md from root and ignores them in pages/resources", async () => {
+      const distPublicDir = path.join(tmpDir, "dist/public");
+      const pagesDir = path.join(tmpDir, "pages");
+      const resourcesDir = path.join(pagesDir, "resources");
+      await mkdir(distPublicDir, { recursive: true });
+      await mkdir(resourcesDir, { recursive: true });
+
+      const indexPath = path.join(distPublicDir, "index.html");
+      const siteConfigPath = path.join(tmpDir, "shadow-claw.config.json");
+
+      await writeFile(
+        indexPath,
+        '<!doctype html><html><head><script src="theme-init.js"></script></head><body></body></html>',
+        "utf8",
+      );
+
+      // Put files at root
+      await writeFile(
+        path.join(tmpDir, "README.md"),
+        "# Root Readme Content",
+        "utf8",
+      );
+      await writeFile(
+        path.join(tmpDir, "AGENTS.md"),
+        "# Root Agents Content",
+        "utf8",
+      );
+
+      // Put stale/conflicting files in pages/resources
+      await writeFile(
+        path.join(resourcesDir, "README.md"),
+        "# Stale Resources Readme",
+        "utf8",
+      );
+      await writeFile(
+        path.join(resourcesDir, "AGENTS.md"),
+        "# Stale Resources Agents",
+        "utf8",
+      );
+
+      const config = {
+        site: { title: "Test Readme Agents Copy" },
+      };
+      await writeFile(siteConfigPath, JSON.stringify(config), "utf8");
+
+      const result = await applySiteConfig(distPublicDir, siteConfigPath);
+      expect(result.applied).toBe(true);
+
+      const distReadme = await readFile(
+        path.join(distPublicDir, "README.md"),
+        "utf8",
+      );
+      expect(distReadme).toBe("# Root Readme Content");
+
+      const distAgents = await readFile(
+        path.join(distPublicDir, "AGENTS.md"),
+        "utf8",
+      );
+      expect(distAgents).toBe("# Root Agents Content");
+
+      const distReadmeUpper = await readFile(
+        path.join(distPublicDir, "README.MD"),
+        "utf8",
+      );
+      expect(distReadmeUpper).toBe("# Root Readme Content");
+
+      const distAgentsUpper = await readFile(
+        path.join(distPublicDir, "AGENTS.MD"),
+        "utf8",
+      );
+      expect(distAgentsUpper).toBe("# Root Agents Content");
+    });
+
     it("prefers the content repo's pages/resources branding asset over a same-path ShadowClaw default at the repo root", async () => {
       const distPublicDir = path.join(tmpDir, "dist/public");
       const repoRootDir = tmpDir;

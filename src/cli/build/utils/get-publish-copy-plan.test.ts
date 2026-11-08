@@ -7,6 +7,15 @@ describe("getPublishCopyPlan", () => {
     expect(
       plan.find((entry) => entry.dest === "dist/public/README.md"),
     ).toBeTruthy();
+    expect(
+      plan.find((entry) => entry.dest === "dist/public/README.MD"),
+    ).toBeTruthy();
+    expect(
+      plan.find((entry) => entry.dest === "dist/public/AGENTS.md"),
+    ).toBeTruthy();
+    expect(
+      plan.find((entry) => entry.dest === "dist/public/AGENTS.MD"),
+    ).toBeTruthy();
     expect(plan.find((entry) => entry.dest === "dist/public/docs")).toEqual(
       expect.objectContaining({
         opts: { recursive: true },
@@ -36,7 +45,15 @@ describe("getPublishCopyPlan", () => {
     );
     expect(readmeEntry).toBeTruthy();
     expect(readmeEntry!.sources).toContain("/custom/content/README.md");
+    expect(readmeEntry!.sources[0]).toBe("/custom/content/README.md");
     expect(readmeEntry!.sources).toContain("/custom/content/pages/README.md");
+
+    const agentsEntry = plan.find(
+      (entry) => entry.dest === "/custom/content/dist/public/AGENTS.md",
+    );
+    expect(agentsEntry).toBeTruthy();
+    expect(agentsEntry!.sources).toContain("/custom/content/AGENTS.md");
+    expect(agentsEntry!.sources[0]).toBe("/custom/content/AGENTS.md");
   });
 
   it("does not leak toolchain docs, README, or sitemap when toolchainRoot !== contentRoot", () => {

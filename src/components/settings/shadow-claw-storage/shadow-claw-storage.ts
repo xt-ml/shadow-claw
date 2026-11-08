@@ -178,6 +178,23 @@ export class ShadowClawStorage extends ShadowClawElement {
       return;
     }
 
+    const confirmed = await this.requestConfirmation({
+      title: "Change Storage Location",
+      message:
+        "Switching storage location will point ShadowClaw to a local folder on disk.",
+      details: [
+        "Existing files in browser storage (OPFS) will NOT be copied or moved.",
+        "Your current files remain safe in browser storage and can be accessed again by clicking 'Reset to Default'.",
+        "To keep existing files in the new location, consider downloading a ZIP backup first.",
+      ],
+      confirmLabel: "Choose Folder",
+      cancelLabel: "Cancel",
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
     try {
       const success = await selectStorageDirectory(this.db);
       if (success) {
@@ -318,6 +335,7 @@ export class ShadowClawStorage extends ShadowClawElement {
     message: string;
     confirmLabel?: string;
     cancelLabel?: string;
+    details?: string[];
   }): Promise<boolean> {
     const appShell = document.querySelector("shadow-claw") as any;
     if (appShell && typeof appShell.requestDialog === "function") {

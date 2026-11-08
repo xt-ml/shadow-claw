@@ -200,15 +200,34 @@ describe("shadow-claw-storage", () => {
     );
   });
 
-  it("handles handleChangeStorageDir success and errors", async () => {
+  it("handles handleChangeStorageDir confirmation, success, and errors", async () => {
     const { selectStorageDirectory } =
       await import("../../../storage/select-storage-directory.js");
-    const { showError } = await import("../../../ui/toast.js");
+    const { showError, showSuccess } = await import("../../../ui/toast.js");
 
     const el = new ShadowClawStorage() as any;
     el.db = {};
     el.updateStorageInfo = jest.fn();
 
+    // 1. Rejection / cancellation
+    el.requestConfirmation = jest.fn().mockResolvedValue(false);
+    await el.handleChangeStorageDir();
+    expect(el.requestConfirmation).toHaveBeenCalledWith({
+      title: "Change Storage Location",
+      message:
+        "Switching storage location will point ShadowClaw to a local folder on disk.",
+      details: [
+        "Existing files in browser storage (OPFS) will NOT be copied or moved.",
+        "Your current files remain safe in browser storage and can be accessed again by clicking 'Reset to Default'.",
+        "To keep existing files in the new location, consider downloading a ZIP backup first.",
+      ],
+      confirmLabel: "Choose Folder",
+      cancelLabel: "Cancel",
+    });
+    expect(selectStorageDirectory).not.toHaveBeenCalled();
+
+    // 2. Confirmed and success
+    el.requestConfirmation = jest.fn().mockResolvedValue(true);
     (selectStorageDirectory as jest.Mock<any>).mockResolvedValueOnce(true);
     await el.handleChangeStorageDir();
     expect(showSuccess).toHaveBeenCalledWith(
@@ -216,6 +235,7 @@ describe("shadow-claw-storage", () => {
       4500,
     );
 
+    // 3. Confirmed and error
     (selectStorageDirectory as jest.Mock<any>).mockRejectedValueOnce(
       new Error("Directory pick error"),
     );
@@ -301,10 +321,15 @@ describe("shadow-claw-storage", () => {
     const res2 = await el.requestConfirmation({
       title: "Test",
       message: "Confirm action?",
+      details: ["Detail note"],
     });
     expect(res2).toBe(true);
     expect(appShell.requestDialog).toHaveBeenCalledWith(
-      expect.objectContaining({ mode: "confirm", title: "Test" }),
+      expect.objectContaining({
+        mode: "confirm",
+        title: "Test",
+        details: ["Detail note"],
+      }),
     );
 
     document.body.removeChild(appShell);

@@ -448,6 +448,14 @@ An interactive documentation platform and demonstration engine for the classic U
 
 [![pwgen Knowledge Hub screenshot](https://xt-ml.github.io/shadow-claw/assets/screenshots/kherrick.github.io_pwgen-knowledge-hub-1024x768.png)](https://kherrick.github.io/pwgen-knowledge-hub/)
 
+### [Shadow Claw DAW](https://xt-ml.github.io/shadow-claw-daw/)
+
+[![Agent Skills](https://img.shields.io/badge/Agent_Skills-Discovery-8b5cf6?style=flat)](https://xt-ml.github.io/shadow-claw-daw/.well-known/agent-skills/index.json)
+
+An in-browser digital audio workstation (DAW) template powered by **ShadowClaw**, featuring a Vanilla JS Web Audio API engine, TC39-shaped reactive Signals, Web Components, and autonomous agent skills.
+
+[![Shadow Claw DAW screenshot](https://xt-ml.github.io/shadow-claw/assets/screenshots/xt-ml.github.io_shadow-claw-daw-1024x768.png)](https://xt-ml.github.io/shadow-claw-daw/)
+
 ### [ShadowClaw Agent CLI Weather](https://xt-ml.github.io/shadow-claw-agent-cli-weather/)
 
 [![Agent Skills](https://img.shields.io/badge/Agent_Skills-Discovery-8b5cf6?style=flat)](https://xt-ml.github.io/shadow-claw-agent-cli-weather/.well-known/agent-skills/index.json)

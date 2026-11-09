@@ -1146,6 +1146,8 @@ program
           },
           branding: {
             titleText: "My ShadowClaw Site",
+            faviconPath: "assets/icons/favicon.svg",
+            appleTouchIconPath: "assets/icons/180.png",
           },
           pages: {
             sortOrder: "asc",
@@ -1195,6 +1197,64 @@ slug: "home"
       console.log(`  npx shadow-claw dev\n`);
     } catch (err) {
       console.error("Init failed:", err);
+      process.exit(1);
+    }
+  });
+
+program
+  .command("icons [dir]")
+  .description(
+    "Generate or refresh template-specific favicon.svg, favicon.ico, apple-touch-icon.png, and PWA PNG icons (48..1024)",
+  )
+  .option(
+    "--out-dir <dir>",
+    "Target icons directory relative to content root (default: pages/resources/assets/icons)",
+  )
+  .option(
+    "--force",
+    "Regenerate all raster PNG and ICO files from the primary SVG/PNG icon source",
+    false,
+  )
+  .action(async (dirArg, options) => {
+    try {
+      const targetRoot = path.resolve(dirArg || process.cwd());
+      const { getSiteConfigCandidates } =
+        await import("./build/utils/get-site-config-candidates.js");
+      const { findFirstExistingPath } =
+        await import("./build/utils/find-first-existing-path.js");
+      const { ensureTemplateIconSet } =
+        await import("./site-config/generate-icons.js");
+
+      const configCandidate = await findFirstExistingPath(
+        getSiteConfigCandidates(targetRoot),
+      );
+      let config: any = {};
+      if (configCandidate) {
+        try {
+          config = JSON.parse(await readFile(configCandidate, "utf8"));
+        } catch {}
+      }
+
+      const outRel = options.outDir || "pages/resources/assets/icons";
+      const targetIconsDir = path.resolve(targetRoot, outRel);
+      const result = await ensureTemplateIconSet({
+        targetIconsDir,
+        searchDirs: [
+          targetIconsDir,
+          path.join(targetRoot, "pages/resources"),
+          path.join(targetRoot, "assets/icons"),
+          path.join(targetRoot, "pages/main"),
+          targetRoot,
+        ],
+        config,
+        forceOverwriteAll: Boolean(options.force),
+      });
+
+      console.log(
+        `Generated ${result.generatedFiles.length} icon file(s) in ${targetIconsDir} (source: ${result.sourceType}).`,
+      );
+    } catch (err) {
+      console.error("Failed to generate icons:", err);
       process.exit(1);
     }
   });

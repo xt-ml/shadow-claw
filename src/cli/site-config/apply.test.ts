@@ -15,9 +15,11 @@ import {
   patchBaseHref,
   patchIndexHtml,
   patchManifest,
+  patchShareTargetHtml,
   patchSitemap,
   resolveSiteBasePath,
 } from "./apply.js";
+import { isDefaultShadowClawIconBuffer } from "./generate-icons.js";
 
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -583,9 +585,247 @@ describe("apply-site-config", () => {
         '<meta name="twitter:description" content="Web Bluetooth sensory workbench" />',
       );
     });
+
+    it("injects and patches Apple Home Screen Web App and application-name meta tags", () => {
+      const patched = patchIndexHtml(baseHtml, {
+        site: {
+          title: "TinyDuino LightMeter — Hardware Sensory Workbench",
+        },
+        branding: {
+          titleText: "TinyDuino LightMeter",
+        },
+        pwa: {
+          shortName: "LightMeter",
+          appleStatusBarStyle: "black-translucent",
+        },
+      });
+
+      expect(patched).toContain(
+        '<meta name="apple-mobile-web-app-capable" content="yes" />',
+      );
+      expect(patched).toContain(
+        '<meta name="mobile-web-app-capable" content="yes" />',
+      );
+      expect(patched).toContain(
+        '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />',
+      );
+      expect(patched).toContain(
+        '<meta name="apple-mobile-web-app-title" content="LightMeter" />',
+      );
+      expect(patched).toContain(
+        '<meta name="application-name" content="LightMeter" />',
+      );
+    });
+
+    it("uses resolvedAppleTouchIconPath option when provided so .svg appleTouchIconPath resolves to a raster PNG", () => {
+      const htmlWithApple = baseHtml.replace(
+        "</head>",
+        '<link href="assets/icons/180.png" rel="apple-touch-icon" /></head>',
+      );
+      const patched = patchIndexHtml(
+        htmlWithApple,
+        {
+          branding: {
+            faviconPath: "assets/icons/favicon.svg",
+            appleTouchIconPath: "assets/icons/favicon.svg",
+          },
+        },
+        undefined,
+        { resolvedAppleTouchIconPath: "assets/icons/180.png" },
+      );
+
+      expect(patched).toContain(
+        '<link href="assets/icons/favicon.svg" rel="icon" type="image/svg+xml" />',
+      );
+      expect(patched).toContain(
+        '<link href="assets/icons/180.png" rel="apple-touch-icon" />',
+      );
+    });
+
+    it("supports custom branding.ogImagePath when resolving og:image and twitter:image", () => {
+      const fullHtml = `<!doctype html>
+<html>
+  <head>
+    <title>ShadowClaw</title>
+    <meta property="og:image" content="https://xt-ml.github.io/shadow-claw/assets/icons/512.png" />
+    <meta name="twitter:image" content="https://xt-ml.github.io/shadow-claw/assets/icons/512.png" />
+  </head>
+  <body></body>
+</html>`;
+
+      const patched = patchIndexHtml(fullHtml, {
+        site: { title: "Karl Herrick" },
+        branding: {
+          siteUrl: "https://infinitym.ca/",
+          ogImagePath: "icon-192x192.png",
+        },
+      });
+
+      expect(patched).toContain(
+        '<meta property="og:image" content="https://infinitym.ca/icon-192x192.png" />',
+      );
+      expect(patched).toContain(
+        '<meta name="twitter:image" content="https://infinitym.ca/icon-192x192.png" />',
+      );
+    });
+  });
+
+  describe("patchShareTargetHtml", () => {
+    const baseShareHtml = `<!doctype html>
+<html lang="en">
+  <head>
+    <title>ShadowClaw</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="ShadowClaw - multi-runtime AI assistant." />
+    <meta name="theme-color" content="#fff" />
+    <base href="/" />
+    <link rel="manifest" href="manifest.json" />
+    <link href="assets/icons/favicon.ico" rel="icon" type="image/x-icon" />
+    <link href="assets/icons/180.png" rel="apple-touch-icon" />
+  </head>
+  <body>
+    <shadow-claw>
+      <template id="share-target-boot-template">
+        <div aria-hidden="true" class="boot-shell">
+          <header class="boot-shell-header">
+            <div class="boot-shell-brand">🦞 ShadowClaw</div>
+            <div class="boot-shell-status">Importing shared content...</div>
+          </header>
+        </div>
+      </template>
+    </shadow-claw>
+  </body>
+</html>`;
+
+    it("patches title, description, theme-color, icons, Apple meta tags, and boot-shell-brand", () => {
+      const patched = patchShareTargetHtml(
+        baseShareHtml,
+        {
+          site: {
+            title: "TinyDuino LightMeter — Hardware Sensory Workbench",
+            description: "Hardware sensory workbench.",
+            themeColor: "#060d14",
+          },
+          branding: {
+            titleText: "TinyDuino LightMeter",
+            faviconPath: "assets/icons/favicon.svg",
+            appleTouchIconPath: "assets/icons/180.png",
+          },
+          pwa: {
+            shortName: "LightMeter",
+          },
+        },
+        { basePath: "/shadow-claw-light-meter/" },
+      );
+
+      expect(patched).toContain(
+        "<title>TinyDuino LightMeter — Hardware Sensory Workbench</title>",
+      );
+      expect(patched).toContain(
+        '<meta name="description" content="Hardware sensory workbench." />',
+      );
+      expect(patched).toContain(
+        '<meta name="theme-color" content="#060d14" />',
+      );
+      expect(patched).toContain('<base href="/shadow-claw-light-meter/" />');
+      expect(patched).toContain(
+        '<link href="assets/icons/favicon.svg" rel="icon" type="image/svg+xml" />',
+      );
+      expect(patched).toContain(
+        '<link href="assets/icons/180.png" rel="apple-touch-icon" />',
+      );
+      expect(patched).toContain(
+        '<meta name="apple-mobile-web-app-title" content="LightMeter" />',
+      );
+      expect(patched).toContain(
+        '<div class="boot-shell-brand">TinyDuino LightMeter</div>',
+      );
+      expect(patched).not.toContain("🦞 ShadowClaw");
+    });
   });
 
   describe("patchManifest", () => {
+    it("derives a template-specific manifest id when manifest.id is 'shadow-claw' on a non-ShadowClaw site", () => {
+      const baseManifest = JSON.stringify({
+        id: "shadow-claw",
+        name: "ShadowClaw",
+        short_name: "ShadowClaw",
+      });
+
+      const patched = JSON.parse(
+        patchManifest(baseManifest, {
+          site: { title: "TinyDuino LightMeter" },
+          branding: {
+            siteUrl: "https://xt-ml.github.io/shadow-claw-light-meter/",
+          },
+          pwa: {
+            name: "TinyDuino LightMeter — Hardware Sensory Workbench",
+            shortName: "LightMeter",
+          },
+        }),
+      );
+
+      expect(patched.id).toBe("shadow-claw-light-meter");
+      expect(patched.id).not.toBe("shadow-claw");
+    });
+
+    it("supports explicit pwa.id and pwa.scope overrides", () => {
+      const baseManifest = JSON.stringify({
+        id: "shadow-claw",
+        name: "ShadowClaw",
+      });
+
+      const patched = JSON.parse(
+        patchManifest(baseManifest, {
+          pwa: {
+            id: "custom-pwa-id",
+            scope: ".",
+            name: "Custom App",
+          },
+        }),
+      );
+
+      expect(patched.id).toBe("custom-pwa-id");
+      expect(patched.scope).toBe(".");
+    });
+
+    it("replaces manifest.icons with pwa.icons instead of merging default ShadowClaw icons", () => {
+      const baseManifest = JSON.stringify({
+        name: "ShadowClaw",
+        icons: [
+          { src: "assets/icons/48.png", sizes: "48x48", type: "image/png" },
+          { src: "assets/icons/512.png", sizes: "512x512", type: "image/png" },
+        ],
+      });
+
+      const patched = JSON.parse(
+        patchManifest(baseManifest, {
+          pwa: {
+            name: "Custom App",
+            icons: [
+              {
+                src: "assets/icons/favicon.svg",
+                sizes: "any",
+                type: "image/svg+xml",
+              },
+              {
+                src: "assets/icons/192.png",
+                sizes: "192x192",
+                type: "image/png",
+                purpose: "any maskable",
+              },
+            ],
+          },
+        }),
+      );
+
+      const srcs = patched.icons.map((i: any) => i.src);
+      expect(srcs).toContain("assets/icons/favicon.svg");
+      expect(srcs).toContain("assets/icons/192.png");
+      expect(srcs).not.toContain("assets/icons/48.png");
+      expect(srcs).not.toContain("assets/icons/512.png");
+    });
     it("patches manifest name, short_name, and colors", () => {
       const baseManifest = JSON.stringify({
         name: "ShadowClaw",
@@ -1519,6 +1759,64 @@ https://example.com/about`;
 
       const shareContentDev = await readFile(sharePath, "utf8");
       expect(shareContentDev).toContain('<base href="/" />');
+    });
+
+    it("synthesizes non-lobster raster icons from template branding and normalizes .svg appleTouchIconPath to assets/icons/180.png", async () => {
+      const distPublicDir = path.join(tmpDir, "dist/public");
+      const distIconsDir = path.join(distPublicDir, "assets/icons");
+      const shareDir = path.join(distPublicDir, "share");
+      await mkdir(distIconsDir, { recursive: true });
+      await mkdir(shareDir, { recursive: true });
+
+      // Seed dist/public/assets/icons/180.png with the actual ShadowClaw red lobster icon
+      const repoRoot = path.resolve(
+        new URL("../../..", import.meta.url).pathname,
+      );
+      const lobster180 = await readFile(
+        path.join(repoRoot, "assets/icons/180.png"),
+      );
+      await writeFile(path.join(distIconsDir, "180.png"), lobster180);
+
+      const indexPath = path.join(distPublicDir, "index.html");
+      await writeFile(
+        indexPath,
+        '<!doctype html><html><head><link href="assets/icons/favicon.ico" rel="icon" type="image/x-icon" /><link href="assets/icons/180.png" rel="apple-touch-icon" /><script src="theme-init.js"></script></head><body><shadow-claw></shadow-claw></body></html>',
+        "utf8",
+      );
+
+      const siteConfigPath = path.join(tmpDir, "shadow-claw.config.json");
+      const config = {
+        site: {
+          title: "TinyDuino LightMeter",
+          themeColor: "#060d14",
+        },
+        branding: {
+          titleText: "TinyDuino LightMeter",
+          faviconPath: "assets/icons/favicon.svg",
+          appleTouchIconPath: "assets/icons/favicon.svg",
+          logoSlotHtml:
+            '<svg class="header-title-logo" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="8" fill="#060d14"/><circle cx="16" cy="16" r="6" fill="#38bdf8"/></svg>',
+        },
+        pwa: {
+          shortName: "LightMeter",
+        },
+      };
+      await writeFile(siteConfigPath, JSON.stringify(config), "utf8");
+
+      await applySiteConfig(distPublicDir, siteConfigPath);
+
+      const patchedIndex = await readFile(indexPath, "utf8");
+      // apple-touch-icon should resolve to raster 180.png instead of .svg
+      expect(patchedIndex).toContain(
+        '<link href="assets/icons/180.png" rel="apple-touch-icon" />',
+      );
+      expect(patchedIndex).toContain(
+        '<meta name="apple-mobile-web-app-title" content="LightMeter" />',
+      );
+
+      // And 180.png in dist/public/assets/icons/ must no longer be the red lobster icon
+      const updated180 = await readFile(path.join(distIconsDir, "180.png"));
+      expect(isDefaultShadowClawIconBuffer(updated180)).toBe(false);
     });
   });
 });

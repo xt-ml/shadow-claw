@@ -63,6 +63,7 @@ export default defineConfig({
     "nodemailer",
     "marked",
     "dompurify",
+    "canvas",
   ],
   platform: "node",
   resolve: {

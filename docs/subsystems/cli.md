@@ -828,6 +828,36 @@ npx shadow-claw skills:index --out-file custom/discovery/index.json
 
 > **Build Pipeline Integration:** `src/cli/build/build.ts` (invoked via `bin/build.mjs`) automatically generates `.well-known/agent-skills/index.json` during builds into `dist/public`, indexing both content skills and bundled skills (such as `skill-creator`) using the content root's site metadata, and keeps `.agents/scripts` and repository `.well-known` synchronized. The exported `isTestFileOrDir` helper (from `src/cli/commands/skills-index.ts`) is reused by the build to filter test files and directories (`.test.js`, `.spec.ts`, `__tests__/`, `test/`, `tests/`) from `.agents/skills`, `.agents/tools`, and `.agents/scripts` when copying them into `dist/public`, preventing test fixtures from being published as live agent assets.
 
+### `shadow-claw icons [dir]`
+
+Generates or refreshes template-specific raster and vector icons, including `favicon.svg`, `favicon.ico`, `apple-touch-icon.png`, and a full suite of PWA PNG icons (`48.png`, `72.png`, `96.png`, `128.png`, `152.png`, `180.png`, `192.png`, `512.png`, `1024.png`).
+
+```bash
+# Generate or refresh icon suite in default location (pages/resources/assets/icons)
+npx shadow-claw icons
+
+# Specify custom target root directory and custom output directory
+npx shadow-claw icons ./my-site --out-dir assets/icons
+
+# Force regeneration of all raster PNG and ICO files from the primary source
+npx shadow-claw icons --force
+```
+
+| Option            | Type    | Description                                                                     | Default                          |
+| :---------------- | :------ | :------------------------------------------------------------------------------ | :------------------------------- |
+| `--out-dir <dir>` | string  | Target icons directory relative to content root                                 | `"pages/resources/assets/icons"` |
+| `--force`         | boolean | Regenerate all raster PNG and ICO files even if destination files already exist | `false`                          |
+
+#### Source Resolution Hierarchy
+
+`ensureTemplateIconSet` automatically determines the primary icon source using the following priority:
+
+1. **Custom Vector SVG**: Searches for non-default SVGs at `favicon.svg`, `logo.svg`, or `branding.faviconPath` across search directories, or extracts inline SVG markup from `branding.logoSlotHtml`.
+2. **Custom High-Resolution PNG**: Searches for custom PNGs (`1024.png`, `512.png`, `192.png`, `180.png`, `apple-touch-icon.png`, etc.) that do not match the built-in ShadowClaw lobster icon fingerprints.
+3. **Dynamic Monogram Fallback**: If no custom icon is found and the site is configured with a custom title (`pwa.shortName`, `branding.titleText`, `site.title`, or `pwa.name`), generates an initial-letter monogram SVG using the site's accent and background colors.
+
+Generated icon suites include a multi-resolution `favicon.ico` (embedding 16x16, 32x32, and 48x48 PNG frames), `apple-touch-icon.png` (180x180), and standard PWA manifest icons. During site builds (`src/cli/site-config/apply.ts`), `ensureTemplateIconSet` runs automatically to ensure consumer template sites always ship consistent, isolated branding.
+
 ---
 
 ## NPM Packaging & Prepack Lifecycle

@@ -23,6 +23,7 @@ import {
 } from "../prerender/utils/insert-before-closing-head.js";
 import { applySidebarVisibilityToTemplate } from "../prerender/dsd-shell/prerender-dsd-shell.js";
 import { patchHtmlHeadMetadata } from "../../utils/seo.js";
+import { ensureTemplateIconSet } from "./generate-icons.js";
 
 export interface SiteConfigSite {
   title?: string;
@@ -34,6 +35,9 @@ export interface SiteConfigSite {
 export interface SiteConfigBranding {
   faviconPath?: string;
   appleTouchIconPath?: string;
+  ogImagePath?: string;
+  appleStatusBarStyle?: string;
+  appleMobileWebAppCapable?: boolean | string;
   titleText?: string;
   siteUrl?: string;
   logoSlotHtml?: string | null;
@@ -56,12 +60,16 @@ export interface ManifestIcon {
 }
 
 export interface SiteConfigPwa {
+  id?: string;
+  scope?: string;
   name?: string;
   shortName?: string;
   backgroundColor?: string;
   themeColor?: string;
   startUrl?: string;
   manifestPath?: string;
+  appleStatusBarStyle?: string;
+  appleMobileWebAppCapable?: boolean | string;
   icons?: ManifestIcon[];
   screenshots?: any[];
 }
@@ -314,6 +322,76 @@ export interface PatchIndexHtmlOptions {
   basePath?: string;
   pagesOrigin?: string;
   isProduction?: boolean;
+  resolvedAppleTouchIconPath?: string;
+}
+
+function upsertMetaNameTag(
+  html: string,
+  metaName: string,
+  content: string,
+): string {
+  const escapedName = metaName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const tagRegex = new RegExp(
+    `<meta\\b[^>]*\\bname=["']${escapedName}["'][^>]*\\/?>`,
+    "iu",
+  );
+  const newTag = `<meta name="${escapeHtml(metaName)}" content="${escapeHtml(content)}" />`;
+  if (tagRegex.test(html)) {
+    return html.replace(tagRegex, newTag);
+  }
+  return insertBeforeClosingHead(html, `  ${newTag}`);
+}
+
+function patchAppleAndAppMetaTags(html: string, config: SiteConfig): string {
+  let next = html;
+  const site = config.site || {};
+  const branding = config.branding || {};
+  const pwa = config.pwa || {};
+
+  const appTitle = (
+    pwa.shortName ||
+    pwa.name ||
+    branding.titleText ||
+    site.title ||
+    ""
+  ).trim();
+  const statusBarStyle = (
+    pwa.appleStatusBarStyle ||
+    branding.appleStatusBarStyle ||
+    "black-translucent"
+  ).trim();
+  const capableRaw =
+    pwa.appleMobileWebAppCapable ?? branding.appleMobileWebAppCapable;
+  const capableContent =
+    capableRaw === false || capableRaw === "no" ? "no" : "yes";
+
+  const hasAppMetaConfig = Boolean(
+    appTitle ||
+    pwa.appleStatusBarStyle ||
+    branding.appleStatusBarStyle ||
+    pwa.appleMobileWebAppCapable !== undefined ||
+    branding.appleMobileWebAppCapable !== undefined,
+  );
+
+  if (hasAppMetaConfig) {
+    next = upsertMetaNameTag(
+      next,
+      "apple-mobile-web-app-capable",
+      capableContent,
+    );
+    next = upsertMetaNameTag(next, "mobile-web-app-capable", capableContent);
+    next = upsertMetaNameTag(
+      next,
+      "apple-mobile-web-app-status-bar-style",
+      statusBarStyle,
+    );
+    if (appTitle) {
+      next = upsertMetaNameTag(next, "apple-mobile-web-app-title", appTitle);
+      next = upsertMetaNameTag(next, "application-name", appTitle);
+    }
+  }
+
+  return next;
 }
 
 export function patchIndexHtml(
@@ -331,7 +409,10 @@ export function patchIndexHtml(
   let defaultImageUrl: string | undefined;
   if (branding.siteUrl) {
     try {
-      defaultImageUrl = new URL("assets/icons/512.png", branding.siteUrl).href;
+      const rawImagePath = (
+        branding.ogImagePath || "assets/icons/512.png"
+      ).replace(/^\/+/, "");
+      defaultImageUrl = new URL(rawImagePath, branding.siteUrl).href;
     } catch {}
   }
 
@@ -350,6 +431,8 @@ export function patchIndexHtml(
       `<meta name="theme-color" content="${escapeHtml(site.themeColor)}" />`,
     );
   }
+
+  next = patchAppleAndAppMetaTags(next, config);
 
   if (site.lang) {
     next = next.replace(/<html\s+lang="[^"]*"/iu, `<html lang="${site.lang}"`);
@@ -389,8 +472,10 @@ export function patchIndexHtml(
     }
   }
 
-  if (branding.appleTouchIconPath) {
-    const appleHref = branding.appleTouchIconPath.replace(/^pages\/main\//, "");
+  const effectiveAppleTouchIconPath =
+    options?.resolvedAppleTouchIconPath || branding.appleTouchIconPath;
+  if (effectiveAppleTouchIconPath) {
+    const appleHref = effectiveAppleTouchIconPath.replace(/^pages\/main\//, "");
     const newTag = `<link href="${escapeHtml(appleHref)}" rel="apple-touch-icon" />`;
     let appleReplaced = false;
     next = next.replace(
@@ -685,6 +770,166 @@ function normalizeManifestIcon(icon: ManifestIcon): ManifestIcon[] {
   ];
 }
 
+export function patchShareTargetHtml(
+  html: string,
+  config: SiteConfig,
+  options?: PatchIndexHtmlOptions,
+): string {
+  let next = html;
+  const site = config.site || {};
+  const branding = config.branding || {};
+  const pwa = config.pwa || {};
+  const isProd = options?.isProduction ?? process.env.NODE_ENV === "production";
+
+  const title = site.title || pwa.name || branding.titleText;
+  if (title) {
+    next = next.replace(
+      /<title>[^<]*<\/title>/iu,
+      `<title>${escapeHtml(title)}</title>`,
+    );
+  }
+
+  if (site.description) {
+    next = next.replace(
+      /<meta\s+name="description"\s+content="[^"]*"\s*\/?>/iu,
+      `<meta name="description" content="${escapeHtml(site.description)}" />`,
+    );
+  }
+
+  const themeColor = site.themeColor || pwa.themeColor;
+  if (themeColor) {
+    next = next.replace(
+      /<meta\s+name="theme-color"\s+content="[^"]*"\s*\/?>/iu,
+      `<meta name="theme-color" content="${escapeHtml(themeColor)}" />`,
+    );
+  }
+
+  next = patchAppleAndAppMetaTags(next, config);
+
+  let effectiveBasePath = "/";
+  if (options?.basePath && options.basePath.trim()) {
+    effectiveBasePath = options.basePath;
+  } else if (isProd && (options?.pagesOrigin || branding.siteUrl)) {
+    effectiveBasePath = resolveSiteBasePath({
+      pagesOrigin: options?.pagesOrigin,
+      siteUrl: branding.siteUrl,
+    });
+  }
+  next = patchBaseHref(next, effectiveBasePath);
+
+  if (branding.faviconPath) {
+    const faviconHref = branding.faviconPath.replace(/^pages\/main\//, "");
+    const iconType = faviconHref.endsWith(".svg")
+      ? "image/svg+xml"
+      : faviconHref.endsWith(".png")
+        ? "image/png"
+        : "image/x-icon";
+    const newTag = `<link href="${escapeHtml(faviconHref)}" rel="icon" type="${iconType}" />`;
+    let faviconReplaced = false;
+    next = next.replace(
+      /<link\b[^>]*\brel=["']?(?:shortcut\s+)?icon["']?[^>]*\/?>/giu,
+      () => {
+        if (!faviconReplaced) {
+          faviconReplaced = true;
+          return newTag;
+        }
+        return "";
+      },
+    );
+    if (!faviconReplaced) {
+      next = insertBeforeClosingHead(next, `  ${newTag}`);
+    }
+  }
+
+  const effectiveAppleTouchIconPath =
+    options?.resolvedAppleTouchIconPath || branding.appleTouchIconPath;
+  if (effectiveAppleTouchIconPath) {
+    const appleHref = effectiveAppleTouchIconPath.replace(/^pages\/main\//, "");
+    const newTag = `<link href="${escapeHtml(appleHref)}" rel="apple-touch-icon" />`;
+    let appleReplaced = false;
+    next = next.replace(
+      /<link\b[^>]*\brel=["']?apple-touch-icon["']?[^>]*\/?>/giu,
+      () => {
+        if (!appleReplaced) {
+          appleReplaced = true;
+          return newTag;
+        }
+        return "";
+      },
+    );
+    if (!appleReplaced) {
+      next = insertBeforeClosingHead(next, `  ${newTag}`);
+    }
+  }
+
+  const brandName = (
+    branding.titleText ||
+    pwa.shortName ||
+    site.title ||
+    pwa.name ||
+    ""
+  ).trim();
+  if (brandName && brandName !== "ShadowClaw") {
+    next = next.replace(
+      /<div\s+class="boot-shell-brand">[\s\S]*?<\/div>/iu,
+      `<div class="boot-shell-brand">${escapeHtml(brandName)}</div>`,
+    );
+  }
+
+  return next;
+}
+
+function deriveTemplateManifestId(config: SiteConfig): string | null {
+  const pwa = config.pwa || {};
+  const branding = config.branding || {};
+  const site = config.site || {};
+
+  if (pwa.id && pwa.id.trim()) {
+    return pwa.id.trim();
+  }
+
+  if (branding.siteUrl) {
+    try {
+      const parsed = new URL(branding.siteUrl);
+      const pathSlug = parsed.pathname
+        .replace(/^\/+|\/+$/g, "")
+        .replace(/[^a-zA-Z0-9_-]+/g, "-")
+        .toLowerCase();
+      if (pathSlug && pathSlug !== "shadow-claw") {
+        return pathSlug;
+      }
+      if (!pathSlug && parsed.hostname) {
+        const hostSlug = parsed.hostname
+          .replace(/^www\./i, "")
+          .replace(/[^a-zA-Z0-9_-]+/g, "-")
+          .toLowerCase();
+        if (hostSlug) {
+          return hostSlug;
+        }
+      }
+    } catch {}
+  }
+
+  const rawTitle = (
+    pwa.shortName ||
+    branding.titleText ||
+    site.title ||
+    pwa.name ||
+    ""
+  ).trim();
+  if (rawTitle && rawTitle !== "ShadowClaw") {
+    const slug = rawTitle
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    if (slug) {
+      return slug;
+    }
+  }
+
+  return null;
+}
+
 export function patchManifest(
   manifestJson: string | any,
   config: SiteConfig,
@@ -694,6 +939,19 @@ export function patchManifest(
   const pwa = config.pwa || {};
   const site = config.site || {};
   const pagesOrigin = process.env.PAGES_ORIGIN;
+
+  if (pwa.id) {
+    manifest.id = pwa.id;
+  } else {
+    const derivedId = deriveTemplateManifestId(config);
+    if (derivedId && (!manifest.id || manifest.id === "shadow-claw")) {
+      manifest.id = derivedId;
+    }
+  }
+
+  if (pwa.scope) {
+    manifest.scope = pwa.scope;
+  }
 
   if (pwa.name || site.title) {
     manifest.name = pwa.name || site.title;
@@ -723,16 +981,8 @@ export function patchManifest(
     manifest.start_url = "./";
   }
 
-  if (pwa.icons && Array.isArray(pwa.icons)) {
-    const customIcons = pwa.icons.flatMap(normalizeManifestIcon);
-    const existingIcons = Array.isArray(manifest.icons)
-      ? manifest.icons.flatMap(normalizeManifestIcon)
-      : [];
-    const customSrcs = new Set(customIcons.map((i) => i.src));
-    manifest.icons = [
-      ...customIcons,
-      ...existingIcons.filter((i) => !customSrcs.has(i.src)),
-    ];
+  if (pwa.icons && Array.isArray(pwa.icons) && pwa.icons.length > 0) {
+    manifest.icons = pwa.icons.flatMap(normalizeManifestIcon);
   } else if (Array.isArray(manifest.icons)) {
     manifest.icons = manifest.icons.flatMap(normalizeManifestIcon);
   }
@@ -1423,6 +1673,37 @@ export async function applySiteConfig(
     ? path.dirname(path.resolve(siteConfigPath))
     : process.cwd();
   const templateRootDir = getTemplateRootDir(configDir);
+  const repoRootDir = getRepoRootDir(configDir);
+
+  await copyThemeStylesheet(config, distPublicDir, siteConfigPath);
+  await copyLocalScripts(config, distPublicDir, siteConfigPath);
+  await copyBrandingAssets(config, distPublicDir, siteConfigPath);
+
+  await ensureTemplateIconSet({
+    targetIconsDir: path.join(distPublicDir, "assets/icons"),
+    searchDirs: [
+      path.join(repoRootDir, "pages/resources/assets/icons"),
+      path.join(repoRootDir, "pages/resources"),
+      path.join(templateRootDir, "pages/resources/assets/icons"),
+      path.join(templateRootDir, "pages/resources"),
+      path.join(configDir, "resources/assets/icons"),
+      path.join(configDir, "resources"),
+      distPublicDir,
+    ],
+    config,
+  });
+
+  let resolvedAppleTouchIconPath: string | undefined;
+  const rawAppleTouch = config.branding?.appleTouchIconPath || "";
+  if (rawAppleTouch.toLowerCase().endsWith(".svg")) {
+    const raster180 = await findFirstExisting([
+      path.join(distPublicDir, "assets/icons/180.png"),
+      path.join(distPublicDir, "assets/icons/apple-touch-icon.png"),
+    ]);
+    if (raster180) {
+      resolvedAppleTouchIconPath = `assets/icons/${path.basename(raster180)}`;
+    }
+  }
 
   let sidebarHtml: string | undefined;
   if (config.sidebar?.slotHtml) {
@@ -1455,6 +1736,7 @@ export async function applySiteConfig(
       basePath,
       pagesOrigin,
       isProduction,
+      resolvedAppleTouchIconPath,
     });
     await writeText(indexPath, patched);
     console.log("  Patched index.html");
@@ -1463,16 +1745,12 @@ export async function applySiteConfig(
   const shareTargetPath = path.join(distPublicDir, "share/share-target.html");
   const shareTargetHtml = await readText(shareTargetPath);
   if (shareTargetHtml) {
-    let effectiveBasePath = "/";
-    if (basePath && basePath.trim()) {
-      effectiveBasePath = basePath;
-    } else if (isProduction && (pagesOrigin || config.branding?.siteUrl)) {
-      effectiveBasePath = resolveSiteBasePath({
-        pagesOrigin,
-        siteUrl: config.branding?.siteUrl,
-      });
-    }
-    const patched = patchBaseHref(shareTargetHtml, effectiveBasePath);
+    const patched = patchShareTargetHtml(shareTargetHtml, config, {
+      basePath,
+      pagesOrigin,
+      isProduction,
+      resolvedAppleTouchIconPath,
+    });
     await writeText(shareTargetPath, patched);
     console.log("  Patched share/share-target.html");
   }
@@ -1574,10 +1852,6 @@ export async function applySiteConfig(
     await writeText(notFoundPath, patched);
     console.log("  Patched 404.html");
   }
-
-  await copyThemeStylesheet(config, distPublicDir, siteConfigPath);
-  await copyLocalScripts(config, distPublicDir, siteConfigPath);
-  await copyBrandingAssets(config, distPublicDir, siteConfigPath);
 
   console.log("Site configuration applied successfully.");
   return { applied: true };

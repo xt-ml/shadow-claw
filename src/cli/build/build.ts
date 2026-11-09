@@ -1,6 +1,14 @@
 import { execSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { chdir, env, exit } from "node:process";
 import { fileURLToPath } from "node:url";
@@ -308,9 +316,12 @@ async function embedSingleFileBundle(
       );
     }
 
-    const appleHref = (branding.appleTouchIconPath || "assets/icons/180.png")
+    const rawAppleHref = (branding.appleTouchIconPath || "assets/icons/180.png")
       .replace(/^\/+/, "")
       .replace(/^pages\/main\//, "");
+    const appleHref = rawAppleHref.toLowerCase().endsWith(".svg")
+      ? "assets/icons/180.png"
+      : rawAppleHref;
     const appleTarget = deployedBase
       ? `${deployedBase}${appleHref}`
       : `${assetBase}assets/icons/180.png`;
@@ -945,35 +956,27 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
       },
     });
 
-    // The toolchain's own sitemap must not leak into another site's build.
+    // The toolchain's own sitemap and screenshots must not leak into another site's build.
     if (contentRoot !== toolchainRoot) {
       await rimraf(join(distPublicDir, "sitemap.xml"));
       await rimraf(join(distPublicDir, "sitemap.txt"));
+      try {
+        const distScreenshots = join(distPublicDir, "assets/screenshots");
+        if (await pathExists(distScreenshots)) {
+          const files = await readdir(distScreenshots);
+          for (const f of files) {
+            if (f.startsWith("shadow-claw-screenshot-")) {
+              await rimraf(join(distScreenshots, f));
+            }
+          }
+        }
+      } catch {}
     }
 
-    // 2. Ensure default toolchain assets (icons, screenshots, fonts) are available
+    // 2. Ensure default toolchain assets (fonts) are available.
+    // Toolchain screenshots and icons must NOT leak into downstream template sites.
     const toolchainAssets = join(toolchainRoot, "assets");
     if (contentRoot !== toolchainRoot && (await pathExists(toolchainAssets))) {
-      const toolchainIcons = join(toolchainAssets, "icons");
-      if (await pathExists(toolchainIcons)) {
-        await cp(toolchainIcons, join(distPublicDir, "assets/icons"), {
-          recursive: true,
-          force: false,
-          errorOnExist: false,
-        });
-      }
-      const toolchainScreenshots = join(toolchainAssets, "screenshots");
-      if (await pathExists(toolchainScreenshots)) {
-        await cp(
-          toolchainScreenshots,
-          join(distPublicDir, "assets/screenshots"),
-          {
-            recursive: true,
-            force: false,
-            errorOnExist: false,
-          },
-        );
-      }
       const toolchainFonts = join(toolchainAssets, "fonts");
       if (await pathExists(toolchainFonts)) {
         await cp(toolchainFonts, join(distPublicDir, "assets/fonts"), {

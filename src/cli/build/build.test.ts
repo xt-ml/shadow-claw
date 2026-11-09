@@ -223,7 +223,7 @@ describe("build without and with pages", () => {
             "assets/screenshots/shadow-claw-screenshot-1920x1052.png",
           ),
         ),
-      ).toBe(true);
+      ).toBe(false);
     } finally {
       logSpy.mockRestore();
       await rm(tempConsumerRoot, { recursive: true, force: true });

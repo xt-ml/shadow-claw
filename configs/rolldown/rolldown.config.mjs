@@ -686,6 +686,7 @@ const configs = [
       "compression",
       "isomorphic-git",
       "@mcp-b/webmcp-polyfill",
+      "canvas",
     ],
     ...commonResolve("node"),
   },

@@ -35,14 +35,33 @@ Custom theming is declared in the root configuration file (`shadow-claw.config.j
   },
   "branding": {
     "titleText": "My Custom Site",
-    "faviconPath": "pages/resources/favicon.ico",
-    "appleTouchIconPath": "pages/resources/icon-192x192.png",
+    "faviconPath": "pages/resources/favicon.svg",
+    "appleTouchIconPath": "assets/icons/180.png",
+    "ogImagePath": "assets/icons/512.png",
+    "appleStatusBarStyle": "black-translucent",
+    "appleMobileWebAppCapable": "yes",
     "logoSlotHtml": "none"
+  },
+  "pwa": {
+    "id": "my-custom-site",
+    "name": "My Custom Site",
+    "shortName": "MySite",
+    "themeColor": "#ffffff",
+    "backgroundColor": "#ffffff"
   }
 }
 ```
 
 Setting `branding.logoSlotHtml` to `"none"`, `""`, or `null` strips the default header logo markup and removes the left margin on `.header-title`.
+
+### Template Iconography & Apple Home Screen Web Apps
+
+ShadowClaw provides automated multi-size iconography synthesis and iOS Web App integration:
+
+- **Icon Synthesis (`shadow-claw icons`)**: Generates or refreshes vector `favicon.svg`, multi-frame `favicon.ico` (16x16, 32x32, 48x48), `apple-touch-icon.png` (180x180), and PWA PNG icons (`48` through `1024` px) from primary SVG, custom high-resolution PNG, or monogram fallback.
+- **Apple Web App Meta Tags**: Automatically injects standalone meta tags (`apple-mobile-web-app-capable`, `mobile-web-app-capable`, `apple-mobile-web-app-status-bar-style`, `apple-mobile-web-app-title`, and `application-name`) into `index.html` and `share/share-target.html`.
+- **SVG Apple Touch Icon Normalization**: When `branding.appleTouchIconPath` points to an SVG file, build tooling normalizes the link tag to a raster PNG (`assets/icons/180.png` or `apple-touch-icon.png`) for iOS Home Screen compatibility.
+- **PWA ID & Scope Isolation**: Automatically sets or derives a unique template `manifest.id` and supports custom `pwa.scope` to prevent collision with other ShadowClaw deployments.
 
 ### `theme.stylesheet`
 

@@ -276,4 +276,178 @@ describe("Transformers.js Provider", () => {
       ),
     ).rejects.toBe("Out of memory");
   });
+
+  it("coalesces concurrent loads for the same model instead of starting a second download", async () => {
+    let activeLoadGroupId = "";
+    const loadCalls: any[] = [];
+    mockWorkerInstance.postMessage = jest.fn((msg: any) => {
+      const { type, payload } = msg;
+      if (type === "load") {
+        loadCalls.push(payload);
+        activeLoadGroupId = payload.groupId;
+      } else if (type === "generate") {
+        setTimeout(() => {
+          mockWorkerInstance.onmessage?.({
+            data: {
+              type: "done",
+              payload: { groupId: payload.groupId, text: "Hi back!" },
+            },
+          });
+        }, 0);
+      }
+    });
+
+    const { prepareTransformersJsModel, invokeWithTransformersJs } =
+      await import("./transformers-js-provider.js");
+
+    const settingsProgress: any[] = [];
+    const preparePromise = prepareTransformersJsModel(
+      {} as any,
+      "onnx-community/Qwen3-0.6B-ONNX",
+      (p) => settingsProgress.push(p),
+    );
+
+    const chatEmitted: any[] = [];
+    const chatPromise = invokeWithTransformersJs(
+      {} as any,
+      "br:main",
+      "System",
+      [{ role: "user", content: "Hi" }],
+      512,
+      (msg) => {
+        chatEmitted.push(msg);
+      },
+      undefined,
+      [],
+      "onnx-community/Qwen3-0.6B-ONNX",
+    );
+
+    await new Promise((r) => setTimeout(r, 0));
+    expect(loadCalls).toHaveLength(1);
+
+    mockWorkerInstance.onmessage?.({
+      data: {
+        type: "progress",
+        payload: {
+          groupId: activeLoadGroupId,
+          status: "running",
+          progress: 0.5,
+          message: "Downloading model weights... 50%",
+        },
+      },
+    });
+    mockWorkerInstance.onmessage?.({
+      data: {
+        type: "progress",
+        payload: { groupId: activeLoadGroupId, status: "done" },
+      },
+    });
+
+    await expect(preparePromise).resolves.toBeUndefined();
+    await expect(chatPromise).resolves.toBeUndefined();
+
+    expect(
+      chatEmitted.some(
+        (e) => e.type === "response" && e.payload.text === "Hi back!",
+      ),
+    ).toBe(true);
+
+    expect(settingsProgress.some((p) => p.progress === 0.5)).toBe(true);
+    expect(
+      chatEmitted.some(
+        (e) =>
+          e.type === "model-download-progress" && e.payload.progress === 0.5,
+      ),
+    ).toBe(true);
+  });
+
+  it("cancels an in-flight download when a different model is requested", async () => {
+    const workers: any[] = [];
+    (globalThis as any).Worker = jest.fn().mockImplementation(() => {
+      const w: any = {
+        terminate: jest.fn(),
+        onmessage: null,
+        postMessage: jest.fn((msg: any) => {
+          if (msg.type === "load" && msg.payload.modelId === "model-b") {
+            setTimeout(() => {
+              w.onmessage?.({
+                data: {
+                  type: "progress",
+                  payload: { groupId: msg.payload.groupId, status: "done" },
+                },
+              });
+            }, 0);
+          }
+        }),
+      };
+      workers.push(w);
+      return w;
+    });
+
+    const { prepareTransformersJsModel } =
+      await import("./transformers-js-provider.js");
+
+    const promiseA = prepareTransformersJsModel({} as any, "model-a");
+    await new Promise((r) => setTimeout(r, 0));
+
+    const promiseB = prepareTransformersJsModel({} as any, "model-b");
+
+    await expect(promiseA).rejects.toThrow(/cancel/i);
+    expect(workers[0].terminate).toHaveBeenCalledTimes(1);
+    await expect(promiseB).resolves.toBeUndefined();
+    expect(workers).toHaveLength(2);
+  });
+
+  it("does not re-download a model that is already loaded", async () => {
+    const loadCalls: any[] = [];
+    mockWorkerInstance.postMessage = jest.fn((msg: any) => {
+      if (msg.type === "load") {
+        loadCalls.push(msg.payload);
+        setTimeout(() => {
+          mockWorkerInstance.onmessage?.({
+            data: {
+              type: "progress",
+              payload: { groupId: msg.payload.groupId, status: "done" },
+            },
+          });
+        }, 0);
+      }
+    });
+
+    const { prepareTransformersJsModel } =
+      await import("./transformers-js-provider.js");
+
+    await prepareTransformersJsModel({} as any, "model-a");
+    await prepareTransformersJsModel({} as any, "model-a");
+
+    expect(loadCalls).toHaveLength(1);
+  });
+
+  it("cancels an in-flight download via cancelTransformersJsDownload without affecting idle workers", async () => {
+    const workers: any[] = [];
+    (globalThis as any).Worker = jest.fn().mockImplementation(() => {
+      const w: any = {
+        terminate: jest.fn(),
+        onmessage: null,
+        postMessage: jest.fn(),
+      };
+      workers.push(w);
+      return w;
+    });
+
+    const { prepareTransformersJsModel, cancelTransformersJsDownload } =
+      await import("./transformers-js-provider.js");
+
+    // Calling when nothing is downloading should be a no-op
+    cancelTransformersJsDownload();
+    expect(workers).toHaveLength(0);
+
+    const promise = prepareTransformersJsModel({} as any, "model-a");
+    await new Promise((r) => setTimeout(r, 0));
+    expect(workers).toHaveLength(1);
+
+    cancelTransformersJsDownload();
+    await expect(promise).rejects.toThrow(/cancel/i);
+    expect(workers[0].terminate).toHaveBeenCalledTimes(1);
+  });
 });

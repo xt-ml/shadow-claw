@@ -54,8 +54,10 @@ jest.unstable_mockModule("../../../config/config.js", () => ({
     PROMPT_API_BACKEND: "prompt_api_backend",
     PROMPT_API_DTYPE_STRATEGY: "prompt_api_dtype_strategy",
     PROMPT_API_FALLBACK_MODEL: "prompt_api_fallback_model",
+    PROMPT_API_ONBOARDING_SEEN: "prompt_api_onboarding_seen",
     TRANSFORMERS_JS_BACKEND: "transformers_js_backend",
     TRANSFORMERS_JS_DTYPE_STRATEGY: "transformers_js_dtype_strategy",
+    TRANSFORMERS_JS_ONBOARDING_SEEN: "transformers_js_onboarding_seen",
   },
   DEFAULT_MAX_ITERATIONS: 50,
   DEFAULT_CONTROL_PLANE_ENABLED: false,
@@ -105,6 +107,17 @@ const mockSetLlamafileSettings = jest.fn(async () => {});
 const mockSetContextCompressionEnabled = jest.fn(async () => {});
 const mockSetStreamingEnabled = jest.fn(async () => {});
 const mockSetModel = jest.fn(async () => {});
+const mockPrepareTransformersJsModel = jest.fn<any>(async () => {});
+const mockCancelTransformersJsDownload = jest.fn<any>();
+
+jest.unstable_mockModule(
+  "../../../subsystems/providers/transformers-js-provider.js",
+  () => ({
+    cancelTransformersJsDownload: mockCancelTransformersJsDownload,
+    prepareTransformersJsModel: mockPrepareTransformersJsModel,
+    invokeWithTransformersJs: jest.fn(),
+  }),
+);
 
 jest.unstable_mockModule(
   "../../../core/orchestrator/utils/operations/provider.js",
@@ -316,6 +329,11 @@ describe("shadow-claw-llm", () => {
       button!.disabled = false;
       button!.click();
       expect(create).toHaveBeenCalledTimes(1);
+      expect(create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          expectedOutputs: [{ type: "text", languages: ["en"] }],
+        }),
+      );
       expect(button!.disabled).toBe(true);
       onProgress?.({ loaded: 0.5, total: 1 });
       expect(status?.textContent).toContain("50%");
@@ -360,6 +378,352 @@ describe("shadow-claw-llm", () => {
     } finally {
       (globalThis as any).LanguageModel = originalLanguageModel;
     }
+  });
+
+  it("hides Download Local AI Model when provider is openrouter and local task APIs are not selected", async () => {
+    const originalLanguageModel = (globalThis as any).LanguageModel;
+    (globalThis as any).LanguageModel = {
+      create: jest.fn<any>(),
+    };
+
+    try {
+      const orch = createOrchestratorStub({ provider: "openrouter" });
+      const el = new ShadowClawLlm();
+      el.orchestrator = orch as any;
+      el.db = {} as any;
+      el.bindEventListeners();
+
+      await el.initializeBuiltinAiModelAction();
+
+      const button = el.shadowRoot?.querySelector<HTMLButtonElement>(
+        '[data-action="prepare-builtin-ai-model"]',
+      );
+      const status = el.shadowRoot?.querySelector<HTMLElement>(
+        '[data-info="builtin-ai-model-status"]',
+      );
+      expect(button?.hidden).toBe(true);
+      expect(button?.disabled).toBe(true);
+      expect(status?.hidden).toBe(true);
+    } finally {
+      (globalThis as any).LanguageModel = originalLanguageModel;
+    }
+  });
+
+  it("shows Download Local AI Model when provider is transformers_js_browser and LanguageModel is available", async () => {
+    const originalLanguageModel = (globalThis as any).LanguageModel;
+    (globalThis as any).LanguageModel = {
+      create: jest.fn<any>(),
+    };
+
+    try {
+      const orch = createOrchestratorStub({
+        provider: "transformers_js_browser",
+      });
+      const el = new ShadowClawLlm();
+      el.orchestrator = orch as any;
+      el.db = {} as any;
+      el.bindEventListeners();
+
+      await el.initializeBuiltinAiModelAction();
+
+      const button = el.shadowRoot?.querySelector<HTMLButtonElement>(
+        '[data-action="prepare-builtin-ai-model"]',
+      );
+      expect(button?.hidden).toBe(false);
+      expect(button?.disabled).toBe(false);
+    } finally {
+      (globalThis as any).LanguageModel = originalLanguageModel;
+    }
+  });
+
+  it("shows Download Local AI Model when provider is prompt_api and LanguageModel is available", async () => {
+    const originalLanguageModel = (globalThis as any).LanguageModel;
+    (globalThis as any).LanguageModel = {
+      create: jest.fn<any>(),
+    };
+
+    try {
+      const orch = createOrchestratorStub({ provider: "prompt_api" });
+      const el = new ShadowClawLlm();
+      el.orchestrator = orch as any;
+      el.db = {} as any;
+      el.bindEventListeners();
+
+      await el.initializeBuiltinAiModelAction();
+
+      const button = el.shadowRoot?.querySelector<HTMLButtonElement>(
+        '[data-action="prepare-builtin-ai-model"]',
+      );
+      expect(button?.hidden).toBe(false);
+      expect(button?.disabled).toBe(false);
+    } finally {
+      (globalThis as any).LanguageModel = originalLanguageModel;
+    }
+  });
+
+  it("shows Download Local AI Model when provider is openrouter but local task backend is selected", async () => {
+    const originalLanguageModel = (globalThis as any).LanguageModel;
+    (globalThis as any).LanguageModel = {
+      create: jest.fn<any>(),
+    };
+
+    try {
+      const orch = createOrchestratorStub({ provider: "openrouter" });
+      const el = new ShadowClawLlm();
+      el.orchestrator = orch as any;
+      el.db = {} as any;
+      el.bindEventListeners();
+
+      const toolsBackendSelect =
+        el.shadowRoot?.querySelector<HTMLSelectElement>(
+          '[data-setting="builtin-ai-tools-backend-select"]',
+        );
+      expect(toolsBackendSelect).not.toBeNull();
+      toolsBackendSelect!.value = "local";
+      toolsBackendSelect!.dispatchEvent(new Event("change"));
+      await new Promise(process.nextTick);
+
+      const button = el.shadowRoot?.querySelector<HTMLButtonElement>(
+        '[data-action="prepare-builtin-ai-model"]',
+      );
+      expect(button?.hidden).toBe(false);
+      expect(button?.disabled).toBe(false);
+
+      toolsBackendSelect!.value = "active_provider";
+      toolsBackendSelect!.dispatchEvent(new Event("change"));
+      await new Promise(process.nextTick);
+
+      expect(button?.hidden).toBe(true);
+      expect(button?.disabled).toBe(true);
+    } finally {
+      (globalThis as any).LanguageModel = originalLanguageModel;
+    }
+  });
+
+  it("hides Download Local AI Model when LanguageModel.create is unavailable", async () => {
+    const originalLanguageModel = (globalThis as any).LanguageModel;
+    const originalAi = (globalThis as any).ai;
+    (globalThis as any).LanguageModel = {};
+    delete (globalThis as any).ai;
+
+    try {
+      const orch = createOrchestratorStub({ provider: "prompt_api" });
+      const el = new ShadowClawLlm();
+      el.orchestrator = orch as any;
+      el.db = {} as any;
+      el.bindEventListeners();
+
+      await el.initializeBuiltinAiModelAction();
+
+      const button = el.shadowRoot?.querySelector<HTMLButtonElement>(
+        '[data-action="prepare-builtin-ai-model"]',
+      );
+      expect(button?.hidden).toBe(true);
+      expect(button?.disabled).toBe(true);
+    } finally {
+      (globalThis as any).LanguageModel = originalLanguageModel;
+      (globalThis as any).ai = originalAi;
+    }
+  });
+
+  it("does not probe LanguageModel.availability in updateModelSelector when provider is not prompt_api", async () => {
+    const originalLanguageModel = (globalThis as any).LanguageModel;
+    const availability = jest.fn<any>().mockResolvedValue("unavailable");
+    (globalThis as any).LanguageModel = {
+      availability,
+      create: jest.fn<any>(),
+    };
+
+    try {
+      const orch = createOrchestratorStub({
+        provider: "transformers_js_browser",
+        model: "onnx-community/Qwen3-0.6B-ONNX",
+      });
+      const el = new ShadowClawLlm();
+      el.orchestrator = orch as any;
+      el.db = {} as any;
+      el.updateModelSelector();
+      await new Promise(process.nextTick);
+
+      expect(availability).not.toHaveBeenCalled();
+    } finally {
+      (globalThis as any).LanguageModel = originalLanguageModel;
+    }
+  });
+
+  it("downloads the Transformers.js model into cache when provider is transformers_js_browser without calling window.LanguageModel", async () => {
+    const originalLanguageModel = (globalThis as any).LanguageModel;
+    const nativeCreate = jest.fn<any>();
+    (globalThis as any).LanguageModel = {
+      availability: jest.fn<any>().mockResolvedValue("unavailable"),
+      create: nativeCreate,
+    };
+    const emit = jest.fn<any>();
+    let observedDuringDownload = "";
+    mockPrepareTransformersJsModel.mockImplementationOnce(
+      async (_db: any, _modelId: string, onProgress?: (p: any) => void) => {
+        onProgress?.({
+          status: "running",
+          progress: 0.42,
+          message: "Downloading model weights (q4f16)... 42%",
+        });
+        observedDuringDownload =
+          el.shadowRoot?.querySelector<HTMLElement>(
+            '[data-info="builtin-ai-model-status"]',
+          )?.textContent || "";
+      },
+    );
+
+    const orch = createOrchestratorStub({
+      provider: "transformers_js_browser",
+      model: "onnx-community/Qwen3-0.6B-ONNX",
+      events: { emit },
+    });
+    const el = new ShadowClawLlm();
+
+    try {
+      el.orchestrator = orch as any;
+      el.db = {} as any;
+      el.bindEventListeners();
+
+      await el.initializeBuiltinAiModelAction();
+
+      const button = el.shadowRoot?.querySelector<HTMLButtonElement>(
+        '[data-action="prepare-builtin-ai-model"]',
+      );
+      const status = el.shadowRoot?.querySelector<HTMLElement>(
+        '[data-info="builtin-ai-model-status"]',
+      );
+      expect(button?.hidden).toBe(false);
+      expect(button?.disabled).toBe(false);
+
+      await el.prepareBuiltinAiModel();
+
+      expect(nativeCreate).not.toHaveBeenCalled();
+      expect(mockPrepareTransformersJsModel).toHaveBeenCalledWith(
+        el.db,
+        "onnx-community/Qwen3-0.6B-ONNX",
+        expect.any(Function),
+      );
+      expect(observedDuringDownload).toContain("42%");
+      expect(observedDuringDownload).not.toContain(
+        "Preparing local AI model...",
+      );
+      expect(emit).toHaveBeenCalledWith("model-download-progress", {
+        status: "running",
+        progress: 0.42,
+        message: "Downloading model weights (q4f16)... 42%",
+      });
+      expect(emit).toHaveBeenCalledWith("model-download-progress", {
+        status: "done",
+        progress: 1,
+      });
+      const { setConfig } = await import("../../../db/set-config.js");
+      expect(setConfig).toHaveBeenCalledWith(
+        el.db,
+        "transformers_js_onboarding_seen",
+        "true",
+      );
+      expect(setConfig).toHaveBeenCalledWith(
+        el.db,
+        "prompt_api_onboarding_seen",
+        "true",
+      );
+      expect(status?.textContent).toMatch(/ready/i);
+    } finally {
+      (globalThis as any).LanguageModel = originalLanguageModel;
+    }
+  });
+
+  it("falls back to prompt-api-polyfill when native LanguageModel is unavailable on prompt_api", async () => {
+    const originalLanguageModel = (globalThis as any).LanguageModel;
+    const originalTransformersConfig = (globalThis as any).TRANSFORMERS_CONFIG;
+    delete (globalThis as any).TRANSFORMERS_CONFIG;
+
+    const brokenCreate = jest
+      .fn<any>()
+      .mockRejectedValue(
+        new Error(
+          "The device is unable to create a session to run the model. Please check the result of availability() first.",
+        ),
+      );
+    (globalThis as any).LanguageModel = {
+      availability: jest.fn<any>().mockResolvedValue("unavailable"),
+      create: brokenCreate,
+    };
+
+    try {
+      const orch = createOrchestratorStub({ provider: "prompt_api" });
+      const el = new ShadowClawLlm();
+      el.orchestrator = orch as any;
+      el.db = {} as any;
+      el.bindEventListeners();
+
+      await el.initializeBuiltinAiModelAction();
+
+      const button = el.shadowRoot?.querySelector<HTMLButtonElement>(
+        '[data-action="prepare-builtin-ai-model"]',
+      );
+      expect(button?.hidden).toBe(false);
+      expect(button?.disabled).toBe(false);
+
+      // Stub prompt-api-polyfill's LanguageModel.create after fallback loads
+      const polyfillCreate = jest
+        .fn<any>()
+        .mockResolvedValue({ destroy: jest.fn() });
+      const polyfillMod = await import("prompt-api-polyfill");
+      const origPolyfillCreate = polyfillMod.LanguageModel.create;
+      polyfillMod.LanguageModel.create = polyfillCreate;
+
+      try {
+        await el.prepareBuiltinAiModel();
+        expect(brokenCreate).not.toHaveBeenCalled();
+        expect(polyfillCreate).toHaveBeenCalledTimes(1);
+        const status = el.shadowRoot?.querySelector<HTMLElement>(
+          '[data-info="builtin-ai-model-status"]',
+        );
+        expect(status?.textContent).toMatch(/ready/i);
+      } finally {
+        polyfillMod.LanguageModel.create = origPolyfillCreate;
+      }
+    } finally {
+      (globalThis as any).LanguageModel = originalLanguageModel;
+      if (originalTransformersConfig === undefined) {
+        delete (globalThis as any).TRANSFORMERS_CONFIG;
+      } else {
+        (globalThis as any).TRANSFORMERS_CONFIG = originalTransformersConfig;
+      }
+    }
+  });
+
+  it("cancels an in-flight download when switching provider or model in settings", async () => {
+    const orch = createOrchestratorStub({
+      provider: "transformers_js_browser",
+      model: "onnx-community/Qwen3-0.6B-ONNX",
+    });
+    const el = new ShadowClawLlm();
+    el.orchestrator = orch as any;
+    el.db = {} as any;
+    el.bindEventListeners();
+
+    const providerSelect = el.shadowRoot?.querySelector<HTMLSelectElement>(
+      '[data-setting="provider-select"]',
+    );
+    providerSelect!.innerHTML =
+      '<option value="transformers_js_browser">Transformers.js</option><option value="provider-a">Provider A</option>';
+    providerSelect!.value = "provider-a";
+    await el.onProviderChange();
+    expect(mockCancelTransformersJsDownload).toHaveBeenCalledTimes(1);
+
+    mockCancelTransformersJsDownload.mockClear();
+    const modelSelect = el.shadowRoot?.querySelector<HTMLSelectElement>(
+      '[data-setting="model-select"]',
+    );
+    modelSelect!.innerHTML =
+      '<option value="onnx-community/Qwen3-0.6B-ONNX">Qwen3</option><option value="model-b">Model B</option>';
+    modelSelect!.value = "model-b";
+    modelSelect!.dispatchEvent(new Event("change"));
+    expect(mockCancelTransformersJsDownload).toHaveBeenCalledTimes(1);
   });
 
   it("renders selectors correctly", async () => {

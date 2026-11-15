@@ -79,6 +79,9 @@ describe("prompt-api help and capability utilities", () => {
       };
       (globalThis as any).LanguageModel = mockLm;
       expect(await isNativePromptApiAvailable()).toBe(true);
+      expect(mockLm.availability).toHaveBeenCalledWith({
+        expectedOutputs: [{ type: "text", languages: ["en"] }],
+      });
 
       mockLm.availability.mockResolvedValue("after-download");
       expect(await isNativePromptApiAvailable()).toBe(true);

@@ -10,14 +10,14 @@ import { setPostHandler } from "../../worker/utils/post.js";
 import { ToolDefinition } from "../tools/tools.js";
 
 import type { SubagentInvokeContext } from "../../worker/tools/spawn-subagent/spawn-subagent.js";
+import type { ActiveLoadState } from "./types.js";
 
 class TransformersJsManager {
+  private activeLoad: ActiveLoadState | null = null;
   private chunkCallbacks = new Map<string, (payload: any) => void>();
-  private loadRejects = new Map<string, (reason: any) => void>();
-  private loadResolves = new Map<string, () => void>();
+  private loadedKey: string | null = null;
   private pendingRejects = new Map<string, (reason: any) => void>();
   private pendingResolves = new Map<string, (value: any) => void>();
-  private progressCallbacks = new Map<string, (payload: any) => void>();
   private thinkingCallbacks = new Map<string, (text: string) => void>();
   private worker: Worker | null = null;
 
@@ -46,6 +46,30 @@ class TransformersJsManager {
     });
   }
 
+  cancelActiveLoad(reason: Error) {
+    if (!this.activeLoad) {
+      return;
+    }
+
+    const prev = this.activeLoad;
+    this.activeLoad = null;
+    this.loadedKey = null;
+
+    for (const waiter of prev.waiters) {
+      waiter.reject(reason);
+    }
+
+    for (const [id, reject] of this.pendingRejects.entries()) {
+      reject(reason);
+      this.cleanup(id);
+    }
+
+    if (this.worker) {
+      this.worker.terminate?.();
+      this.worker = null;
+    }
+  }
+
   async load(
     modelId: string,
     device: string,
@@ -53,12 +77,34 @@ class TransformersJsManager {
     groupId: string,
     onProgress: (payload: any) => void,
   ): Promise<void> {
+    const key = JSON.stringify([modelId, device, dtypeStrategy]);
+
+    if (!this.activeLoad && this.loadedKey === key) {
+      return;
+    }
+
+    if (this.activeLoad && this.activeLoad.key === key) {
+      return new Promise((resolve, reject) => {
+        this.activeLoad!.waiters.push({ resolve, reject, onProgress });
+        if (this.activeLoad!.lastProgress) {
+          onProgress(this.activeLoad!.lastProgress);
+        }
+      });
+    }
+
+    if (this.activeLoad && this.activeLoad.key !== key) {
+      this.cancelActiveLoad(new Error("Model download cancelled"));
+    }
+
+    this.loadedKey = null;
     const worker = this.getWorker();
 
     return new Promise((resolve, reject) => {
-      this.loadResolves.set(groupId, resolve);
-      this.loadRejects.set(groupId, reject);
-      this.progressCallbacks.set(groupId, onProgress);
+      this.activeLoad = {
+        key,
+        lastProgress: null,
+        waiters: [{ resolve, reject, onProgress }],
+      };
       worker.postMessage({
         type: "load",
         payload: { modelId, device, dtypeStrategy, groupId },
@@ -69,30 +115,41 @@ class TransformersJsManager {
   private cleanup(groupId: string) {
     this.pendingResolves.delete(groupId);
     this.pendingRejects.delete(groupId);
-    this.progressCallbacks.delete(groupId);
     this.chunkCallbacks.delete(groupId);
     this.thinkingCallbacks.delete(groupId);
   }
 
   private getWorker() {
     if (!this.worker) {
-      this.worker = createModuleWorker(
+      const worker = createModuleWorker(
         new URL("./transformers-js.worker.js", import.meta.url).href,
       );
-      this.worker.onmessage = (event) => {
+      this.worker = worker;
+      worker.onmessage = (event) => {
+        if (this.worker !== worker) {
+          return;
+        }
         const { type, payload } = event.data;
         const groupId = payload?.groupId;
 
         switch (type) {
-          case "progress":
-            this.progressCallbacks.get(groupId)?.(payload);
-            if (payload.status === "done") {
-              this.loadResolves.get(groupId)?.();
-              this.loadResolves.delete(groupId);
-              this.loadRejects.delete(groupId);
+          case "progress": {
+            const active = this.activeLoad;
+            if (active) {
+              active.lastProgress = payload;
+              for (const waiter of [...active.waiters]) {
+                waiter.onProgress(payload);
+              }
+              if (payload.status === "done") {
+                this.activeLoad = null;
+                this.loadedKey = active.key;
+                for (const waiter of active.waiters) {
+                  waiter.resolve();
+                }
+              }
             }
-
             break;
+          }
           case "chunk":
             this.chunkCallbacks.get(groupId)?.(payload);
 
@@ -106,14 +163,19 @@ class TransformersJsManager {
             this.cleanup(groupId);
 
             break;
-          case "error":
+          case "error": {
             this.pendingRejects.get(groupId)?.(payload.error);
-            this.loadRejects.get(groupId)?.(payload.error);
             this.cleanup(groupId);
-            this.loadResolves.delete(groupId);
-            this.loadRejects.delete(groupId);
-
+            const active = this.activeLoad;
+            if (active) {
+              this.activeLoad = null;
+              this.loadedKey = null;
+              for (const waiter of active.waiters) {
+                waiter.reject(payload.error);
+              }
+            }
             break;
+          }
         }
       };
     }
@@ -195,6 +257,40 @@ function parseStructured(raw: string) {
 
     return null;
   }
+}
+
+/**
+ * Cancel any in-flight Transformers.js model download.
+ */
+export function cancelTransformersJsDownload(): void {
+  manager.cancelActiveLoad(new Error("Model download cancelled"));
+}
+
+/**
+ * Preload/download a Transformers.js model into the browser cache using configured backend/dtype settings.
+ */
+export async function prepareTransformersJsModel(
+  db: ShadowClawDatabase | null | undefined,
+  modelId: string,
+  onProgress?: (payload: any) => void,
+): Promise<void> {
+  const backend =
+    (db ? await getConfig(db, CONFIG_KEYS.TRANSFORMERS_JS_BACKEND) : null) ||
+    "auto";
+  const dtypeStrategy =
+    (db
+      ? await getConfig(db, CONFIG_KEYS.TRANSFORMERS_JS_DTYPE_STRATEGY)
+      : null) || "auto";
+
+  await manager.load(
+    modelId,
+    backend,
+    dtypeStrategy,
+    "settings-prepare",
+    (payload) => {
+      onProgress?.(payload);
+    },
+  );
 }
 
 export async function invokeWithTransformersJs(

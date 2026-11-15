@@ -20,6 +20,10 @@ import {
   ensureBuiltinAiPolyfills,
   retainPreparedPromptApiSession,
 } from "../../../subsystems/providers/builtin-ai-tasks.js";
+import {
+  cancelTransformersJsDownload,
+  prepareTransformersJsModel,
+} from "../../../subsystems/providers/transformers-js-provider.js";
 
 import {
   buildLlamafileHelpDialogOptions,
@@ -198,6 +202,9 @@ export class ShadowClawLlm extends ShadowClawElement {
           customInput.style.display =
             target.value === "__custom__" ? "block" : "none";
         }
+        if (target && target.value !== this.orchestrator?.model) {
+          cancelTransformersJsDownload();
+        }
       });
 
     root
@@ -275,12 +282,56 @@ export class ShadowClawLlm extends ShadowClawElement {
     }
 
     root
+      .querySelector('[data-setting="compaction-engine-select"]')
+      ?.addEventListener("change", () => {
+        void this.initializeBuiltinAiModelAction();
+      });
+
+    root
+      .querySelector('[data-setting="builtin-ai-tools-backend-select"]')
+      ?.addEventListener("change", () => {
+        void this.initializeBuiltinAiModelAction();
+      });
+
+    root
       .querySelector('[data-setting="llamafile-mode"]')
       ?.addEventListener("change", () => {
         this.updateLlamafileModeVisibility();
         this.updateLlamafileModelSectionVisibility();
         this.updateModelSelector();
       });
+  }
+
+  private getActiveProviderId(): string {
+    const providerSelect = this.shadowRoot?.querySelector(
+      '[data-setting="provider-select"]',
+    ) as HTMLSelectElement | null;
+    return this.orchestrator?.provider || providerSelect?.value || "";
+  }
+
+  /**
+   * Determine whether the local Built-in AI model download action applies to the current settings.
+   */
+  isBuiltinAiModelActionApplicable(): boolean {
+    const root = this.shadowRoot;
+    if (!root) {
+      return false;
+    }
+
+    const activeProvider = this.getActiveProviderId();
+    const compactionSelect = root.querySelector(
+      '[data-setting="compaction-engine-select"]',
+    ) as HTMLSelectElement | null;
+    const toolsBackendSelect = root.querySelector(
+      '[data-setting="builtin-ai-tools-backend-select"]',
+    ) as HTMLSelectElement | null;
+
+    return (
+      activeProvider === "prompt_api" ||
+      activeProvider === "transformers_js_browser" ||
+      compactionSelect?.value === "builtin_task_api" ||
+      toolsBackendSelect?.value === "local"
+    );
   }
 
   async initializeBuiltinAiModelAction(): Promise<void> {
@@ -291,15 +342,43 @@ export class ShadowClawLlm extends ShadowClawElement {
       '[data-info="builtin-ai-model-status"]',
     );
     if (!button || !status) return;
+
+    if (!this.isBuiltinAiModelActionApplicable()) {
+      button.hidden = true;
+      button.disabled = true;
+      status.hidden = true;
+      status.textContent = "";
+      return;
+    }
+
+    if (this.getActiveProviderId() === "transformers_js_browser") {
+      button.hidden = false;
+      button.disabled = false;
+      status.hidden = false;
+      return;
+    }
+
     try {
       await ensureBuiltinAiPolyfills();
+      if (!this.isBuiltinAiModelActionApplicable()) {
+        button.hidden = true;
+        button.disabled = true;
+        status.hidden = true;
+        status.textContent = "";
+        return;
+      }
       const global = globalThis as any;
       const languageModel = global.LanguageModel || global.ai?.languageModel;
       if (typeof languageModel?.create !== "function") {
         throw new Error("Local AI is unavailable in this browser.");
       }
+      button.hidden = false;
       button.disabled = false;
+      status.hidden = false;
     } catch (error) {
+      button.hidden = true;
+      button.disabled = true;
+      status.hidden = false;
       status.textContent =
         error instanceof Error ? error.message : String(error);
     }
@@ -313,12 +392,114 @@ export class ShadowClawLlm extends ShadowClawElement {
       '[data-info="builtin-ai-model-status"]',
     );
     if (!button || !status) return;
-    const global = globalThis as any;
-    const languageModel = global.LanguageModel || global.ai?.languageModel;
     button.disabled = true;
+    status.hidden = false;
     status.textContent = "Preparing local AI model...";
+
+    const emitDownloadProgress = (payload: {
+      status: string;
+      progress: number;
+      message?: string;
+    }) => {
+      this.orchestrator?.events?.emit("model-download-progress", payload);
+    };
+
+    if (this.db) {
+      try {
+        if (CONFIG_KEYS.TRANSFORMERS_JS_ONBOARDING_SEEN) {
+          await setConfig(
+            this.db,
+            CONFIG_KEYS.TRANSFORMERS_JS_ONBOARDING_SEEN,
+            "true",
+          );
+        }
+        if (CONFIG_KEYS.PROMPT_API_ONBOARDING_SEEN) {
+          await setConfig(
+            this.db,
+            CONFIG_KEYS.PROMPT_API_ONBOARDING_SEEN,
+            "true",
+          );
+        }
+      } catch {
+        // Non-fatal: continue preparing the local model even if persisting onboarding fails.
+      }
+    }
+
     try {
-      const session = await languageModel.create({
+      if (this.getActiveProviderId() === "transformers_js_browser") {
+        const modelSelect = this.shadowRoot?.querySelector(
+          '[data-setting="model-select"]',
+        ) as HTMLSelectElement | null;
+        const customInput = this.shadowRoot?.querySelector(
+          '[data-setting="custom-model-input"]',
+        ) as HTMLInputElement | null;
+        const selectedModel =
+          modelSelect?.value === "__custom__"
+            ? customInput?.value?.trim()
+            : modelSelect?.value;
+        const modelId =
+          selectedModel ||
+          this.orchestrator?.model ||
+          DEFAULT_PROMPT_API_FALLBACK_MODEL;
+
+        await prepareTransformersJsModel(this.db, modelId, (payload) => {
+          const rawProgress = Number(payload?.progress);
+          const msg =
+            typeof payload?.message === "string" && payload.message.trim()
+              ? payload.message
+              : undefined;
+
+          if (Number.isFinite(rawProgress)) {
+            const normalized =
+              payload?.status === "running" || rawProgress <= 1
+                ? Math.max(0, Math.min(1, rawProgress))
+                : Math.max(0, Math.min(1, rawProgress / 100));
+            const percent = Math.round(normalized * 100);
+            const displayMessage =
+              msg || `Downloading local AI model: ${percent}%`;
+            status.textContent = displayMessage;
+            emitDownloadProgress({
+              status: payload?.status === "done" ? "done" : "running",
+              progress: normalized,
+              message: displayMessage,
+            });
+          } else if (msg) {
+            status.textContent = msg;
+            emitDownloadProgress({
+              status: "running",
+              progress: 0,
+              message: msg,
+            });
+          }
+        });
+        status.textContent = "Local AI model is ready.";
+        return;
+      }
+
+      const global = globalThis as any;
+      let languageModel = global.LanguageModel || global.ai?.languageModel;
+
+      if (
+        typeof languageModel?.availability === "function" &&
+        !global.TRANSFORMERS_CONFIG
+      ) {
+        let availability = "available";
+        try {
+          availability =
+            (await languageModel.availability({
+              expectedOutputs: [{ type: "text", languages: ["en"] }],
+            })) ?? "available";
+        } catch {
+          availability = "unavailable";
+        }
+        if (availability === "unavailable" || availability === "no") {
+          await ensureBuiltinAiPolyfills({ forcePromptApiPolyfill: true });
+          languageModel = global.LanguageModel || global.ai?.languageModel;
+        }
+      }
+
+      const createOptions = {
+        expectedOutputs: [{ type: "text", languages: ["en"] }],
         monitor(target: any) {
           target.addEventListener("downloadprogress", (event: any) => {
             const loaded = Number(event.loaded);
@@ -328,17 +509,52 @@ export class ShadowClawLlm extends ShadowClawElement {
               Number.isFinite(total) &&
               total > 0
             ) {
-              status.textContent = `Downloading local AI model: ${Math.round(Math.max(0, Math.min(1, loaded / total)) * 100)}%`;
+              const ratio = Math.max(0, Math.min(1, loaded / total));
+              const percent = Math.round(ratio * 100);
+              const message = `Downloading local AI model: ${percent}%`;
+              status.textContent = message;
+              emitDownloadProgress({
+                status: "running",
+                progress: ratio,
+                message,
+              });
             }
           });
         },
-      });
+      };
+
+      let session: any;
+      try {
+        session = await languageModel.create(createOptions);
+      } catch (err: any) {
+        if (
+          err?.name !== "NotAllowedError" &&
+          err?.name !== "AbortError" &&
+          !global.TRANSFORMERS_CONFIG
+        ) {
+          await ensureBuiltinAiPolyfills({ forcePromptApiPolyfill: true });
+          languageModel = global.LanguageModel || global.ai?.languageModel;
+          session = await languageModel.create(createOptions);
+        } else {
+          throw err;
+        }
+      }
+
       retainPreparedPromptApiSession(session);
       status.textContent = "Local AI model is ready.";
     } catch (error) {
-      status.textContent =
-        error instanceof Error ? error.message : String(error);
+      const message = error instanceof Error ? error.message : String(error);
+      if (
+        message === "Model download cancelled" &&
+        !this.isBuiltinAiModelActionApplicable()
+      ) {
+        status.hidden = true;
+        status.textContent = "";
+      } else {
+        status.textContent = message;
+      }
     } finally {
+      emitDownloadProgress({ status: "done", progress: 1 });
       button.disabled = false;
     }
   }
@@ -699,14 +915,19 @@ export class ShadowClawLlm extends ShadowClawElement {
       '[data-setting="prompt-api-fallback-group"]',
     ) as HTMLElement | null;
     if (promptApiFallbackGroup) {
-      const isAvailable = isNativePromptApiSupported();
-      promptApiFallbackGroup.style.display =
-        currentProvider === "prompt_api" && !isAvailable ? "block" : "none";
-      void isNativePromptApiAvailable().then((available) => {
-        if (this.orchestrator?.provider === "prompt_api") {
-          promptApiFallbackGroup.style.display = !available ? "block" : "none";
-        }
-      });
+      if (currentProvider === "prompt_api") {
+        const isAvailable = isNativePromptApiSupported();
+        promptApiFallbackGroup.style.display = !isAvailable ? "block" : "none";
+        void isNativePromptApiAvailable().then((available) => {
+          if (this.orchestrator?.provider === "prompt_api") {
+            promptApiFallbackGroup.style.display = !available
+              ? "block"
+              : "none";
+          }
+        });
+      } else {
+        promptApiFallbackGroup.style.display = "none";
+      }
     }
 
     const modelSelect = root.querySelector(
@@ -1322,6 +1543,7 @@ export class ShadowClawLlm extends ShadowClawElement {
     const currentProvider = this.orchestrator.provider;
 
     if (providerId !== currentProvider) {
+      cancelTransformersJsDownload();
       try {
         await setProvider(this.orchestrator, this.db, providerId, {
           loadApiKeyForProvider: this.orchestrator.loadApiKeyForProvider.bind(
@@ -1340,6 +1562,7 @@ export class ShadowClawLlm extends ShadowClawElement {
         this.updateMeshLlmSettingsVisibility(providerId);
         this.updateTransformersJsSettingsVisibility(providerId);
         await this.renderTransformersJsSettings();
+        void this.initializeBuiltinAiModelAction();
 
         const selectedText =
           providerSelect.selectedOptions[0]?.text || providerId;
@@ -1417,6 +1640,36 @@ export class ShadowClawLlm extends ShadowClawElement {
     this.updateMeshLlmSettingsVisibility(currentProvider);
     this.renderMeshLlmSettings();
     this.updateTransformersJsSettingsVisibility(currentProvider);
+
+    // Load synchronous orchestrator settings before async config reads
+    const streamingToggle = root.querySelector(
+      '[data-setting="streaming-toggle"]',
+    ) as HTMLInputElement | null;
+    if (streamingToggle) {
+      streamingToggle.checked = this.orchestrator.streamingEnabled;
+    }
+
+    const ccToggle = root.querySelector(
+      '[data-setting="context-compression-toggle"]',
+    ) as HTMLInputElement | null;
+    if (ccToggle) {
+      ccToggle.checked = this.orchestrator.contextCompressionEnabled;
+    }
+
+    const reasoningSelect = root.querySelector(
+      '[data-setting="reasoning-effort-select"]',
+    ) as HTMLSelectElement | null;
+    if (reasoningSelect) {
+      reasoningSelect.value = this.orchestrator.reasoningEffort || "none";
+    }
+
+    const maxIterInput = root.querySelector(
+      '[data-setting="max-iterations-input"]',
+    ) as HTMLInputElement | null;
+    if (maxIterInput && this.orchestrator) {
+      maxIterInput.value = String(this.orchestrator.maxIterations);
+    }
+
     await this.renderTransformersJsSettings();
     void this.renderBuiltinAiSettings();
 
@@ -1458,37 +1711,6 @@ export class ShadowClawLlm extends ShadowClawElement {
         (await getConfig(this.db, CONFIG_KEYS.PROMPT_API_DTYPE_STRATEGY)) ||
         "auto";
       promptApiDtypeSelect.value = configuredDtype;
-    }
-
-    // Load streaming toggle
-    const streamingToggle = root.querySelector(
-      '[data-setting="streaming-toggle"]',
-    ) as HTMLInputElement | null;
-    if (streamingToggle) {
-      streamingToggle.checked = this.orchestrator.streamingEnabled;
-    }
-
-    // Load context compression toggle
-    const ccToggle = root.querySelector(
-      '[data-setting="context-compression-toggle"]',
-    ) as HTMLInputElement | null;
-    if (ccToggle) {
-      ccToggle.checked = this.orchestrator.contextCompressionEnabled;
-    }
-
-    const reasoningSelect = root.querySelector(
-      '[data-setting="reasoning-effort-select"]',
-    ) as HTMLSelectElement | null;
-    if (reasoningSelect) {
-      reasoningSelect.value = this.orchestrator.reasoningEffort || "none";
-    }
-
-    // Load max iterations
-    const maxIterInput = root.querySelector(
-      '[data-setting="max-iterations-input"]',
-    ) as HTMLInputElement | null;
-    if (maxIterInput && this.orchestrator) {
-      maxIterInput.value = String(this.orchestrator.maxIterations);
     }
 
     // Load subagent max parallel
@@ -1578,6 +1800,8 @@ export class ShadowClawLlm extends ShadowClawElement {
     if (toolsBackendSelect) {
       toolsBackendSelect.value = toolsPref || "active_provider";
     }
+
+    await this.initializeBuiltinAiModelAction();
   }
 
   async renderTransformersJsSettings() {
@@ -2049,6 +2273,9 @@ export class ShadowClawLlm extends ShadowClawElement {
     }
 
     try {
+      if (finalModel !== this.orchestrator.model) {
+        cancelTransformersJsDownload();
+      }
       await setModel(this.orchestrator, this.db, finalModel);
       this.updateMaxTokensUI();
       const isLlamafileProvider = this.orchestrator.provider === "llamafile";

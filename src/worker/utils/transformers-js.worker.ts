@@ -73,6 +73,15 @@ async function loadModel(
   dtypeStrategy: string | undefined,
 ) {
   if (model && currentModelId === modelId && currentDevice === device) {
+    self.postMessage({
+      payload: {
+        groupId,
+        message: "Model ready.",
+        progress: 1,
+        status: "done",
+      },
+      type: "progress",
+    });
     return;
   }
 

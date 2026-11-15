@@ -548,6 +548,16 @@ describe("builtin-ai-tasks subsystem", () => {
       await ensureBuiltinAiPolyfills();
       expect((globalThis as any).TRANSFORMERS_CONFIG).toBeUndefined();
     });
+
+    it("configures TRANSFORMERS_CONFIG and loads prompt-api-polyfill when forcePromptApiPolyfill is true", async () => {
+      const nativeLm = class {};
+      (globalThis as any).LanguageModel = nativeLm;
+      delete (globalThis as any).TRANSFORMERS_CONFIG;
+
+      await ensureBuiltinAiPolyfills({ forcePromptApiPolyfill: true });
+      expect((globalThis as any).TRANSFORMERS_CONFIG).toBeDefined();
+      expect((globalThis as any).LanguageModel).not.toBe(nativeLm);
+    });
   });
 
   describe("summarizeText", () => {

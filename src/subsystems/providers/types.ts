@@ -8,3 +8,15 @@ export interface LLMProvider {
   name: string;
   requiresApiKey?: boolean;
 }
+
+export interface ActiveLoadWaiter {
+  onProgress: (payload: any) => void;
+  reject: (reason: any) => void;
+  resolve: () => void;
+}
+
+export interface ActiveLoadState {
+  key: string;
+  lastProgress: any | null;
+  waiters: ActiveLoadWaiter[];
+}

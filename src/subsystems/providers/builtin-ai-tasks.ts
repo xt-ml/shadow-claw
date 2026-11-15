@@ -363,7 +363,9 @@ export async function createTaskInstanceWithFallback<T = any>(
 /**
  * Dynamically import polyfills if native APIs are absent on globalThis or window.ai.
  */
-export async function ensureBuiltinAiPolyfills(): Promise<void> {
+export async function ensureBuiltinAiPolyfills(options?: {
+  forcePromptApiPolyfill?: boolean;
+}): Promise<void> {
   const g = globalThis as any;
   const tasks: Promise<any>[] = [];
 
@@ -395,7 +397,12 @@ export async function ensureBuiltinAiPolyfills(): Promise<void> {
 
   let currentFallbackModel: string | undefined;
 
-  if (!("LanguageModel" in g) && !g.ai?.languageModel) {
+  const forcePromptApiPolyfill = options?.forcePromptApiPolyfill === true;
+
+  if (
+    forcePromptApiPolyfill ||
+    (!("LanguageModel" in g) && !g.ai?.languageModel)
+  ) {
     currentFallbackModel = await getPromptApiFallbackModel();
 
     if (!g.TRANSFORMERS_CONFIG) {
@@ -462,7 +469,10 @@ export async function ensureBuiltinAiPolyfills(): Promise<void> {
     tasks.push(
       import("prompt-api-polyfill")
         .then((mod) => {
-          if (mod?.LanguageModel && !g.LanguageModel) {
+          if (
+            mod?.LanguageModel &&
+            (forcePromptApiPolyfill || !g.LanguageModel)
+          ) {
             g.LanguageModel = mod.LanguageModel;
           }
         })

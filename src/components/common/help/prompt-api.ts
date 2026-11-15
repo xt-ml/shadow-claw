@@ -42,7 +42,9 @@ export async function isNativePromptApiAvailable(): Promise<boolean> {
 
   if (typeof lm?.availability === "function") {
     try {
-      const status = await lm.availability();
+      const status = await lm.availability({
+        expectedOutputs: [{ type: "text", languages: ["en"] }],
+      });
       return status !== "unavailable" && status !== "no";
     } catch {
       return false;

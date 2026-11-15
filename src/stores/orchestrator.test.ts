@@ -286,6 +286,13 @@ jest.unstable_mockModule("../db/reorder-tasks.js", () => ({
 const { OrchestratorStore, accumulateTokenUsage } =
   await import("./orchestrator.js");
 const { DEFAULT_GROUP_ID, CONFIG_KEYS } = await import("../config/config.js");
+const {
+  isAllowedCustomElement,
+  isSafeCustomElementSource,
+  setAllowedCustomElementHostPatterns,
+  setAllowedCustomElements,
+  uninstallCustomElementsRegistryGuard,
+} = await import("../security/custom-element-security.js");
 
 function createEvents() {
   const handlers = new Map<string, Set<Function>>();
@@ -3099,6 +3106,71 @@ describe("OrchestratorStore", () => {
         );
       } finally {
         configElement.remove();
+      }
+    });
+
+    it("merges newly added customElements.allowedElements and allowedDomains into existing IndexedDB allowlists", async () => {
+      const store = new OrchestratorStore();
+      const events = createEvents();
+      const orch: any = {
+        events,
+        getUseProxy: () => false,
+        getProxyUrl: () => "",
+        getGitProxyUrl: () => "",
+        getVMBashFullInternetAccess: () => false,
+        getTaskServerUrl: () => "/schedule",
+        taskServerEnabled: true,
+      };
+
+      const configElement = document.createElement("script");
+      configElement.id = "shadow-claw-site-config";
+      configElement.type = "application/json";
+      configElement.textContent = JSON.stringify({
+        customElements: {
+          allowedElements: ["scdaw-workbench", "scdaw-synth"],
+          allowedDomains: ["localhost", "esm.sh"],
+        },
+      });
+      document.head.appendChild(configElement);
+
+      mockGetConfig.mockImplementation(async (_db: any, key: string) => {
+        if (key === CONFIG_KEYS.SITE_CONFIG_SEEDED) {
+          return "true";
+        }
+        if (key === CONFIG_KEYS.ALLOWED_CUSTOM_ELEMENTS) {
+          return JSON.stringify(["scdaw-workbench"]);
+        }
+        if (key === CONFIG_KEYS.ALLOWED_CUSTOM_ELEMENT_HOST_PATTERNS) {
+          return JSON.stringify(["localhost"]);
+        }
+        return undefined;
+      });
+      mockListGroups.mockResolvedValue([
+        { groupId: DEFAULT_GROUP_ID, name: "Main" },
+      ]);
+
+      try {
+        await store.init({} as any, orch);
+
+        expect(isAllowedCustomElement("scdaw-workbench")).toBe(true);
+        expect(isAllowedCustomElement("scdaw-synth")).toBe(true);
+        expect(isSafeCustomElementSource("https://esm.sh/pkg")).toBe(true);
+
+        expect(mockSetConfig).toHaveBeenCalledWith(
+          {} as any,
+          CONFIG_KEYS.ALLOWED_CUSTOM_ELEMENTS,
+          JSON.stringify(["scdaw-workbench", "scdaw-synth"]),
+        );
+        expect(mockSetConfig).toHaveBeenCalledWith(
+          {} as any,
+          CONFIG_KEYS.ALLOWED_CUSTOM_ELEMENT_HOST_PATTERNS,
+          JSON.stringify(["localhost", "esm.sh"]),
+        );
+      } finally {
+        configElement.remove();
+        setAllowedCustomElements([]);
+        setAllowedCustomElementHostPatterns([]);
+        uninstallCustomElementsRegistryGuard();
       }
     });
 

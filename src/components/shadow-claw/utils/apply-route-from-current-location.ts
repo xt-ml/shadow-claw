@@ -85,7 +85,11 @@ export async function applyRouteFromCurrentLocation(
         window.history
       ) {
         const targetUrl = applyBasePath(prettyPath);
-        window.history.replaceState(null, "", targetUrl);
+        window.history.replaceState(
+          null,
+          "",
+          `${targetUrl}${url.search}${url.hash}`,
+        );
       }
     }
 

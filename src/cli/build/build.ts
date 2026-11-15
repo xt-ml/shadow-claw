@@ -21,6 +21,7 @@ import { getPublishCopyPlan } from "./utils/get-publish-copy-plan.js";
 import { getRoutesCandidates } from "./utils/get-routes-candidates.js";
 import { getSiteConfigCandidates } from "./utils/get-site-config-candidates.js";
 import { resolveBuildFlags } from "./utils/resolve-build-flags.js";
+import { syncServiceWorkerPrecacheRevisions } from "./utils/sync-service-worker-precache.js";
 import {
   collectPageSources,
   prerenderDsdShell,
@@ -834,6 +835,7 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
       await run("npm run -s build:service-worker");
       const swPath = "dist/public/service-worker.js";
       if (await pathExists(swPath)) {
+        await syncServiceWorkerPrecacheRevisions("dist/public", swPath);
         await patchServiceWorkerTrustedTypesFile(swPath, { logImpl: () => {} });
       }
 
@@ -1386,6 +1388,7 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
     // 11. Service Worker patch
     const swPath = join(distPublicDir, "service-worker.js");
     if (await pathExists(swPath)) {
+      await syncServiceWorkerPrecacheRevisions(distPublicDir, swPath);
       await patchServiceWorkerTrustedTypesFile(swPath, { logImpl: () => {} });
     }
 

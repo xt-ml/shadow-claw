@@ -1,10 +1,12 @@
 export * from "./custom-element-guard.js";
 
 import {
+  extractCustomElementConfigFields,
   getAllowedCustomElementHostPatterns,
   getAllowedCustomElements,
   isAllowedCustomElement,
   isSafeCustomElementSource,
+  normalizeElementList,
   normalizePatternList,
   setAllowedCustomElementHostPatterns,
   setAllowedCustomElements,
@@ -425,13 +427,95 @@ export function hasApprovedCustomElement(html: string): boolean {
   return false;
 }
 
+function parseStoredAllowlistValue(
+  raw: unknown,
+  normalizeFn: (val: string[] | string) => string[],
+): string[] {
+  if (Array.isArray(raw)) {
+    return normalizeFn(raw.map((entry) => String(entry)));
+  }
+
+  if (typeof raw === "string" && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return normalizeFn(parsed.map((entry) => String(entry)));
+      }
+    } catch {}
+
+    return normalizeFn(raw);
+  }
+
+  return [];
+}
+
 /**
- * Load allowed custom elements and host patterns from IndexedDB.
+ * Merges an existing stored allowlist with an incoming deployment allowlist
+ * (case-insensitively deduplicated) and reports whether new entries were added.
+ */
+export function mergeAllowlistValues(
+  existing: unknown,
+  incoming: unknown,
+  normalizeFn: (val: string[] | string) => string[],
+): { merged: string[]; changed: boolean } {
+  const existingList = parseStoredAllowlistValue(existing, normalizeFn);
+  const incomingList = parseStoredAllowlistValue(incoming, normalizeFn);
+  const merged: string[] = [];
+  const seen = new Set<string>();
+
+  for (const item of existingList) {
+    const key = item.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      merged.push(item);
+    }
+  }
+
+  let changed = false;
+  for (const item of incomingList) {
+    const key = item.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      merged.push(item);
+      changed = true;
+    }
+  }
+
+  return { merged, changed };
+}
+
+function readEmbeddedCustomElementConfigFields(): {
+  allowedElements?: string[] | string;
+  allowedDomains?: string[] | string;
+} {
+  if (typeof document === "undefined") {
+    return {};
+  }
+
+  const configScript = document.getElementById("shadow-claw-site-config");
+  if (!configScript?.textContent) {
+    return {};
+  }
+
+  try {
+    return extractCustomElementConfigFields(
+      JSON.parse(configScript.textContent),
+    );
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Load allowed custom elements and host patterns from IndexedDB, merging with
+ * embedded `#shadow-claw-site-config` entries so deployment upgrades are never
+ * shadowed by stale persisted allowlists.
  */
 export async function loadCustomElementSecurityFromDb(
   db?: ShadowClawDatabase | null,
 ): Promise<void> {
   try {
+    const embedded = readEmbeddedCustomElementConfigFields();
     const { getDb } = await import("../db/db.js");
     const { getConfig } = await import("../db/get-config.js");
     const database = db ?? (await getDb());
@@ -445,21 +529,25 @@ export async function loadCustomElementSecurityFromDb(
     ]);
 
     if (typeof elementsVal === "string" && elementsVal.trim()) {
-      try {
-        const parsed = JSON.parse(elementsVal);
-        setAllowedCustomElements(parsed);
-      } catch {
-        setAllowedCustomElements(elementsVal);
-      }
+      const { merged } = mergeAllowlistValues(
+        elementsVal,
+        embedded.allowedElements,
+        normalizeElementList,
+      );
+      setAllowedCustomElements(merged);
+    } else if (embedded.allowedElements !== undefined) {
+      setAllowedCustomElements(embedded.allowedElements);
     }
 
     if (typeof hostsVal === "string" && hostsVal.trim()) {
-      try {
-        const parsed = JSON.parse(hostsVal);
-        setAllowedCustomElementHostPatterns(parsed);
-      } catch {
-        setAllowedCustomElementHostPatterns(hostsVal);
-      }
+      const { merged } = mergeAllowlistValues(
+        hostsVal,
+        embedded.allowedDomains,
+        normalizePatternList,
+      );
+      setAllowedCustomElementHostPatterns(merged);
+    } else if (embedded.allowedDomains !== undefined) {
+      setAllowedCustomElementHostPatterns(embedded.allowedDomains);
     }
   } catch (err) {
     console.warn("Failed to load custom element security from db:", err);

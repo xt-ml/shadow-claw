@@ -176,6 +176,27 @@ async function matchCacheEntry(
     return undefined;
   }
 
+  // Search Workbox precache caches before runtime caches (e.g. shadow-claw-cache)
+  // so updated deployments take precedence over older runtime-cached HTML.
+  if (typeof caches.keys === "function") {
+    try {
+      const keys = await caches.keys();
+      const sortedKeys = [...keys].sort((a, b) => {
+        const aPrecache = a.startsWith("workbox-precache") ? 0 : 1;
+        const bPrecache = b.startsWith("workbox-precache") ? 0 : 1;
+
+        return aPrecache - bPrecache;
+      });
+      for (const key of sortedKeys) {
+        const cache = await caches.open(key);
+        const match = await cache.match(urlOrRequest, options);
+        if (match) {
+          return match;
+        }
+      }
+    } catch {}
+  }
+
   try {
     const directMatch = await caches.match(urlOrRequest, options);
     if (directMatch) {
@@ -183,32 +204,12 @@ async function matchCacheEntry(
     }
   } catch {}
 
-  try {
-    const keys = await caches.keys();
-    for (const key of keys) {
-      const cache = await caches.open(key);
-      const match = await cache.match(urlOrRequest, options);
-      if (match) {
-        return match;
-      }
-    }
-  } catch {}
-
   return undefined;
 }
 
-async function findCachedAppShell(): Promise<Response | undefined> {
-  const shellPath = applyBasePath("index.html");
-  const shellUrl = new URL(shellPath, location.origin);
-  const candidates = [
-    shellUrl.href,
-    shellPath,
-    "index.html",
-    "/index.html",
-    "/",
-    `${location.origin}/`,
-  ];
-
+async function matchFirstCachedCandidate(
+  candidates: string[],
+): Promise<Response | undefined> {
   for (const candidate of candidates) {
     const match = await matchCacheEntry(candidate, { ignoreSearch: true });
     if (match) {
@@ -217,6 +218,35 @@ async function findCachedAppShell(): Promise<Response | undefined> {
   }
 
   return undefined;
+}
+
+async function findCachedAppShell(): Promise<Response | undefined> {
+  const shellPath = applyBasePath("index.html");
+  const shellUrl = new URL(shellPath, location.origin);
+
+  return matchFirstCachedCandidate([
+    shellUrl.href,
+    shellPath,
+    "index.html",
+    "/index.html",
+    "/",
+    `${location.origin}/`,
+  ]);
+}
+
+async function findCachedNavigationCandidate(
+  requestUrl: URL,
+): Promise<Response | undefined> {
+  const pathname = requestUrl.pathname;
+  const cleanPath = pathname.replace(/\/+$/, "");
+
+  return matchFirstCachedCandidate([
+    requestUrl.href,
+    pathname,
+    `${cleanPath}/`,
+    `${cleanPath}/index.html`,
+    `${cleanPath}.html`,
+  ]);
 }
 
 async function fetchWithOriginAgentCluster(
@@ -250,29 +280,71 @@ async function fetchAppShellWithOriginAgentCluster(): Promise<Response> {
 
   let response: Response | undefined;
   try {
-    response = await findCachedAppShell();
-  } catch {}
-
-  if (!response) {
-    try {
-      response = await fetch(shellUrl.href);
-      if (response && response.ok && typeof caches !== "undefined") {
+    const networkResponse = await fetch(shellUrl.href);
+    if (networkResponse && networkResponse.ok) {
+      response = networkResponse;
+      if (typeof caches !== "undefined") {
         try {
           const cache = await caches.open("shadow-claw-cache");
-          await cache.put(shellUrl.href, response.clone());
+          await cache.put(shellUrl.href, networkResponse.clone());
         } catch {}
       }
-    } catch (err) {
+    } else {
       try {
         response = await findCachedAppShell();
       } catch {}
       if (!response) {
-        throw err;
+        response = networkResponse;
       }
+    }
+  } catch (err) {
+    try {
+      response = await findCachedAppShell();
+    } catch {}
+    if (!response) {
+      throw err;
     }
   }
 
   return ensureOriginAgentClusterHeader(response);
+}
+
+async function fetchNavigationWithFallback(
+  request: Request,
+  requestUrl: URL,
+): Promise<Response> {
+  try {
+    const networkResponse = await fetchWithOriginAgentCluster(request);
+    if (
+      networkResponse.ok ||
+      networkResponse.type === "opaqueredirect" ||
+      networkResponse.status === 0 ||
+      (networkResponse.status >= 300 && networkResponse.status < 400)
+    ) {
+      return networkResponse;
+    }
+
+    const cachedCandidate = await findCachedNavigationCandidate(requestUrl);
+    if (cachedCandidate) {
+      return ensureOriginAgentClusterHeader(cachedCandidate);
+    }
+
+    return networkResponse;
+  } catch (fetchErr) {
+    const cachedCandidate = await findCachedNavigationCandidate(requestUrl);
+    if (cachedCandidate) {
+      return ensureOriginAgentClusterHeader(cachedCandidate);
+    }
+
+    try {
+      const cachedShell = await findCachedAppShell();
+      if (cachedShell) {
+        return ensureOriginAgentClusterHeader(cachedShell);
+      }
+    } catch {}
+
+    throw fetchErr;
+  }
 }
 
 // On every SW startup (including after the browser terminates and restarts the SW
@@ -326,37 +398,7 @@ self.addEventListener("fetch", (event: FetchEvent) => {
         return;
       }
 
-      event.respondWith(
-        (async () => {
-          const pathname = requestUrl.pathname;
-          const cleanPath = pathname.replace(/\/+$/, "");
-          const candidates = [
-            requestUrl.href,
-            pathname,
-            `${cleanPath}/`,
-            `${cleanPath}/index.html`,
-            `${cleanPath}.html`,
-          ];
-          for (const candidate of candidates) {
-            const match = await matchCacheEntry(candidate, {
-              ignoreSearch: true,
-            });
-            if (match) {
-              return ensureOriginAgentClusterHeader(match);
-            }
-          }
-
-          try {
-            return await fetchWithOriginAgentCluster(event.request);
-          } catch (fetchErr) {
-            try {
-              return await fetchAppShellWithOriginAgentCluster();
-            } catch {
-              throw fetchErr;
-            }
-          }
-        })(),
-      );
+      event.respondWith(fetchNavigationWithFallback(event.request, requestUrl));
 
       return;
     }

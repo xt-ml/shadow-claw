@@ -1047,4 +1047,81 @@ describe("build without and with pages", () => {
       await rm(tempConsumerRoot, { recursive: true, force: true });
     }
   });
+
+  it("updates service-worker.js precache revisions in consumer builds instead of keeping the toolchain index.html hash", async () => {
+    const toolchainIndexJs = path.join(tempProjectRoot, "dist/public/index.js");
+    if (!fs.existsSync(toolchainIndexJs)) {
+      await runBuild();
+    }
+
+    const toolchainSwPath = path.join(
+      tempProjectRoot,
+      "dist/public/service-worker.js",
+    );
+    const hadToolchainSw = fs.existsSync(toolchainSwPath);
+    const previousToolchainSw = hadToolchainSw
+      ? await readFile(toolchainSwPath, "utf8")
+      : "";
+    if (!previousToolchainSw.includes("precacheAndRoute")) {
+      await writeFile(
+        toolchainSwPath,
+        'if(!self.define){let e,s={};}define(["./workbox-123"],function(e){"use strict";importScripts("service-worker/fetch-proxy.js"),e.precacheAndRoute([{url:"index.html",revision:"toolchain_initial_rev"},{url:"404.html",revision:"toolchain_404_rev"}],{})});',
+        "utf8",
+      );
+    }
+
+    const toolchainSw = await readFile(toolchainSwPath, "utf8");
+    const toolchainRevMatch = toolchainSw.match(
+      /["']?url["']?\s*:\s*"index\.html"\s*,\s*["']?revision["']?\s*:\s*"([^"]+)"/,
+    );
+    expect(toolchainRevMatch).not.toBeNull();
+    const toolchainIndexRev = toolchainRevMatch![1];
+
+    const tempConsumerRoot = await mkdtemp(
+      path.join(os.tmpdir(), "shadow-claw-sw-consumer-"),
+    );
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      await writeFile(
+        path.join(tempConsumerRoot, "shadow-claw.config.json"),
+        JSON.stringify({
+          site: {
+            title: "Consumer Synth Site",
+            description: "Custom consumer build.",
+          },
+          customElements: {
+            allowedElements: ["scdaw-synth"],
+          },
+        }),
+        "utf8",
+      );
+
+      await runConsumerBuild({
+        contentRoot: tempConsumerRoot,
+        toolchainRoot: tempProjectRoot,
+        isProduction: false,
+        quiet: true,
+        stdio: "pipe",
+      });
+
+      const consumerSw = await readFile(
+        path.join(tempConsumerRoot, "dist/public/service-worker.js"),
+        "utf8",
+      );
+      const consumerRevMatch = consumerSw.match(
+        /["']?url["']?\s*:\s*"index\.html"\s*,\s*["']?revision["']?\s*:\s*"([^"]+)"/,
+      );
+      expect(consumerRevMatch).not.toBeNull();
+      expect(consumerRevMatch![1]).not.toBe(toolchainIndexRev);
+    } finally {
+      if (hadToolchainSw) {
+        await writeFile(toolchainSwPath, previousToolchainSw, "utf8");
+      } else {
+        await rm(toolchainSwPath, { force: true });
+      }
+      logSpy.mockRestore();
+      await rm(tempConsumerRoot, { recursive: true, force: true });
+    }
+  });
 });

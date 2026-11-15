@@ -237,6 +237,38 @@ describe("applyRouteFromCurrentLocation", () => {
     replaceStateSpy.mockRestore();
   });
 
+  it("preserves search and hash params when replacing history state for defaultPinnedPage", async () => {
+    const appRoutes = await import("../../../core/app-routes.js");
+    (
+      appRoutes.resolveRouteToPrettyPathAsync as jest.Mock<any>
+    ).mockResolvedValue("/main/");
+
+    const replaceStateSpy = jest.spyOn(window.history, "replaceState");
+
+    (oStore as any).defaultPinnedPage = {
+      groupId: "br:main",
+      path: "index.html",
+    };
+    const rootUrl = new URL("http://localhost:8888/?foo=1#file=abc123");
+
+    await applyRouteFromCurrentLocation(
+      shadow,
+      shadowClaw,
+      db,
+      fStore,
+      oStore,
+      rootUrl,
+    );
+
+    expect(replaceStateSpy).toHaveBeenCalledWith(
+      null,
+      "",
+      "/main/?foo=1#file=abc123",
+    );
+
+    replaceStateSpy.mockRestore();
+  });
+
   it("does not override with defaultPinnedPage when browsing to non-root page URL", async () => {
     (oStore as any).defaultPinnedPage = {
       groupId: "br:main",

@@ -47,7 +47,7 @@ graph TD
 ### 1. Custom Element Validation (`isAllowedCustomElement`)
 
 - **Built-in Permitted Elements:** Standard HTML elements (no hyphen) and built-in ShadowClaw components (`shadow-claw` and `shadow-claw-*`) are always permitted.
-- **Dynamic Allowlist:** Custom elements (tags containing `-`) outside the built-in prefix must match explicitly configured allowlists populated from `shadow-claw.config.json` (or legacy `site-config.json`) or persistent IndexedDB configuration.
+- **Dynamic Allowlist:** Custom elements (tags containing `-`) outside the built-in prefix (`shadow-claw`, `shadow-claw-*`, `sc-*`) must match explicitly configured allowlists populated from `shadow-claw.config.json` (or legacy `site-config.json`) or persistent IndexedDB configuration. On startup, `loadCustomElementSecurityFromDb()` and `OrchestratorStore.applySiteConfigDefaults()` (`syncAllowlistConfigKey`) merge newly declared `#shadow-claw-site-config` `allowedElements` and `allowedDomains` with persisted IndexedDB entries via `mergeAllowlistValues()`, preserving existing entries while ensuring upgraded deployments never block newly added custom elements.
 
 ### 2. Registry Guard (`installCustomElementsRegistryGuard`)
 

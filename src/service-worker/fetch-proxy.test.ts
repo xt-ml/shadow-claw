@@ -56,8 +56,21 @@ describe("service-worker fetch proxy", () => {
       this._bodySource = body;
     }
 
+    get ok(): boolean {
+      return this.status >= 200 && this.status < 300;
+    }
+
     get body(): any {
       return this._bodySource;
+    }
+
+    clone(): TestResponse {
+      return new TestResponse(this._bodySource, {
+        status: this.status,
+        statusText: this.statusText,
+        type: this.type,
+        headers: this.headers,
+      });
     }
 
     async arrayBuffer(): Promise<ArrayBuffer> {
@@ -274,17 +287,27 @@ describe("service-worker fetch proxy", () => {
     expect(response.headers.get("Origin-Agent-Cluster")).toBe("?1");
   });
 
-  it("serves app shell from cache when available for app route navigation requests", async () => {
-    const cachedShell = new TestResponse("cached-app-shell", {
+  it("uses Network-First for app route navigation and updates shadow-claw-cache even when cached", async () => {
+    const staleShell = new TestResponse("stale-app-shell", {
       status: 200,
       headers: { "Content-Type": "text/html; charset=utf-8" },
     });
-    const matchMock = jest.fn(async () => cachedShell);
+    const freshShell = new TestResponse("fresh-app-shell", {
+      status: 200,
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    });
+    const putMock = jest.fn(async (_key: string, _res: any) => undefined);
+    const matchMock = jest.fn(async () => staleShell);
     Object.defineProperty(globalThis, "caches", {
       configurable: true,
       writable: true,
-      value: { match: matchMock },
+      value: {
+        match: matchMock,
+        keys: async () => ["shadow-claw-cache"],
+        open: async () => ({ match: matchMock, put: putMock }),
+      },
     });
+    networkFetch.mockResolvedValueOnce(freshShell as unknown as Response);
 
     try {
       const navigationRequest = {
@@ -297,7 +320,52 @@ describe("service-worker fetch proxy", () => {
 
       const response = await dispatchFetch(navigationRequest);
 
-      expect(networkFetch).not.toHaveBeenCalled();
+      expect(networkFetch).toHaveBeenCalledWith(
+        `${globalThis.location.origin}/index.html`,
+      );
+      expect(await response.text()).toBe("fresh-app-shell");
+      expect(response.headers.get("Origin-Agent-Cluster")).toBe("?1");
+      expect(putMock).toHaveBeenCalledWith(
+        `${globalThis.location.origin}/index.html`,
+        expect.any(TestResponse),
+      );
+    } finally {
+      delete (globalThis as any).caches;
+    }
+  });
+
+  it("falls back to cached app shell when network returns non-OK or rejects on app route navigation", async () => {
+    const cachedShell = new TestResponse("cached-app-shell", {
+      status: 200,
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    });
+    const matchMock = jest.fn(async () => cachedShell);
+    Object.defineProperty(globalThis, "caches", {
+      configurable: true,
+      writable: true,
+      value: { match: matchMock },
+    });
+    networkFetch.mockResolvedValueOnce(
+      new TestResponse("Service Unavailable", {
+        status: 503,
+        statusText: "Service Unavailable",
+      }) as unknown as Response,
+    );
+
+    try {
+      const navigationRequest = {
+        url: `${globalThis.location.origin}/files/main/~/docs/example/article.html`,
+        method: "GET",
+        mode: "navigate",
+        destination: "document",
+        headers: new TestHeaders(),
+      };
+
+      const response = await dispatchFetch(navigationRequest);
+
+      expect(networkFetch).toHaveBeenCalledWith(
+        `${globalThis.location.origin}/index.html`,
+      );
       expect(await response.text()).toBe("cached-app-shell");
       expect(response.headers.get("Origin-Agent-Cluster")).toBe("?1");
     } finally {
@@ -350,7 +418,53 @@ describe("service-worker fetch proxy", () => {
     expect(response.type).toBe("opaqueredirect");
   });
 
-  it("serves pre-cached pretty path .html or index.html from caches before network fallback", async () => {
+  it("uses Network-First for pretty-path / non-app-route navigation and refreshes shadow-claw-cache", async () => {
+    const staleMainHtml = new TestResponse("stale-main-html", {
+      status: 200,
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    });
+    const freshMainHtml = new TestResponse("fresh-main-html", {
+      status: 200,
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    });
+    const putMock = jest.fn(async (_key: string, _res: any) => undefined);
+    const matchMock = jest.fn(async () => staleMainHtml);
+    Object.defineProperty(globalThis, "caches", {
+      configurable: true,
+      writable: true,
+      value: {
+        match: matchMock,
+        keys: async () => ["shadow-claw-cache"],
+        open: async () => ({ match: matchMock, put: putMock }),
+      },
+    });
+    networkFetch.mockResolvedValueOnce(freshMainHtml as unknown as Response);
+
+    try {
+      const targetUrl = `${globalThis.location.origin}/shadow-claw-daw/main/`;
+      const navigationRequest = {
+        url: targetUrl,
+        method: "GET",
+        mode: "navigate",
+        destination: "document",
+        headers: new TestHeaders(),
+      };
+
+      const response = await dispatchFetch(navigationRequest);
+
+      expect(networkFetch).toHaveBeenCalledWith(
+        targetUrl,
+        expect.objectContaining({ redirect: "follow" }),
+      );
+      expect(await response.text()).toBe("fresh-main-html");
+      expect(response.headers.get("Origin-Agent-Cluster")).toBe("?1");
+      expect(putMock).toHaveBeenCalledWith(targetUrl, expect.any(TestResponse));
+    } finally {
+      delete (globalThis as any).caches;
+    }
+  });
+
+  it("falls back to pre-cached pretty path .html or index.html when offline or when network returns 404", async () => {
     const cachedPrettyPage = new TestResponse("cached-pretty-page", {
       status: 200,
       headers: { "Content-Type": "text/html; charset=utf-8" },
@@ -372,7 +486,8 @@ describe("service-worker fetch proxy", () => {
     });
 
     try {
-      const navigationRequest = {
+      networkFetch.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+      const offlineRequest = {
         url: `${globalThis.location.origin}/docs/skill-creator`,
         method: "GET",
         mode: "navigate",
@@ -380,11 +495,19 @@ describe("service-worker fetch proxy", () => {
         headers: new TestHeaders(),
       };
 
-      const response = await dispatchFetch(navigationRequest);
+      const offlineResponse = await dispatchFetch(offlineRequest);
+      expect(await offlineResponse.text()).toBe("cached-pretty-page");
+      expect(offlineResponse.headers.get("Origin-Agent-Cluster")).toBe("?1");
 
-      expect(networkFetch).not.toHaveBeenCalled();
-      expect(await response.text()).toBe("cached-pretty-page");
-      expect(response.headers.get("Origin-Agent-Cluster")).toBe("?1");
+      networkFetch.mockResolvedValueOnce(
+        new TestResponse("Not Found", {
+          status: 404,
+          statusText: "Not Found",
+        }) as unknown as Response,
+      );
+      const notFoundResponse = await dispatchFetch(offlineRequest);
+      expect(await notFoundResponse.text()).toBe("cached-pretty-page");
+      expect(notFoundResponse.headers.get("Origin-Agent-Cluster")).toBe("?1");
     } finally {
       delete (globalThis as any).caches;
     }
@@ -605,6 +728,57 @@ describe("service-worker fetch proxy", () => {
       const response = await dispatchFetch(navigationRequest);
 
       expect(await response.text()).toBe("fallback-offline-app-shell");
+      expect(response.headers.get("Origin-Agent-Cluster")).toBe("?1");
+    } finally {
+      delete (globalThis as any).caches;
+    }
+  });
+
+  it("prioritizes workbox-precache-* caches over older shadow-claw-cache entries during offline fallback", async () => {
+    const staleRuntimeShell = new TestResponse("stale-shell", {
+      status: 200,
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    });
+    const updatedPrecachedShell = new TestResponse("updated-precached-shell", {
+      status: 200,
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    });
+
+    const matchShadowClawCache = jest.fn(async () => staleRuntimeShell);
+    const matchWorkboxPrecache = jest.fn(async () => updatedPrecachedShell);
+
+    Object.defineProperty(globalThis, "caches", {
+      configurable: true,
+      writable: true,
+      value: {
+        // Simulates global caches.match() hitting older shadow-claw-cache first
+        match: matchShadowClawCache,
+        keys: async () => [
+          "shadow-claw-cache",
+          "workbox-precache-v2-https://xt-ml.github.io/shadow-claw-daw/",
+        ],
+        open: async (name: string) => ({
+          match: name.startsWith("workbox-precache")
+            ? matchWorkboxPrecache
+            : matchShadowClawCache,
+        }),
+      },
+    });
+
+    networkFetch.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+    try {
+      const navigationRequest = {
+        url: `${globalThis.location.origin}/`,
+        method: "GET",
+        mode: "navigate",
+        destination: "document",
+        headers: new TestHeaders(),
+      };
+
+      const response = await dispatchFetch(navigationRequest);
+
+      expect(await response.text()).toBe("updated-precached-shell");
       expect(response.headers.get("Origin-Agent-Cluster")).toBe("?1");
     } finally {
       delete (globalThis as any).caches;

@@ -300,6 +300,64 @@ describe("custom-element-security", () => {
         ),
       ).toBe(true);
     });
+
+    it("merges embedded #shadow-claw-site-config allowlists with older database entries instead of overwriting them", async () => {
+      const existing = document.getElementById("shadow-claw-site-config");
+      existing?.remove();
+
+      const siteConfigScript = document.createElement("script");
+      siteConfigScript.id = "shadow-claw-site-config";
+      siteConfigScript.type = "application/json";
+      siteConfigScript.textContent = JSON.stringify({
+        customElements: {
+          allowedElements: ["scdaw-workbench", "scdaw-synth"],
+          allowedDomains: ["cdn.jsdelivr.net", "esm.sh"],
+        },
+      });
+      document.head.appendChild(siteConfigScript);
+
+      const storeData: Record<string, string> = {
+        [CONFIG_KEYS.ALLOWED_CUSTOM_ELEMENTS]: JSON.stringify([
+          "scdaw-workbench",
+          "user-custom-el",
+        ]),
+        [CONFIG_KEYS.ALLOWED_CUSTOM_ELEMENT_HOST_PATTERNS]: JSON.stringify([
+          "cdn.jsdelivr.net",
+        ]),
+      };
+
+      const mockDb: any = {
+        transaction: () => ({
+          objectStore: () => ({
+            get: (key: string) => {
+              const req: any = {
+                result: storeData[key]
+                  ? { key, value: storeData[key] }
+                  : undefined,
+              };
+              setTimeout(() => req.onsuccess?.(), 0);
+
+              return req;
+            },
+          }),
+        }),
+      };
+
+      try {
+        await loadCustomElementSecurityFromDb(mockDb);
+
+        expect(isAllowedCustomElement("scdaw-workbench")).toBe(true);
+        expect(isAllowedCustomElement("scdaw-synth")).toBe(true);
+        expect(isAllowedCustomElement("user-custom-el")).toBe(true);
+        expect(isAllowedCustomElement("unapproved-tag")).toBe(false);
+        expect(
+          isSafeCustomElementSource("https://cdn.jsdelivr.net/npm/pkg/a.js"),
+        ).toBe(true);
+        expect(isSafeCustomElementSource("https://esm.sh/pkg")).toBe(true);
+      } finally {
+        siteConfigScript.remove();
+      }
+    });
   });
 
   describe("loadApprovedCustomElementScript", () => {

@@ -23,17 +23,25 @@ function rebuildHostMatchers(patterns: string[]): void {
 
 rebuildHostMatchers(activeHostPatterns);
 
-function normalizeElementList(elements: string[] | string): string[] {
+export function normalizeElementList(elements: string[] | string): string[] {
   if (Array.isArray(elements)) {
-    return elements
-      .map((s) => (typeof s === "string" ? s.toLowerCase().trim() : ""))
-      .filter(Boolean);
+    return Array.from(
+      new Set(
+        elements
+          .map((s) => (typeof s === "string" ? s.toLowerCase().trim() : ""))
+          .filter(Boolean),
+      ),
+    );
   }
   if (typeof elements === "string") {
-    return elements
-      .split(/[\n,]+/)
-      .map((s) => s.toLowerCase().trim())
-      .filter(Boolean);
+    return Array.from(
+      new Set(
+        elements
+          .split(/[\n,]+/)
+          .map((s) => s.toLowerCase().trim())
+          .filter(Boolean),
+      ),
+    );
   }
   return [];
 }
@@ -159,6 +167,27 @@ export function isSafeCustomElementSource(urlStr: string): boolean {
   }
 }
 
+export function extractCustomElementConfigFields(config: any): {
+  allowedElements?: string[] | string;
+  allowedDomains?: string[] | string;
+} {
+  if (!config || typeof config !== "object") {
+    return {};
+  }
+
+  const customEl =
+    typeof config.customElements === "object" &&
+    !Array.isArray(config.customElements)
+      ? config.customElements
+      : undefined;
+
+  return {
+    allowedElements: config.allowedCustomElements || customEl?.allowedElements,
+    allowedDomains:
+      config.allowedCustomElementDomains || customEl?.allowedDomains,
+  };
+}
+
 export function configureCustomElementSecurity(config: {
   allowedCustomElements?: string[] | string;
   allowedCustomElementDomains?: string[] | string;
@@ -174,23 +203,12 @@ export function configureCustomElementSecurity(config: {
     return;
   }
 
-  const elements =
-    config.allowedCustomElements ||
-    (typeof config.customElements === "object" &&
-    !Array.isArray(config.customElements)
-      ? config.customElements?.allowedElements
-      : undefined);
+  const { allowedElements: elements, allowedDomains: domains } =
+    extractCustomElementConfigFields(config);
 
   if (elements !== undefined) {
     setAllowedCustomElements(elements);
   }
-
-  const domains =
-    config.allowedCustomElementDomains ||
-    (typeof config.customElements === "object" &&
-    !Array.isArray(config.customElements)
-      ? config.customElements?.allowedDomains
-      : undefined);
 
   if (domains !== undefined) {
     setAllowedCustomElementHostPatterns(domains);

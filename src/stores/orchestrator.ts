@@ -61,9 +61,15 @@ import { requestStorageAccess } from "../storage/request-storage-access.js";
 import { getStorageStatus } from "../storage/storage.js";
 import {
   configureCustomElementSecurity,
+  extractCustomElementConfigFields,
   installCustomElementDomGuard,
   installCustomElementsRegistryGuard,
   loadCustomElementSecurityFromDb,
+  mergeAllowlistValues,
+  normalizeElementList,
+  normalizePatternList,
+  setAllowedCustomElementHostPatterns,
+  setAllowedCustomElements,
 } from "../security/custom-element-security.js";
 import {
   getSiteConfigDefaultPinnedPage,
@@ -2820,6 +2826,34 @@ export class OrchestratorStore {
     await this.persistTaskSyncOutbox(db);
   }
 
+  private async syncAllowlistConfigKey(
+    db: ShadowClawDatabase,
+    configKey: string,
+    incoming: string[] | string | undefined,
+    normalizeFn: (val: string[] | string) => string[],
+    applyMemoryFn: (list: string[] | string) => void,
+  ): Promise<void> {
+    if (incoming === undefined) {
+      return;
+    }
+
+    const curValue = await getConfig(db, configKey);
+    if (curValue === undefined || curValue === null) {
+      await setConfig(db, configKey, JSON.stringify(incoming));
+      return;
+    }
+
+    const { merged, changed } = mergeAllowlistValues(
+      curValue,
+      incoming,
+      normalizeFn,
+    );
+    applyMemoryFn(merged);
+    if (changed) {
+      await setConfig(db, configKey, JSON.stringify(merged));
+    }
+  }
+
   private async applySiteConfigDefaults(db: ShadowClawDatabase): Promise<void> {
     if (typeof document === "undefined") {
       return;
@@ -2835,7 +2869,6 @@ export class OrchestratorStore {
       installCustomElementsRegistryGuard();
       installCustomElementDomGuard();
 
-      const customElConfig = config.customElements;
       const isSeededRaw = await getConfig(db, CONFIG_KEYS.SITE_CONFIG_SEEDED);
       const alreadySeeded = isTruthyConfigValue(isSeededRaw);
 
@@ -2885,43 +2918,22 @@ export class OrchestratorStore {
         }
       }
 
-      const allowedElements =
-        config.allowedCustomElements ||
-        (typeof customElConfig === "object" && !Array.isArray(customElConfig)
-          ? customElConfig.allowedElements
-          : undefined);
-      if (allowedElements !== undefined) {
-        const curElements = await getConfig(
-          db,
-          CONFIG_KEYS.ALLOWED_CUSTOM_ELEMENTS,
-        );
-        if (curElements === undefined || curElements === null) {
-          await setConfig(
-            db,
-            CONFIG_KEYS.ALLOWED_CUSTOM_ELEMENTS,
-            JSON.stringify(allowedElements),
-          );
-        }
-      }
-
-      const allowedDomains =
-        config.allowedCustomElementDomains ||
-        (typeof customElConfig === "object" && !Array.isArray(customElConfig)
-          ? customElConfig.allowedDomains
-          : undefined);
-      if (allowedDomains !== undefined) {
-        const curDomains = await getConfig(
-          db,
-          CONFIG_KEYS.ALLOWED_CUSTOM_ELEMENT_HOST_PATTERNS,
-        );
-        if (curDomains === undefined || curDomains === null) {
-          await setConfig(
-            db,
-            CONFIG_KEYS.ALLOWED_CUSTOM_ELEMENT_HOST_PATTERNS,
-            JSON.stringify(allowedDomains),
-          );
-        }
-      }
+      const { allowedElements, allowedDomains } =
+        extractCustomElementConfigFields(config);
+      await this.syncAllowlistConfigKey(
+        db,
+        CONFIG_KEYS.ALLOWED_CUSTOM_ELEMENTS,
+        allowedElements,
+        normalizeElementList,
+        setAllowedCustomElements,
+      );
+      await this.syncAllowlistConfigKey(
+        db,
+        CONFIG_KEYS.ALLOWED_CUSTOM_ELEMENT_HOST_PATTERNS,
+        allowedDomains,
+        normalizePatternList,
+        setAllowedCustomElementHostPatterns,
+      );
 
       if (config.sidebar && typeof config.sidebar === "object") {
         const {

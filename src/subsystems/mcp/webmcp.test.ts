@@ -3,7 +3,6 @@ import { jest } from "@jest/globals";
 describe("webmcp integration", () => {
   let isWebMcpSupported: any;
   let registerWebMcpTools: any;
-  let setWebMcpMode: any;
   let unregisterWebMcpTools: any;
   let mockExecuteTool: any;
   let mockOpenDatabase: any;
@@ -45,7 +44,7 @@ describe("webmcp integration", () => {
       }
     });
 
-    jest.unstable_mockModule("@mcp-b/webmcp-polyfill", () => ({
+    jest.unstable_mockModule("@w3c/webmcp-polyfill", () => ({
       installWebMCP: installMock,
     }));
 
@@ -64,12 +63,15 @@ describe("webmcp integration", () => {
     const module = await import("./webmcp.js");
     isWebMcpSupported = module.isWebMcpSupported;
     registerWebMcpTools = module.registerWebMcpTools;
-    setWebMcpMode = module.setWebMcpMode;
     unregisterWebMcpTools = module.unregisterWebMcpTools;
   });
 
   afterEach(() => {
+    if (unregisterWebMcpTools) {
+      unregisterWebMcpTools();
+    }
     delete ((globalThis as any).document as any).modelContext;
+    delete ((globalThis as any).navigator as any).modelContext;
   });
 
   describe("parseWebMcpInputSchema", () => {
@@ -255,7 +257,7 @@ describe("webmcp integration", () => {
 
     // Re-mock the polyfill to be a no-op (simulates polyfill failure)
     jest.resetModules();
-    jest.unstable_mockModule("@mcp-b/webmcp-polyfill", () => ({
+    jest.unstable_mockModule("@w3c/webmcp-polyfill", () => ({
       installWebMCP: jest.fn(),
     }));
 
@@ -283,9 +285,7 @@ describe("webmcp integration", () => {
     expect(isWebMcpSupported()).toBe(true);
   });
 
-  it("uses document.modelContext in native mode", async () => {
-    setWebMcpMode("native");
-
+  it("uses document.modelContext when already present", async () => {
     const documentRegisterTool = jest.fn();
 
     Object.defineProperty((globalThis as any).document, "modelContext", {
@@ -301,11 +301,10 @@ describe("webmcp integration", () => {
     expect(documentRegisterTool).toHaveBeenCalled();
 
     delete ((globalThis as any).document as any).modelContext;
+    unregisterWebMcpTools();
   });
 
   it("falls back to navigator.modelContext when document.modelContext is missing (backward-compat for Chrome < 152)", async () => {
-    setWebMcpMode("native");
-
     delete ((globalThis as any).document as any).modelContext;
 
     const navigatorRegisterTool = jest.fn();
@@ -320,6 +319,9 @@ describe("webmcp integration", () => {
 
     expect(registered).toBe(true);
     expect(navigatorRegisterTool).toHaveBeenCalled();
+
+    delete ((globalThis as any).navigator as any).modelContext;
+    unregisterWebMcpTools();
   });
 
   it("always passes AbortController signal when registering tools", async () => {
@@ -946,62 +948,7 @@ describe("webmcp integration", () => {
     });
   });
 
-  describe("Firefox originAgentCluster compatibility", () => {
-    const origOAC = Object.getOwnPropertyDescriptor(
-      globalThis,
-      "originAgentCluster",
-    );
-
-    afterEach(() => {
-      // Restore originAgentCluster to its original state
-      if (origOAC) {
-        Object.defineProperty(globalThis, "originAgentCluster", origOAC);
-      } else {
-        delete (globalThis as any).originAgentCluster;
-      }
-    });
-
-    it("skips polyfill registration and returns false when originAgentCluster === false (Firefox without Origin-Agent-Cluster header)", async () => {
-      Object.defineProperty(globalThis, "originAgentCluster", {
-        configurable: true,
-        value: false,
-      });
-
-      const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
-
-      const result = await registerWebMcpTools(null, jest.fn());
-
-      expect(result).toBe(false);
-      // Must not have attempted any registerTool calls
-      expect(mockRegisterTool).not.toHaveBeenCalled();
-      // Must emit exactly one descriptive warning
-      expect(warnSpy).toHaveBeenCalledTimes(1);
-      expect(warnSpy.mock.calls[0][0]).toContain("originAgentCluster");
-
-      warnSpy.mockRestore();
-    });
-
-    it("proceeds normally when originAgentCluster === true (Chrome default)", async () => {
-      Object.defineProperty(globalThis, "originAgentCluster", {
-        configurable: true,
-        value: true,
-      });
-
-      const result = await registerWebMcpTools(null, jest.fn());
-
-      expect(result).toBe(true);
-      expect(mockRegisterTool).toHaveBeenCalled();
-    });
-
-    it("proceeds normally when originAgentCluster is undefined (older browsers)", async () => {
-      delete (globalThis as any).originAgentCluster;
-
-      const result = await registerWebMcpTools(null, jest.fn());
-
-      expect(result).toBe(true);
-      expect(mockRegisterTool).toHaveBeenCalled();
-    });
-
+  describe("security error handling", () => {
     it("bails out cleanly on SecurityError DOMException from registerTool without cascading per-tool errors", async () => {
       // Simulate a polyfill that passes the pre-check but throws SecurityError on the first registerTool call
       const securityError = new DOMException("", "SecurityError");

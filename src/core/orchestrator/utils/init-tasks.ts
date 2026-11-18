@@ -15,7 +15,6 @@ import { setConfig } from "../../../db/set-config.js";
 import { createModuleWorker } from "../../../utils/runtime-assets.js";
 import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { RoomManager } from "../../../subsystems/channels/room-manager.js";
-import { setWebMcpMode as applyWebMcpMode } from "../../../subsystems/mcp/webmcp.js";
 import { modelRegistry } from "../../../subsystems/providers/model-registry.js";
 import { isPromptApiSupported } from "../../../subsystems/providers/utils/is-prompt-api-supported.js";
 import { fetchTokenizerConfig } from "../../../subsystems/providers/utils/chat-template.js";
@@ -160,13 +159,6 @@ export async function initFeatureFlagsAndLimits(
   const storedStreaming = await getConfig(db, CONFIG_KEYS.STREAMING_ENABLED);
   orchestrator.streamingEnabled = storedStreaming !== "false";
 
-  const storedWebMcpToolsEnabled = await getConfig(
-    db,
-    CONFIG_KEYS.WEBMCP_TOOLS_ENABLED,
-  );
-
-  orchestrator.webMcpToolsEnabled = storedWebMcpToolsEnabled !== "false";
-
   const storedBashFullInternetAccess = await getConfig(
     db,
     CONFIG_KEYS.VM_BASH_FULL_INTERNET_ACCESS,
@@ -174,11 +166,6 @@ export async function initFeatureFlagsAndLimits(
 
   orchestrator.vmBashFullInternetAccess =
     storedBashFullInternetAccess === "true";
-
-  const storedWebMcpMode = await getConfig(db, CONFIG_KEYS.WEBMCP_MODE);
-  if (storedWebMcpMode === "native" || storedWebMcpMode === "polyfill") {
-    applyWebMcpMode(storedWebMcpMode);
-  }
 
   const storedCompression = await getConfig(
     db,

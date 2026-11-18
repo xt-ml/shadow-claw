@@ -126,7 +126,6 @@ const mockSetConfig = jest
   .mockResolvedValue(undefined);
 const mockSetRemoteAgentTyping =
   jest.fn<(groupId: string, typing: boolean) => void>();
-const mockSetWebMcpMode = jest.fn<(mode: string) => void>();
 const mockTaskSchedulerStart = jest.fn<() => void>();
 let capturedTaskExecutor: ((task: Task) => Promise<void>) | null = null;
 let capturedTaskOnExecuted: (() => void) | null = null;
@@ -235,10 +234,6 @@ jest.unstable_mockModule(
     RoomManager: mockRoomManager,
   }),
 );
-
-jest.unstable_mockModule("../../../subsystems/mcp/webmcp.js", () => ({
-  setWebMcpMode: mockSetWebMcpMode,
-}));
 
 jest.unstable_mockModule("../../../stores/orchestrator.js", () => ({
   orchestratorStore: {
@@ -351,7 +346,6 @@ interface MockInitOrchestrator {
   scheduler?: { start: jest.Mock<() => void>; stop: jest.Mock<() => void> };
   vmBootMode?: string;
   streamingEnabled?: boolean;
-  webMcpToolsEnabled?: boolean;
   vmBashFullInternetAccess?: boolean;
   contextCompressionEnabled?: boolean;
   reasoningEffort?: string;
@@ -695,12 +689,8 @@ describe("initTasks", () => {
             return "9p";
           case CONFIG_KEYS.STREAMING_ENABLED:
             return "false";
-          case CONFIG_KEYS.WEBMCP_TOOLS_ENABLED:
-            return "false";
           case CONFIG_KEYS.VM_BASH_FULL_INTERNET_ACCESS:
             return "true";
-          case CONFIG_KEYS.WEBMCP_MODE:
-            return "polyfill";
           case CONFIG_KEYS.CONTEXT_COMPRESSION_ENABLED:
             return "true";
           case CONFIG_KEYS.REASONING_EFFORT:
@@ -727,9 +717,7 @@ describe("initTasks", () => {
 
       expect(mockOrchestrator.vmBootMode).toBe("9p");
       expect(mockOrchestrator.streamingEnabled).toBe(false);
-      expect(mockOrchestrator.webMcpToolsEnabled).toBe(false);
       expect(mockOrchestrator.vmBashFullInternetAccess).toBe(true);
-      expect(mockSetWebMcpMode).toHaveBeenCalledWith("polyfill");
       expect(mockOrchestrator.contextCompressionEnabled).toBe(true);
       expect(mockOrchestrator.reasoningEffort).toBe("medium");
       expect(mockOrchestrator.useProxy).toBe(true);
@@ -749,7 +737,6 @@ describe("initTasks", () => {
 
       expect(mockOrchestrator.vmBootMode).toBe("disabled");
       expect(mockOrchestrator.streamingEnabled).toBe(true);
-      expect(mockOrchestrator.webMcpToolsEnabled).toBe(true);
       expect(mockOrchestrator.vmBashFullInternetAccess).toBe(false);
       expect(mockOrchestrator.contextCompressionEnabled).toBe(false);
       expect(mockOrchestrator.reasoningEffort).toBe("none");

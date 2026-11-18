@@ -1,11 +1,9 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 
-import { CONFIG_KEYS } from "../../../config/config.js";
 import type { ShadowClawDatabase } from "../../../db/db.js";
 import type { DeclarativeToolDefinition } from "../../../subsystems/tools/declarative.js";
 import type { SkillRecord } from "../../../subsystems/skills/types.js";
 import type { ToolDefinition } from "../../../subsystems/tools/tools.js";
-import type { WebMcpMode } from "../../../subsystems/mcp/webmcp.js";
 import { activate_skill } from "../../../subsystems/skills/tool.js";
 import type { Orchestrator } from "../orchestrator.js";
 
@@ -21,7 +19,6 @@ const mockRegisterWebMcpTools = jest
   .mockResolvedValue(undefined);
 
 const mockUnregisterWebMcpTools = jest.fn<() => void>();
-const mockApplyWebMcpMode = jest.fn<(mode: WebMcpMode) => void>();
 
 let lastActivatedListener: ((event: any) => void) | null = null;
 let lastCancelListener: ((event: any) => void) | null = null;
@@ -45,7 +42,6 @@ const mockOnWebMcpToolChange = jest.fn((cb: any) => {
 jest.unstable_mockModule("../../../subsystems/mcp/webmcp.js", () => ({
   registerWebMcpTools: mockRegisterWebMcpTools,
   unregisterWebMcpTools: mockUnregisterWebMcpTools,
-  setWebMcpMode: mockApplyWebMcpMode,
   onWebMcpToolActivated: mockOnWebMcpToolActivated,
   onWebMcpToolCancel: mockOnWebMcpToolCancel,
   onWebMcpToolChange: mockOnWebMcpToolChange,
@@ -171,12 +167,11 @@ jest.unstable_mockModule("../../../stores/tools.js", () => ({
   },
 }));
 
-const { syncWebMcpRegistration, setWebMcpMode, setWebMcpToolsEnabled } =
+const { syncWebMcpRegistration } =
   await import("./sync-web-mcp-registration.js");
 
 interface MockOrchestrator {
   webMcpEffectCleanup: (() => void) | null;
-  webMcpToolsEnabled: boolean;
   webMcpRegistrationLock: Promise<void>;
   agentWorker: Worker | null;
   events?: { emit: jest.Mock };
@@ -200,7 +195,6 @@ describe("syncWebMcpRegistration", () => {
     mockDb = {} as unknown as ShadowClawDatabase;
     mockOrchestrator = {
       webMcpEffectCleanup: jest.fn(),
-      webMcpToolsEnabled: true,
       webMcpRegistrationLock: Promise.resolve(),
       agentWorker: {} as unknown as Worker,
       events: { emit: jest.fn() },
@@ -224,15 +218,13 @@ describe("syncWebMcpRegistration", () => {
     });
   });
 
-  it("should clean up existing effect and unregister if not enabled", () => {
-    mockOrchestrator.webMcpToolsEnabled = false;
+  it("should clean up existing effect before re-registering", () => {
     const cleanupMock = mockOrchestrator.webMcpEffectCleanup!;
 
     syncWebMcpRegistration(mockOrchestrator as unknown as Orchestrator, mockDb);
 
     expect(cleanupMock).toHaveBeenCalled();
-    expect(mockOrchestrator.webMcpEffectCleanup).toBeNull();
-    expect(mockUnregisterWebMcpTools).toHaveBeenCalled();
+    expect(typeof mockOrchestrator.webMcpEffectCleanup).toBe("function");
   });
 
   it("should subscribe to toolactivated and toolcancel events and emit on orchestrator.events", async () => {
@@ -456,62 +448,5 @@ describe("syncWebMcpRegistration", () => {
     await mockOrchestrator.webMcpRegistrationLock;
 
     expect(mockRegisterWebMcpTools).toHaveBeenCalled();
-  });
-
-  describe("setWebMcpMode", () => {
-    it("should unregister tools, apply mode, save config, and trigger sync", async () => {
-      const syncDeps = {
-        orchestrator: mockOrchestrator as unknown as Orchestrator,
-      };
-
-      await setWebMcpMode(mockOrchestrator, mockDb, "native", syncDeps);
-      await mockOrchestrator.webMcpRegistrationLock;
-
-      expect(mockUnregisterWebMcpTools).toHaveBeenCalled();
-      expect(mockApplyWebMcpMode).toHaveBeenCalledWith("native");
-      expect(mockSetConfig).toHaveBeenCalledWith(
-        mockDb,
-        CONFIG_KEYS.WEBMCP_MODE,
-        "native",
-      );
-      expect(mockRegisterWebMcpTools).toHaveBeenCalled();
-    });
-  });
-
-  describe("setWebMcpToolsEnabled", () => {
-    it("should update enabled state to true, persist config, and sync", async () => {
-      mockOrchestrator.webMcpToolsEnabled = false;
-      const syncDeps = {
-        orchestrator: mockOrchestrator as unknown as Orchestrator,
-      };
-
-      await setWebMcpToolsEnabled(mockOrchestrator, mockDb, true, syncDeps);
-      await mockOrchestrator.webMcpRegistrationLock;
-
-      expect(mockOrchestrator.webMcpToolsEnabled).toBe(true);
-      expect(mockSetConfig).toHaveBeenCalledWith(
-        mockDb,
-        CONFIG_KEYS.WEBMCP_TOOLS_ENABLED,
-        "true",
-      );
-      expect(mockRegisterWebMcpTools).toHaveBeenCalled();
-    });
-
-    it("should update enabled state to false, persist config, and sync", async () => {
-      mockOrchestrator.webMcpToolsEnabled = true;
-      const syncDeps = {
-        orchestrator: mockOrchestrator as unknown as Orchestrator,
-      };
-
-      await setWebMcpToolsEnabled(mockOrchestrator, mockDb, false, syncDeps);
-
-      expect(mockOrchestrator.webMcpToolsEnabled).toBe(false);
-      expect(mockSetConfig).toHaveBeenCalledWith(
-        mockDb,
-        CONFIG_KEYS.WEBMCP_TOOLS_ENABLED,
-        "false",
-      );
-      expect(mockUnregisterWebMcpTools).toHaveBeenCalled();
-    });
   });
 });

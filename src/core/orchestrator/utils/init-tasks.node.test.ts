@@ -79,10 +79,6 @@ jest.unstable_mockModule("./sync-proxy-config-to-service-worker.js", () => ({
   syncProxyConfigToServiceWorker: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../../subsystems/mcp/webmcp.js", () => ({
-  setWebMcpMode: jest.fn(),
-}));
-
 jest.unstable_mockModule("../../../db/get-config.js", () => ({
   getConfig: mockGetConfig,
 }));

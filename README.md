@@ -283,7 +283,7 @@ Tools negotiate execution capabilities depending on the active environment:
 
 ### WebMCP Integration
 
-When running in browsers supporting the Model Context Protocol (or via `@mcp-b/webmcp-polyfill`), ShadowClaw automatically registers its tool catalog on `document.modelContext` with normalized input and output schemas across Chrome versions, output schema validation, and signal-based abort handling, routing tool execution safely through the Web Worker.
+When running in browsers supporting the Model Context Protocol (or via `@w3c/webmcp-polyfill`), ShadowClaw automatically registers its tool catalog on `document.modelContext` with normalized input and output schemas across Chrome versions, output schema validation, and signal-based abort handling, routing tool execution safely through the Web Worker.
 
 ### Declarative Tools, Skills & Remote Importer
 

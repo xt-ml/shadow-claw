@@ -2,7 +2,6 @@ import { getAvailableProviders, getProvider } from "../../config/config.js";
 import { effect } from "../../core/effect.js";
 
 import { getDb, ShadowClawDatabase } from "../../db/db.js";
-import { getWebMcpMode } from "../../subsystems/mcp/webmcp.js";
 
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { toolsStore } from "../../stores/tools.js";
@@ -13,10 +12,6 @@ import { ulid } from "../../utils/ulid.js";
 
 import type { Orchestrator } from "../../core/orchestrator/orchestrator.js";
 import type { RemoteManifest } from "../../subsystems/tools/remote/types.js";
-import {
-  setWebMcpMode,
-  setWebMcpToolsEnabled,
-} from "../../core/orchestrator/utils/sync-web-mcp-registration.js";
 
 import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";
 import "../shadow-claw-dialog/shadow-claw-dialog.js";
@@ -114,40 +109,6 @@ export class ShadowClawTools extends ShadowClawElement {
         toolsStore.setAllDeclarativeEnabled(db, []);
         showInfo("All tools disabled");
       });
-
-    // WebMCP toggle listener
-    const webMcpToggle = root.querySelector(
-      ".tools__webmcp-toggle",
-    ) as HTMLInputElement | null;
-    if (webMcpToggle) {
-      webMcpToggle.addEventListener("change", async () => {
-        const orchestrator =
-          this.orchestrator ?? orchestratorStore.orchestrator;
-        if (!orchestrator) {
-          webMcpToggle.checked = false;
-          showError("Orchestrator is not ready");
-
-          return;
-        }
-
-        const next = webMcpToggle.checked;
-        try {
-          await setWebMcpToolsEnabled(orchestrator, db, next, { orchestrator });
-          showInfo(
-            next
-              ? "WebMCP tool registration enabled"
-              : "WebMCP tool registration disabled",
-          );
-        } catch (err) {
-          webMcpToggle.checked = !next;
-          showError(
-            `Failed to update WebMCP setting: ${
-              err instanceof Error ? err.message : String(err)
-            }`,
-          );
-        }
-      });
-    }
 
     // Shared full internet access toggle listener
     const internetAccessToggle = root.querySelector(
@@ -263,32 +224,6 @@ export class ShadowClawTools extends ShadowClawElement {
           );
         }
       });
-
-    // WebMCP mode selector
-    const webMcpModeSelect = root.querySelector(
-      ".tools__webmcp-mode",
-    ) as HTMLSelectElement | null;
-    if (webMcpModeSelect) {
-      webMcpModeSelect.addEventListener("change", async () => {
-        const orchestrator =
-          this.orchestrator ?? orchestratorStore.orchestrator;
-        if (!orchestrator) {
-          return;
-        }
-
-        const mode = webMcpModeSelect.value as "polyfill" | "native";
-        try {
-          await setWebMcpMode(orchestrator, db, mode, { orchestrator });
-          showInfo(`WebMCP mode set to ${mode}`);
-        } catch (err) {
-          showError(
-            `Failed to update WebMCP mode: ${
-              err instanceof Error ? err.message : String(err)
-            }`,
-          );
-        }
-      });
-    }
 
     // Save prompt
     root
@@ -780,32 +715,9 @@ export class ShadowClawTools extends ShadowClawElement {
       }),
     );
 
-    // WebMCP opt-in toggle
-    const webMcpToggle = root.querySelector(
-      ".tools__webmcp-toggle",
-    ) as HTMLInputElement | null;
     const internetAccessToggle = root.querySelector(
       ".tools__internet-access-toggle",
     ) as HTMLInputElement | null;
-    const webMcpModeSelect = root.querySelector(
-      ".tools__webmcp-mode",
-    ) as HTMLSelectElement | null;
-
-    if (webMcpToggle) {
-      // Sync checked state and mode when orchestrator becomes available
-      this.addCleanup(
-        effect(() => {
-          if (orchestratorStore.ready) {
-            this.orchestrator = orchestratorStore.orchestrator;
-            webMcpToggle.checked =
-              this.orchestrator?.webMcpToolsEnabled === true;
-            if (webMcpModeSelect && this.orchestrator) {
-              webMcpModeSelect.value = getWebMcpMode() || "polyfill";
-            }
-          }
-        }),
-      );
-    }
 
     if (internetAccessToggle) {
       this.addCleanup(

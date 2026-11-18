@@ -54,7 +54,7 @@ export default defineConfig({
     "@aws-sdk/credential-providers",
     "@google/genai",
     "@huggingface/transformers",
-    "@mcp-b/webmcp-polyfill",
+    "@w3c/webmcp-polyfill",
     "webmcp-types",
     "node-datachannel",
     "peer",

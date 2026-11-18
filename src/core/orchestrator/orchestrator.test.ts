@@ -67,7 +67,6 @@ import { setConfig } from "../../db/set-config.js";
 import { encryptValue } from "../../security/crypto.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { toolsStore } from "../../stores/tools.js";
-import { getWebMcpMode } from "../../subsystems/mcp/webmcp.js";
 import { buildSystemPrompt } from "../../worker/utils/system-prompt.js";
 import { Orchestrator } from "./orchestrator.js";
 import type { ShadowClawDatabase } from "../../db/db.js";
@@ -1585,9 +1584,6 @@ describe("Orchestrator", () => {
         bootAttempted: false,
         error: null,
       });
-
-      expect(getWebMcpMode()).toBeDefined();
-      expect(o.webMcpToolsEnabled).toBe(true);
     });
 
     it("applies channel running states properly", () => {

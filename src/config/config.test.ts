@@ -524,7 +524,6 @@ describe("config.js", () => {
       expect(CONFIG_KEYS.VM_BOOT_HOST).toBe("vm_boot_host");
       expect(CONFIG_KEYS.VM_BOOT_MODE).toBe("vm_boot_mode");
       expect(CONFIG_KEYS.VM_NETWORK_RELAY_URL).toBe("vm_network_relay_url");
-      expect(CONFIG_KEYS.WEBMCP_TOOLS_ENABLED).toBe("webmcp_tools_enabled");
     });
 
     it("should include STREAMING_ENABLED config key", () => {

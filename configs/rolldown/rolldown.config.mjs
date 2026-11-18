@@ -685,7 +685,7 @@ const configs = [
       "cors",
       "compression",
       "isomorphic-git",
-      "@mcp-b/webmcp-polyfill",
+      "@w3c/webmcp-polyfill",
       "canvas",
     ],
     ...commonResolve("node"),

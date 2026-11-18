@@ -1189,8 +1189,6 @@ export const CONFIG_KEYS = {
   VM_BOOT_HOST: "vm_boot_host",
   VM_BOOT_MODE: "vm_boot_mode",
   VM_NETWORK_RELAY_URL: "vm_network_relay_url",
-  WEBMCP_MODE: "webmcp_mode",
-  WEBMCP_TOOLS_ENABLED: "webmcp_tools_enabled",
   WEB_SEARCH_PROXY_URL: "web_search_proxy_url",
   WEB_SEARCH_URL: "web_search_url",
   WEB_SEARCH_USE_PROXY: "web_search_use_proxy",

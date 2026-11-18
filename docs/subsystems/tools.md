@@ -99,9 +99,8 @@ The dedicated **Tool Configuration** view (`<shadow-claw-tools>`, accessible via
   - `web_search_use_proxy`: Toggle routing search queries through a CORS proxy.
   - `web_search_cors_proxy_url`: Custom CORS proxy endpoint (defaults to `/proxy?url=`).
   - `web_search_search_url`: Search engine query URL template (defaults to `https://html.duckduckgo.com/html/?q={{query}}`).
-- **WebMCP Integration & Mode**:
-  - `webmcp_enabled`: Enable or disable WebMCP tool exposure to the browser.
-  - `webmcp_mode`: Switch between `"polyfill"` (`@mcp-b/webmcp-polyfill`) and `"native"` (Chrome experimental `document.modelContext`).
+- **WebMCP Integration**:
+  - Automatically exposes the tool catalog via `document.modelContext` using `@w3c/webmcp-polyfill` when native support is absent.
 
 ## Tool Execution Dispatch
 
@@ -291,15 +290,13 @@ When a user manually toggles individual tools:
 
 ### WebMCP integration
 
-When the browser WebMCP API is available (`document.modelContext`, with `navigator.modelContext` fallback), tools are also registered via `src/subsystems/mcp/webmcp.ts` so browser-side model contexts can invoke the same tool surface through `registerWebMcpTools()`.
-
-WebMCP mode can be toggled between `"polyfill"` and `"native"` in Tool Configuration. Tools are registered with accurate metadata annotations:
+When running in browsers, tools are registered via `src/subsystems/mcp/webmcp.ts` using `@w3c/webmcp-polyfill` (or native `document.modelContext` / `navigator.modelContext`) so browser-side model contexts can invoke the tool surface through `registerWebMcpTools()`. Tools are registered with accurate metadata annotations:
 
 - `readOnlyHint`: `true` for non-mutating query tools, `false` for mutating/consequential tools
 - `consequentialHint`: `true` for destructive, irreversible, or external real-world actions (`bash`, `delete_file`, `delete_task`, `git_push`, `email_send_message`, etc.) requiring user confirmation (Chrome 154.0.8017.0+ / WebMCP issue #176)
 - `untrustedContentHint: true` (tool output may contain untrusted/user or external data)
 
-Tool registration is managed with `AbortController` signals passed to `registerTool(...)`, and shutdown aborts those signals while also attempting legacy `unregisterTool` when available.
+Tool registration is managed with `AbortController` signals passed to `registerTool(...)`, and shutdown aborts those signals.
 
 To test the WebMCP integration in Google Chrome, you can use the [Model Context Tool Inspector](https://chromewebstore.google.com/detail/model-context-tool-inspec/gbpdfapgefenggkahomfgkhfehlcenpd) extension.
 

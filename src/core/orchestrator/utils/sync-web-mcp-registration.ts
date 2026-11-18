@@ -2,7 +2,6 @@ import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { toolsStore } from "../../../stores/tools.js";
 
 import {
-  setWebMcpMode as applyWebMcpMode,
   registerWebMcpTools,
   unregisterWebMcpTools,
   onWebMcpToolActivated,
@@ -13,14 +12,9 @@ import {
 import { effect } from "../../effect.js";
 import { handleWorkerMessage } from "./handle-worker-message.js";
 
-import { CONFIG_KEYS } from "../../../config/config.js";
-import { setConfig } from "../../../db/set-config.js";
-
 import type { ShadowClawDatabase } from "../../../db/db.js";
 import type { DeclarativeToolDefinition } from "../../../subsystems/tools/declarative.js";
 import type { SkillRecord } from "../../../subsystems/skills/types.js";
-import type { WebMcpMode } from "../../../subsystems/mcp/webmcp.js";
-import type { OrchestratorState } from "../orchestrator-state.js";
 import type { Orchestrator } from "../orchestrator.js";
 
 import { discoverSkills } from "../../../subsystems/skills/discover-skills.js";
@@ -33,12 +27,6 @@ export function syncWebMcpRegistration(
   if (typeof orchestrator.webMcpEffectCleanup === "function") {
     orchestrator.webMcpEffectCleanup();
     orchestrator.webMcpEffectCleanup = null;
-  }
-
-  if (!orchestrator.webMcpToolsEnabled) {
-    unregisterWebMcpTools();
-
-    return;
   }
 
   // Subscribe to WebMCP lifecycle events (PR #245 / Chrome 156+ with backwards compatibility).
@@ -144,41 +132,4 @@ export function syncWebMcpRegistration(
       disposeEffect();
     }
   };
-}
-export async function setWebMcpMode(
-  _state: Pick<
-    OrchestratorState,
-    "webMcpToolsEnabled" | "webMcpRegistrationLock"
-  > & {
-    webMcpEffectCleanup: (() => void) | null;
-    agentWorker: Worker | null;
-  },
-  db: ShadowClawDatabase,
-  mode: WebMcpMode,
-  syncDeps: { orchestrator: Orchestrator },
-): Promise<void> {
-  // Unregister with old mode, switch, re-register with new mode.
-  unregisterWebMcpTools();
-  applyWebMcpMode(mode);
-
-  await setConfig(db, CONFIG_KEYS.WEBMCP_MODE, mode);
-
-  syncWebMcpRegistration(syncDeps.orchestrator, db);
-}
-
-export async function setWebMcpToolsEnabled(
-  state: Pick<OrchestratorState, "webMcpToolsEnabled">,
-  db: ShadowClawDatabase,
-  enabled: boolean,
-  syncDeps: { orchestrator: Orchestrator },
-): Promise<void> {
-  state.webMcpToolsEnabled = !!enabled;
-
-  await setConfig(
-    db,
-    CONFIG_KEYS.WEBMCP_TOOLS_ENABLED,
-    state.webMcpToolsEnabled ? "true" : "false",
-  );
-
-  syncWebMcpRegistration(syncDeps.orchestrator, db);
 }

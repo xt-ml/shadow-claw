@@ -1,50 +1,29 @@
-import { installWebMCP } from "@mcp-b/webmcp-polyfill";
+import { installWebMCP } from "@w3c/webmcp-polyfill";
 import { Validator } from "@cfworker/json-schema";
 export type { WebMCP } from "webmcp-types";
 
 import { DEFAULT_GROUP_ID } from "../../config/config.js";
 import { TOOL_DEFINITIONS, type ToolDefinition } from "../tools/tools.js";
 
-export type WebMcpMode = "polyfill" | "native";
-
 const registeredToolControllers: Map<string, AbortController> = new Map();
 const registeredToolNames: Set<string> = new Set();
 
-let currentMode: WebMcpMode = "polyfill";
-
 /**
- * Set the WebMCP mode (polyfill vs native).
+ * Install the `@w3c/webmcp-polyfill` onto `document.modelContext`.
  *
- * - `"polyfill"` (default): Uses `@mcp-b/webmcp-polyfill` for a pure-JS
- *   `document.modelContext` that works in all browsers.
- * - `"native"`: Uses Chrome's native `document.modelContext` from
- *   `chrome://flags/#enable-webmcp-testing`.  Requires the flag to be
- *   enabled.  May crash in early Canary builds.
- *
- * Detection follows Chrome's recommended compat pattern:
- *   `document.modelContext || navigator.modelContext`
- * `navigator.modelContext` was deprecated in Chrome 150 and removed in
- * Chrome 152.0.7943.0, but the fallback keeps older clients working.
- */
-export function setWebMcpMode(mode: WebMcpMode): void {
-  currentMode = mode;
-}
-
-export function getWebMcpMode(): WebMcpMode {
-  return currentMode;
-}
-
-/**
- * Install the `@mcp-b/webmcp-polyfill` onto `document.modelContext`.
- *
- * In `@mcp-b/webmcp-polyfill` 6.0.0+, the entry point is `installWebMCP()`
- * (previously `initializeWebMCPPolyfill()` in v5).
- * The polyfill itself bails out when Chrome's native `document.modelContext`
- * is already present — it does NOT override the native API. We call it
- * unconditionally; if the polyfill is already installed it returns quickly.
+ * The polyfill bails out when native `document.modelContext` is already present
+ * — it does NOT override the native API. We call it unconditionally when
+ * accessing the API in a browser context.
  */
 function ensurePolyfill(): void {
   try {
+    if (
+      typeof navigator !== "undefined" &&
+      typeof (navigator as any).modelContext !== "undefined"
+    ) {
+      return;
+    }
+
     // Some test / mock environments or non-HTTPS dev setups may not define isSecureContext.
     // If running in a browser-like environment without isSecureContext set, ensure safe default.
     if (
@@ -74,55 +53,19 @@ function ensurePolyfill(): void {
 }
 
 /**
- * Returns true when the `@mcp-b/webmcp-polyfill` v5.1.0+ security gate will
- * allow `registerTool()` to proceed.
- *
- * The polyfill's `validateOriginAgentCluster()` throws `DOMException("",
- * "SecurityError")` when `globalThis.originAgentCluster === false` (and the
- * protocol is not `file:`). Chrome automatically origin-isolates HTTPS pages so
- * this is never an issue there. Firefox ≥ 138 exposes `originAgentCluster` but
- * returns `false` unless the server sends `Origin-Agent-Cluster: ?1` — a
- * header that GitHub Pages does not set. This check lets us detect Firefox
- * (and any other browser with the same behaviour) early and skip registration
- * with a single descriptive warning instead of N per-tool `DOMException`s.
- *
- * Native mode bypasses the polyfill entirely and is unaffected.
- */
-function isOriginAgentClusterCompatible(): boolean {
-  // If the property is absent the browser is old enough not to enforce the
-  // check — allow registration to proceed.
-  if (typeof globalThis.originAgentCluster === "undefined") {
-    return true;
-  }
-
-  // file: protocol is explicitly exempt in the polyfill guard.
-  const protocol = globalThis.location?.protocol;
-  if (protocol === "file:") {
-    return true;
-  }
-
-  return globalThis.originAgentCluster !== false;
-}
-
-/**
  * Access the WebMCP ModelContext API.
  *
- * In polyfill mode: installs the `@mcp-b/webmcp-polyfill` which surfaces
- * `document.modelContext`.
- * In native mode: follows Chrome's recommended feature-detection pattern:
- *   `document.modelContext || navigator.modelContext`
- * `navigator.modelContext` was deprecated in Chrome 150 and removed in
- * Chrome 152.0.7943.0, but the fallback preserves compatibility with
- * earlier builds that may still be in the wild.
+ * Automatically installs `@w3c/webmcp-polyfill` if native `document.modelContext`
+ * does not already exist. If native support exists, the polyfill no-ops.
+ * Also preserves backwards compatibility with `navigator.modelContext` for
+ * earlier experimental Chrome builds.
  */
 function getModelContextApi(): any {
   if (typeof document === "undefined" && typeof navigator === "undefined") {
     return null;
   }
 
-  if (currentMode === "polyfill") {
-    ensurePolyfill();
-  }
+  ensurePolyfill();
 
   try {
     const modelContext: unknown =
@@ -797,7 +740,7 @@ export function resolveWebMcpToolAnnotations(
 /**
  * Register ShadowClaw tools with the WebMCP ModelContext API.
  *
- * Both the `@mcp-b/webmcp-polyfill` and Chrome's native API support
+ * Both `@w3c/webmcp-polyfill` and Chrome's native API support
  * `registerTool(tool, { signal })`. We always use AbortController signals so
  * that unregistration works identically regardless of which implementation is
  * actually active.
@@ -805,9 +748,9 @@ export function resolveWebMcpToolAnnotations(
  * Key correctness detail: `ensurePolyfill()` is a no-op when
  * Chrome's native `document.modelContext` already exists — it does NOT
  * override the native API. In that situation we are talking to the native
- * Chrome API even in "polyfill" mode. The native Chrome API only supports
- * signal-based unregistration, so using AbortController signals everywhere
- * prevents "Duplicate tool name" errors when tools are re-configured.
+ * Chrome API. The native Chrome API only supports signal-based unregistration,
+ * so using AbortController signals everywhere prevents "Duplicate tool name"
+ * errors when tools are re-configured.
  */
 export async function registerWebMcpTools(
   agentWorker: Worker | null,
@@ -819,25 +762,6 @@ export async function registerWebMcpTools(
 
   if (activeTools.length === 0) {
     return true;
-  }
-
-  // In polyfill mode, the polyfill's validateOriginAgentCluster() guard throws
-  // DOMException("", "SecurityError") when originAgentCluster === false.
-  // Chrome automatically origin-isolates HTTPS pages so this never occurs
-  // there, but Firefox returns false unless the server sends
-  // Origin-Agent-Cluster: ?1 (a header GitHub Pages does not set).
-  // Pre-checking here avoids N identical per-tool DOMException spam and
-  // surfaces a single, actionable warning instead.
-  if (currentMode === "polyfill" && !isOriginAgentClusterCompatible()) {
-    console.warn(
-      "WebMCP polyfill registration skipped: this browser reports " +
-        "originAgentCluster = false. The @mcp-b/webmcp-polyfill v5.1.0+ " +
-        "requires an origin-keyed agent cluster (Chrome enforces this " +
-        "automatically for HTTPS; Firefox requires the server to send " +
-        "Origin-Agent-Cluster: ?1). WebMCP tools are unavailable in this " +
-        "browser session.",
-    );
-    return false;
   }
 
   const modelContext = getModelContextApi();

@@ -1,6 +1,6 @@
 {
   "name": "shadow-claw",
-  "version": "1.62.2",
+  "version": "1.62.3",
   "type": "module",
   "license": "AGPL-3.0",
   "description": "ShadowClaw - multi-runtime AI assistant.",
@@ -149,7 +149,6 @@
     "writer-rewriter-polyfills": "^1.0.2"
   },
   "devDependencies": {
-    "@mcp-b/webmcp-polyfill": "^6.0.3",
     "@playwright/test": "^1.64.0",
     "@storybook/addon-docs": "^10.6.1",
     "@storybook/web-components-vite": "^10.6.1",
@@ -161,6 +160,7 @@
     "@types/node": "^25.9.9",
     "@types/nodemailer": "^8.0.2",
     "@types/serviceworker": "^0.0.196",
+    "@w3c/webmcp-polyfill": "^0.1.1",
     "@zip.js/zip.js": "^2.23.0",
     "assert": "^2.1.0",
     "browserify-zlib": "^0.2.0",

@@ -19,18 +19,14 @@ servers), see [Remote MCP](remote-mcp.md).
 
 ---
 
-## Modes
+## Runtime Polyfill & Native Detection
 
-WebMCP operates in one of two modes, controlled by `setWebMcpMode()`:
+ShadowClaw uses [`@w3c/webmcp-polyfill`](https://www.npmjs.com/package/@w3c/webmcp-polyfill) to expose `document.modelContext`.
 
-| Mode                   | API surface                                                                                                                | Notes                                                                            |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `"polyfill"` (default) | `@mcp-b/webmcp-polyfill` (v6+, entry point `installWebMCP()`, typed via `webmcp-types`) — surfaces `document.modelContext` | Works in all browsers. Safe.                                                     |
-| `"native"`             | Chrome's native `document.modelContext` (with `navigator.modelContext` fallback)                                           | Requires `chrome://flags/#enable-webmcp-testing`. May crash early Canary builds. |
+- If `document.modelContext` (or `navigator.modelContext`) is natively present in the browser (e.g. experimental Chrome with `chrome://flags/#enable-webmcp-testing`), the polyfill bails out and native browser capabilities are used directly.
+- In browsers without native support, `@w3c/webmcp-polyfill` seamlessly installs the spec-aligned WebMCP API onto `document.modelContext`.
 
 > **`navigator.modelContext` deprecation:** Chrome deprecated `navigator.modelContext` in Chrome 150 and removed it in Chrome 152.0.7943.0. Feature detection follows Chrome's recommended compat pattern: `document.modelContext || navigator.modelContext`. The fallback is retained in ShadowClaw for clients on older Canary builds.
-
-The active mode is readable via `getWebMcpMode()`.
 
 ---
 
@@ -521,7 +517,7 @@ ShadowClaw acts primarily as a **Tool Provider** via `registerTool()`, exposing 
 
 ## Testing WebMCP Integration
 
-When `document.modelContext` is available (with `navigator.modelContext` fallback for Chrome < 152), tools are registered through the browser's Model Context Protocol (`@mcp-b/webmcp-polyfill` v3). ShadowClaw provides `parseWebMcpInputSchema` to normalize input schemas across Chrome 154+ (native object) and Chrome < 154 (DOMString JSON) versions, `getWebMcpTools()` to safely query registered tools with graceful degradation, and `executeWebMcpTool()` to execute tools with backwards-compatible argument handling across Chrome 155+ and legacy environments.
+When `document.modelContext` is available (with `navigator.modelContext` fallback for Chrome < 152), tools are registered through the browser's Model Context Protocol (via `@w3c/webmcp-polyfill` or native browser support). ShadowClaw provides `parseWebMcpInputSchema` to normalize input schemas across Chrome 154+ (native object) and Chrome < 154 (DOMString JSON) versions, `getWebMcpTools()` to safely query registered tools with graceful degradation, and `executeWebMcpTool()` to execute tools with backwards-compatible argument handling across Chrome 155+ and legacy environments.
 
 To test registered tools directly from the browser DevTools console:
 

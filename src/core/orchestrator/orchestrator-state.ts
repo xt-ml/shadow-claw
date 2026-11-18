@@ -115,7 +115,6 @@ export interface OrchestratorState {
   // ── WebMCP ────────────────────────────────────────────────────────────────
   webMcpEffectCleanup: (() => void) | null;
   webMcpRegistrationLock: Promise<void>;
-  webMcpToolsEnabled: boolean;
 }
 
 // Re-export the channel type so consumers don't need a separate import.

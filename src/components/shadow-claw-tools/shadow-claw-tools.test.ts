@@ -15,15 +15,6 @@ jest.unstable_mockModule("../../core/effect.js", () => ({
   }),
 }));
 
-const mockSetWebMcpToolsEnabled = jest.fn();
-jest.unstable_mockModule(
-  "../../core/orchestrator/utils/sync-web-mcp-registration.js",
-  () => ({
-    setWebMcpToolsEnabled: mockSetWebMcpToolsEnabled,
-    setWebMcpMode: jest.fn(),
-  }),
-);
-
 jest.unstable_mockModule(
   "../../core/orchestrator/utils/operations/provider.js",
   () => ({
@@ -38,12 +29,7 @@ jest.unstable_mockModule("../../db/db.js", () => ({
 
 jest.unstable_mockModule("../../stores/orchestrator.js", () => ({
   orchestratorStore: {
-    orchestrator: {
-      getWebMcpToolsEnabled: jest.fn(() => true),
-      getWebMcpMode: jest.fn(() => "native"),
-      setWebMcpToolsEnabled: jest.fn(),
-      setWebMcpMode: jest.fn(),
-    },
+    orchestrator: {},
     ready: true,
     vmBashFullInternetAccess: false,
     setVMBashFullInternetAccess: jest.fn(),
@@ -332,30 +318,6 @@ describe("shadow-claw-tools", () => {
     expect(toolsStore.importBackup).toHaveBeenCalled();
     expect(showSuccess).toHaveBeenCalled();
 
-    document.body.removeChild(el);
-  });
-
-  it("bindEventListeners toggles WebMCP", async () => {
-    const el = new ShadowClawTools();
-    document.body.appendChild(el);
-    await el.connectedCallback();
-    await new Promise((r) => setTimeout(r, 0));
-
-    const webMcpToggle = el.shadowRoot?.querySelector(
-      ".tools__webmcp-toggle",
-    ) as HTMLInputElement;
-    if (webMcpToggle) {
-      webMcpToggle.checked = false;
-      webMcpToggle.dispatchEvent(new Event("change"));
-
-      await new Promise((r) => setTimeout(r, 0));
-      expect(mockSetWebMcpToolsEnabled).toHaveBeenCalledWith(
-        orchestratorStore.orchestrator,
-        expect.anything(),
-        false,
-        { orchestrator: orchestratorStore.orchestrator },
-      );
-    }
     document.body.removeChild(el);
   });
 
@@ -701,34 +663,7 @@ describe("shadow-claw-tools", () => {
 
     const root = el.shadowRoot!;
 
-    // 1. WebMCP toggle
-    const webMcpToggle = root.querySelector(
-      ".tools__webmcp-toggle",
-    ) as HTMLInputElement;
-    if (webMcpToggle) {
-      webMcpToggle.checked = true;
-      webMcpToggle.dispatchEvent(new Event("change"));
-      await new Promise((r) => setTimeout(r, 20));
-      expect(showInfo).toHaveBeenCalledWith("WebMCP tool registration enabled");
-
-      // Without orchestrator
-      el.orchestrator = null;
-      (orchestratorStore as any).orchestrator = null;
-      webMcpToggle.checked = true;
-      webMcpToggle.dispatchEvent(new Event("change"));
-      await new Promise((r) => setTimeout(r, 20));
-      expect(showError).toHaveBeenCalledWith("Orchestrator is not ready");
-
-      // Restore orchestrator
-      (orchestratorStore as any).orchestrator = {
-        getWebMcpToolsEnabled: jest.fn(() => true),
-        getWebMcpMode: jest.fn(() => "native"),
-        setWebMcpToolsEnabled: jest.fn(),
-        setWebMcpMode: jest.fn(),
-      };
-    }
-
-    // 2. Internet access toggle
+    // 1. Internet access toggle
     const internetToggle = root.querySelector(
       ".tools__internet-access-toggle",
     ) as HTMLInputElement;
@@ -879,42 +814,7 @@ describe("shadow-claw-tools", () => {
     addBtn?.click();
     expect(addDialog.showModal).toHaveBeenCalled();
 
-    // 2. WebMCP toggle when orchestrator is null
-    el.orchestrator = null;
-    orchestratorStore.orchestrator = null;
-    const webMcpToggle = root.querySelector(
-      ".tools__webmcp-toggle",
-    ) as HTMLInputElement;
-    webMcpToggle.checked = true;
-    webMcpToggle.dispatchEvent(new Event("change"));
-    expect(showError).toHaveBeenCalledWith("Orchestrator is not ready");
-    expect(webMcpToggle.checked).toBe(false);
-
-    // Restore orchestrator and test WebMCP toggle error throw (Error and string error)
-    orchestratorStore.orchestrator = {
-      getWebMcpToolsEnabled: jest.fn(() => true),
-      getWebMcpMode: jest.fn(() => "native"),
-    };
-    mockSetWebMcpToolsEnabled.mockRejectedValueOnce(
-      new Error("WebMCP toggle failure"),
-    );
-    webMcpToggle.checked = true;
-    webMcpToggle.dispatchEvent(new Event("change"));
-    await new Promise((r) => setTimeout(r, 0));
-    expect(showError).toHaveBeenCalledWith(
-      "Failed to update WebMCP setting: WebMCP toggle failure",
-    );
-    expect(webMcpToggle.checked).toBe(false);
-
-    mockSetWebMcpToolsEnabled.mockRejectedValueOnce("WebMCP string error");
-    webMcpToggle.checked = true;
-    webMcpToggle.dispatchEvent(new Event("change"));
-    await new Promise((r) => setTimeout(r, 0));
-    expect(showError).toHaveBeenCalledWith(
-      "Failed to update WebMCP setting: WebMCP string error",
-    );
-
-    // 3. Internet access toggle error throw (string error and Error)
+    // 2. Internet access toggle error throw (string error and Error)
     orchestratorStore.setVMBashFullInternetAccess.mockRejectedValueOnce(
       "String error",
     );
@@ -1040,39 +940,7 @@ describe("shadow-claw-tools", () => {
       "Failed to save Web Search settings: Save URL string error",
     );
 
-    // 7. WebMCP mode select: null orchestrator vs error (Error and string)
-    const webMcpModeSelect = root.querySelector(
-      ".tools__webmcp-mode",
-    ) as HTMLSelectElement;
-    el.orchestrator = null;
-    orchestratorStore.orchestrator = null;
-    webMcpModeSelect.value = "native";
-    webMcpModeSelect.dispatchEvent(new Event("change")); // orchestrator null -> returns early
-
-    const { setWebMcpMode } =
-      (await import("../../core/orchestrator/utils/sync-web-mcp-registration.js")) as any;
-    el.orchestrator = { webMcpToolsEnabled: true };
-    setWebMcpMode.mockRejectedValueOnce(new Error("Mode error"));
-    webMcpModeSelect.dispatchEvent(new Event("change"));
-    await new Promise((r) => setTimeout(r, 0));
-    expect(showError).toHaveBeenCalledWith(
-      "Failed to update WebMCP mode: Mode error",
-    );
-
-    setWebMcpMode.mockRejectedValueOnce("Mode string error");
-    webMcpModeSelect.dispatchEvent(new Event("change"));
-    await new Promise((r) => setTimeout(r, 0));
-    expect(showError).toHaveBeenCalledWith(
-      "Failed to update WebMCP mode: Mode string error",
-    );
-
-    setWebMcpMode.mockResolvedValueOnce(undefined);
-    webMcpModeSelect.value = "polyfill";
-    webMcpModeSelect.dispatchEvent(new Event("change"));
-    await new Promise((r) => setTimeout(r, 0));
-    expect(showInfo).toHaveBeenCalledWith("WebMCP mode set to polyfill");
-
-    // 8. Prompt buttons: save and clear
+    // 7. Prompt buttons: save and clear
     const promptArea = root.querySelector(
       ".tools__prompt-area",
     ) as HTMLTextAreaElement;

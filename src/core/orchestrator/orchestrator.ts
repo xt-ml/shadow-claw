@@ -206,7 +206,6 @@ export class Orchestrator {
 
   webMcpEffectCleanup: (() => void) | null = null;
   webMcpRegistrationLock: Promise<void> = Promise.resolve();
-  webMcpToolsEnabled: boolean = true;
 
   #apiKeyCache: { value: string; expiresAt: number } | null = null;
   #encryptedApiKey: string | null = null;

@@ -447,6 +447,18 @@ describe("Vertex AI proxy", () => {
 
     const responseData = res.json.mock.calls[0][0];
     expect(responseData.data.length).toBeGreaterThan(0);
+    const ids = responseData.data.map((m: any) => m.id);
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        "gemini-3.5-pro",
+        "gemini-3.5-flash",
+        "gemini-2.5-pro",
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+      ]),
+    );
+    expect(ids).not.toContain("gemini-1.5-flash");
+    expect(ids).not.toContain("gemini-1.5-pro");
     expect(responseData.data[0]).toEqual(
       expect.objectContaining({
         id: expect.stringContaining("gemini"),

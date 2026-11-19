@@ -155,7 +155,7 @@ export function registerGeminiRoutes(
       }
 
       const body = req.body;
-      const modelId = body.model || "gemini-2.0-flash";
+      const modelId = body.model || "gemini-2.5-flash";
       const wantsStreaming = body.stream === true;
 
       const ai = new GoogleGenAI({ apiKey });
@@ -380,13 +380,35 @@ export function registerGeminiRoutes(
       // If we failed to get models or got an empty list, provide standard fallbacks
       if (modelsList.length === 0) {
         const fallbacks = [
-          { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", ctx: 1048576 },
-          { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash", ctx: 1048576 },
-          { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro", ctx: 2097152 },
           {
-            id: "gemini-2.0-flash-thinking-preview",
-            name: "Gemini 2.0 Flash Thinking",
+            id: "gemini-3.5-pro",
+            name: "Gemini 3.5 Pro",
+            ctx: 2097152,
+            out: 65536,
+          },
+          {
+            id: "gemini-3.5-flash",
+            name: "Gemini 3.5 Flash",
             ctx: 1048576,
+            out: 65536,
+          },
+          {
+            id: "gemini-2.5-pro",
+            name: "Gemini 2.5 Pro",
+            ctx: 1048576,
+            out: 65536,
+          },
+          {
+            id: "gemini-2.5-flash",
+            name: "Gemini 2.5 Flash",
+            ctx: 1048576,
+            out: 65536,
+          },
+          {
+            id: "gemini-2.0-flash",
+            name: "Gemini 2.0 Flash",
+            ctx: 1048576,
+            out: 65536,
           },
         ];
 
@@ -395,7 +417,7 @@ export function registerGeminiRoutes(
             id: f.id,
             name: f.name,
             context_length: f.ctx,
-            max_completion_tokens: 65536,
+            max_completion_tokens: f.out,
             supports_tools: true,
             ...(buildReasoningMetadata(f.id) && {
               reasoning: buildReasoningMetadata(f.id),

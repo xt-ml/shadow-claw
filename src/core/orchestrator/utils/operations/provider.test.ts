@@ -205,6 +205,22 @@ describe("provider operations", () => {
     expect(emptyModelsProvider?.models).toEqual(["fallback-default-model"]);
   });
 
+  it("getAvailableProviders preserves both modelsUrl and static models for hybrid providers", () => {
+    const providers = getAvailableProviders();
+
+    for (const id of [
+      "transformers_js_local",
+      "transformers_js_browser",
+      "litert_lm_browser",
+    ]) {
+      const provider = providers.find((p) => p.id === id);
+      expect(provider).toBeDefined();
+      expect(provider?.modelsUrl).toBeTruthy();
+      expect(Array.isArray(provider?.models)).toBe(true);
+      expect(provider?.models?.length).toBeGreaterThan(0);
+    }
+  });
+
   it("getReasoningConfig returns effort or undefined for various effort inputs", () => {
     expect(getReasoningConfig(makeState({ reasoningEffort: "high" }))).toEqual({
       effort: "high",

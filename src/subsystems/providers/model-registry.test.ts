@@ -567,4 +567,43 @@ describe("ModelRegistry", () => {
       routesByRequestFeatures: true,
     });
   });
+
+  it("parses top-level JSON array responses from HuggingFace API models endpoints", async () => {
+    const originalFetch = (globalThis as any).fetch;
+    (globalThis as any).fetch = async () => ({
+      ok: true,
+      json: async () => [
+        {
+          id: "litert-community/gemma-4-E2B-it-litert-lm",
+          context_length: 128000,
+        },
+        {
+          id: "litert-community/gemma-4-E4B-it-litert-lm",
+          context_length: 128000,
+        },
+      ],
+    });
+
+    try {
+      await modelRegistry.fetchModelInfo({
+        id: "litert_lm_browser",
+        modelsUrl: "https://huggingface.co/api/models?author=litert-community",
+      } as any);
+
+      expect(
+        modelRegistry.getModelInfo("litert-community/gemma-4-E2B-it-litert-lm"),
+      ).toEqual({
+        contextWindow: 128000,
+        maxOutput: null,
+      });
+      expect(
+        modelRegistry.getModelInfo("litert-community/gemma-4-E4B-it-litert-lm"),
+      ).toEqual({
+        contextWindow: 128000,
+        maxOutput: null,
+      });
+    } finally {
+      (globalThis as any).fetch = originalFetch;
+    }
+  });
 });

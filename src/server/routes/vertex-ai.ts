@@ -372,8 +372,14 @@ export function registerVertexAiRoutes(
       if (modelsList.length === 0) {
         const fallbacks = [
           {
-            id: "gemini-2.5-flash",
-            name: "Gemini 2.5 Flash",
+            id: "gemini-3.5-pro",
+            name: "Gemini 3.5 Pro",
+            ctx: 2097152,
+            out: 65536,
+          },
+          {
+            id: "gemini-3.5-flash",
+            name: "Gemini 3.5 Flash",
             ctx: 1048576,
             out: 65536,
           },
@@ -384,21 +390,15 @@ export function registerVertexAiRoutes(
             out: 65536,
           },
           {
+            id: "gemini-2.5-flash",
+            name: "Gemini 2.5 Flash",
+            ctx: 1048576,
+            out: 65536,
+          },
+          {
             id: "gemini-2.0-flash",
             name: "Gemini 2.0 Flash",
             ctx: 1048576,
-            out: 65536,
-          },
-          {
-            id: "gemini-1.5-flash",
-            name: "Gemini 1.5 Flash",
-            ctx: 1048576,
-            out: 65536,
-          },
-          {
-            id: "gemini-1.5-pro",
-            name: "Gemini 1.5 Pro",
-            ctx: 2097152,
             out: 65536,
           },
         ];

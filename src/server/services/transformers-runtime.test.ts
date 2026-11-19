@@ -401,6 +401,132 @@ describe("TransformersRuntimeService", () => {
       );
       expect(gemma3Std?.supports_tools).toBe(false);
     });
+
+    it("refreshes disk cache when cachedAt is older than TTL and writes cachedAt", async () => {
+      const mod = await import("./transformers-runtime.js");
+      const now = 1_700_000_000_000;
+      jest.setSystemTime(now);
+
+      const expiredAt =
+        now - mod.DEFAULT_TRANSFORMERS_JS_MODELS_CACHE_TTL_MS - 1_000;
+      readFileMock
+        .mockResolvedValueOnce(
+          JSON.stringify({
+            cachedAt: expiredAt,
+            models: [
+              {
+                id: "onnx-community/stale-model",
+                name: "Stale (ONNX)",
+                context_length: 32000,
+                max_completion_tokens: 8192,
+                supports_tools: true,
+              },
+            ],
+          }),
+        )
+        .mockResolvedValueOnce(
+          JSON.stringify([{ id: "onnx-community/fresh-model-ONNX" }]),
+        );
+
+      statMock.mockRejectedValue(new Error("ENOENT"));
+      (globalThis as any).fetch = (jest.fn() as any).mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify([{ id: "onnx-community/fresh-model-ONNX" }]),
+      });
+
+      const service = mod.createTransformersRuntimeService();
+      const models = await service.fetchDynamicModels();
+
+      expect(
+        models.some((m) => m.id === "onnx-community/fresh-model-ONNX"),
+      ).toBe(true);
+      expect(models.some((m) => m.id === "onnx-community/stale-model")).toBe(
+        false,
+      );
+
+      const cacheWrite = writeFileMock.mock.calls.find(
+        (call: any[]) =>
+          typeof call[0] === "string" && call[0].endsWith("models.json"),
+      );
+      expect(cacheWrite).toBeDefined();
+      const writtenPayload = JSON.parse(cacheWrite[1]);
+      expect(writtenPayload.cachedAt).toBe(now);
+    });
+
+    it("re-fetches when in-memory cache expires past TTL or forceRefresh is true", async () => {
+      const mod = await import("./transformers-runtime.js");
+      const start = 1_700_000_000_000;
+      jest.setSystemTime(start);
+
+      readFileMock
+        .mockRejectedValueOnce(new Error("ENOENT"))
+        .mockResolvedValueOnce(
+          JSON.stringify([{ id: "onnx-community/first-fetch-ONNX" }]),
+        )
+        .mockRejectedValueOnce(new Error("ENOENT"))
+        .mockResolvedValueOnce(
+          JSON.stringify([{ id: "onnx-community/second-fetch-ONNX" }]),
+        )
+        .mockResolvedValueOnce(
+          JSON.stringify([{ id: "onnx-community/third-fetch-ONNX" }]),
+        );
+
+      statMock.mockRejectedValue(new Error("ENOENT"));
+      const fetchMock = (jest.fn() as any)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify([{ id: "onnx-community/first-fetch-ONNX" }]),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify([{ id: "onnx-community/second-fetch-ONNX" }]),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify([{ id: "onnx-community/third-fetch-ONNX" }]),
+        });
+      (globalThis as any).fetch = fetchMock;
+
+      const service = mod.createTransformersRuntimeService();
+
+      const first = await service.fetchDynamicModels();
+      expect(
+        first.some((m) => m.id === "onnx-community/first-fetch-ONNX"),
+      ).toBe(true);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      // Within TTL: returns cached without re-fetching
+      const cached = await service.fetchDynamicModels();
+      expect(
+        cached.some((m) => m.id === "onnx-community/first-fetch-ONNX"),
+      ).toBe(true);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      // Advance time past TTL -> re-fetches
+      jest.setSystemTime(
+        start + mod.DEFAULT_TRANSFORMERS_JS_MODELS_CACHE_TTL_MS + 1_000,
+      );
+      const second = await service.fetchDynamicModels();
+      expect(
+        second.some((m) => m.id === "onnx-community/second-fetch-ONNX"),
+      ).toBe(true);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+
+      // forceRefresh: true -> re-fetches immediately even within TTL
+      const third = await service.fetchDynamicModels({ forceRefresh: true });
+      expect(
+        third.some((m) => m.id === "onnx-community/third-fetch-ONNX"),
+      ).toBe(true);
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    });
   });
 
   describe("getDownloadStatus & getDiskCacheStatus & prewarmModel", () => {

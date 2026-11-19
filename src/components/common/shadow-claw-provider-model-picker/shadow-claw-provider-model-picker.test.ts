@@ -371,4 +371,106 @@ describe("shadow-claw-provider-model-picker", () => {
 
     el.remove();
   });
+
+  it("prefers non-empty dynamic models over static baseline and falls back to static models on empty or failed load", async () => {
+    const el = new ShadowClawProviderModelPicker();
+    document.body.appendChild(el);
+
+    let resolveLoader!: (models: any[]) => void;
+    const loader = jest.fn(
+      () =>
+        new Promise<any[]>((resolve) => {
+          resolveLoader = resolve;
+        }),
+    );
+
+    el.setModelLoader(loader as any);
+    el.setProviders([
+      {
+        id: "litert_lm_browser",
+        name: "LiteRT-LM (Browser)",
+        modelsUrl: "https://huggingface.co/api/models?author=litert-community",
+        models: ["litert-community/gemma-4-E2B-it-litert-lm"],
+      } as any,
+    ]);
+
+    el.setValue({
+      providerId: "litert_lm_browser",
+      modelId: "litert-community/gemma-4-E2B-it-litert-lm",
+    });
+    await el.render();
+
+    // Static baseline is visible while dynamic fetch is pending
+    let modelSelect = el.shadowRoot?.querySelector(
+      '[data-role="model-select"]',
+    ) as HTMLSelectElement | null;
+    let options = Array.from(modelSelect?.options || []);
+    expect(
+      options.some(
+        (o) => o.value === "litert-community/gemma-4-E2B-it-litert-lm",
+      ),
+    ).toBe(true);
+    expect(
+      options.find(
+        (o) => o.value === "litert-community/gemma-4-E2B-it-litert-lm",
+      )?.textContent,
+    ).toContain("🛠️");
+
+    // Once dynamic loader resolves with models, dynamic list replaces static list
+    resolveLoader([
+      { id: "litert-community/gemma-4-E4B-it-litert-lm" },
+      { id: "litert-community/gemma-4-E9B-it-litert-lm" },
+    ]);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    modelSelect = el.shadowRoot?.querySelector(
+      '[data-role="model-select"]',
+    ) as HTMLSelectElement | null;
+    options = Array.from(modelSelect?.options || []);
+    expect(
+      options.some(
+        (o) => o.value === "litert-community/gemma-4-E9B-it-litert-lm",
+      ),
+    ).toBe(true);
+    expect(
+      options.find(
+        (o) => o.value === "litert-community/gemma-4-E9B-it-litert-lm",
+      )?.textContent,
+    ).toContain("🛠️");
+
+    // On failing loader, static baseline remains available
+    const elFail = new ShadowClawProviderModelPicker();
+    document.body.appendChild(elFail);
+    elFail.setModelLoader(
+      jest.fn<() => Promise<any[]>>().mockRejectedValue(new Error("offline")),
+    );
+    elFail.setProviders([
+      {
+        id: "litert_lm_browser",
+        name: "LiteRT-LM (Browser)",
+        modelsUrl: "https://huggingface.co/api/models?author=litert-community",
+        models: ["litert-community/gemma-4-E2B-it-litert-lm"],
+      } as any,
+    ]);
+    elFail.setValue({
+      providerId: "litert_lm_browser",
+      modelId: "litert-community/gemma-4-E2B-it-litert-lm",
+    });
+    await elFail.render();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const failSelect = elFail.shadowRoot?.querySelector(
+      '[data-role="model-select"]',
+    ) as HTMLSelectElement | null;
+    expect(
+      Array.from(failSelect?.options || []).some(
+        (o) => o.value === "litert-community/gemma-4-E2B-it-litert-lm",
+      ),
+    ).toBe(true);
+
+    el.remove();
+    elFail.remove();
+  });
 });

@@ -25,23 +25,23 @@ Provider (config) → Adapter (format-specific) → Request/Response transformat
 
 ## Provider Registry
 
-All providers are declared in `src/config/config.ts` under `PROVIDERS`:
+All providers are declared in `src/config/config.ts` under `PROVIDERS` (with `SHARED_TRANSFORMERS_JS_MODELS` shared across `transformers_js_local` and `transformers_js_browser`):
 
-| Provider ID               | Format            | Streaming | API Key Required |
-| ------------------------- | ----------------- | --------- | ---------------- |
-| `prompt_api`              | `prompt_api`      | ❌        | ❌               |
-| `litert_lm_browser`       | `litert_lm`       | ❌        | ❌               |
-| `transformers_js_browser` | `transformers_js` | ❌        | ❌ (Default)     |
-| `transformers_js_local`   | `openai`          | ✅        | ❌               |
-| `openrouter`              | `openai`          | ✅        | ✅               |
-| `huggingface`             | `openai`          | ✅        | ✅               |
-| `vertex_ai`               | `openai`          | ✅        | ✅               |
-| `gemini_proxy`            | `openai`          | ✅        | ✅               |
-| `bedrock_proxy`           | `anthropic`       | ✅        | ❌               |
-| `ollama`                  | `openai`          | ✅        | ❌               |
-| `llamafile`               | `openai`          | ✅        | ❌               |
-| `agentfile`               | `openai`          | ✅        | ❌               |
-| `mesh-llm`                | `mesh-llm`        | ✅        | ❌               |
+| Provider ID               | Format            | Streaming | API Key Required | Dynamic Model Discovery (`modelsUrl`)    | Default Model                               |
+| ------------------------- | ----------------- | --------- | ---------------- | ---------------------------------------- | ------------------------------------------- |
+| `prompt_api`              | `prompt_api`      | ❌        | ❌               | ❌ (`["browser-built-in"]`)              | `browser-built-in`                          |
+| `litert_lm_browser`       | `litert_lm`       | ❌        | ❌               | ✅ HuggingFace `author=litert-community` | `litert-community/gemma-4-E2B-it-litert-lm` |
+| `transformers_js_browser` | `transformers_js` | ❌        | ❌ (Default)     | ✅ HuggingFace `author=onnx-community`   | `onnx-community/Qwen3-0.6B-ONNX`            |
+| `transformers_js_local`   | `openai`          | ✅        | ❌               | ✅ `/transformers-js-proxy/models`       | `onnx-community/Qwen3-0.6B-ONNX`            |
+| `openrouter`              | `openai`          | ✅        | ✅               | ✅ OpenRouter `/api/v1/models`           | `openrouter/free`                           |
+| `huggingface`             | `openai`          | ✅        | ✅               | ✅ HuggingFace Router `/v1/models`       | `meta-llama/Llama-3.3-70B-Instruct`         |
+| `vertex_ai`               | `openai`          | ✅        | ✅               | ✅ `/vertex-ai-proxy/models`             | `gemini-2.5-flash`                          |
+| `gemini_proxy`            | `openai`          | ✅        | ✅               | ✅ `/gemini-proxy/models`                | `gemini-2.5-flash`                          |
+| `bedrock_proxy`           | `anthropic`       | ✅        | ❌               | ✅ `/bedrock-proxy/models`               | `anthropic.claude-sonnet-5-v1:0`            |
+| `ollama`                  | `openai`          | ✅        | ❌               | ✅ `/ollama-proxy/models`                | `qwen3:8b`                                  |
+| `llamafile`               | `openai`          | ✅        | ❌               | ✅ `/llamafile-proxy/models`             | `Qwen3.5-9B-Q5_K_S`                         |
+| `agentfile`               | `openai`          | ✅        | ❌               | ✅ `/agentfile-proxy/models`             | `default.agentfile`                         |
+| `mesh-llm`                | `mesh-llm`        | ✅        | ❌               | ✅ `/mesh-llm-proxy/models`              | `mesh`                                      |
 
 > **Default Provider Strategy:** In the browser client, ShadowClaw defaults out-of-the-box to **Transformers.js (Browser)** (`transformers_js_browser`) with guided onboarding. For headless CLI agent execution (`shadow-claw agent`), it defaults out-of-the-box to **OpenRouter** (`openrouter` with default model `openrouter/free`). Prompt API (`prompt_api`) and its polyfills remain fully supported when manually selected. Projects can also declaratively configure a default provider and model in `shadow-claw.config.json` under `settings.defaultProvider` and `settings.defaultModel`.
 >
@@ -298,6 +298,7 @@ ShadowClaw utilizes secure server-side proxy routes for Google Gemini and Vertex
 - **Security**: API keys and service account credentials (ADC) are managed server-side.
 - **Robustness**: The proxies use the official `@google/genai` and Vertex AI SDKs to provide a stable, streaming-compliant interface.
 - **Tooling**: Comprehensive support for function calling and native multimodal attachments.
+- **Dynamic Listing & Current Fallbacks**: Both `/gemini-proxy/models` and `/vertex-ai-proxy/models` list models dynamically via `ai.models.list()`, falling back to current-generation Gemini IDs (`gemini-3.5-pro`, `gemini-3.5-flash`, `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-2.0-flash`) if dynamic listing yields an empty set or fails during iteration. `gemini_proxy` defaults to `gemini-2.5-flash`.
 
 ### Attachment Support
 
@@ -305,7 +306,7 @@ Gemini models feature **Native PDF Support**. ShadowClaw automatically detects m
 
 ## Model Selection
 
-Models are fetched dynamically via the provider API (e.g., `GET /models`). The model list is loaded in Settings and persisted as `CONFIG_KEYS.MODEL`.
+Models are fetched dynamically via the provider API (e.g., `GET /models`, including top-level JSON array responses from Hugging Face API endpoints for `transformers_js_browser` and `litert_lm_browser`). The model list is loaded in Settings and persisted as `CONFIG_KEYS.MODEL`. Hybrid providers with both `modelsUrl` and static `models` (such as `transformers_js_local`, `transformers_js_browser`, and `litert_lm_browser`) preserve their static baseline models in `getAvailableProviders()` while preferring non-empty dynamically fetched lists in `shadow-claw-provider-model-picker`.
 
 **Context limits** are resolved per model family via `getContextLimit(model)` — see the [Context Management](../architecture/context-management.md#context-limits-by-model) doc.
 

@@ -260,13 +260,15 @@ class ModelRegistry {
 
       const data = await response.json();
 
-      // OpenRouter / HuggingFace Router / any OpenAI-compatible /v1/models
-      // All return {data: [{id, context_length, top_provider?:{max_completion_tokens}}]}
-      const items: any[] = Array.isArray(data.data)
-        ? data.data
-        : Array.isArray(data.models)
-          ? data.models
-          : [];
+      // OpenRouter / HuggingFace Router / HuggingFace API (/api/models returns top-level array)
+      // or any OpenAI-compatible /v1/models returning {data: [...]} or {models: [...]}
+      const items: any[] = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.data)
+          ? data.data
+          : Array.isArray(data?.models)
+            ? data.models
+            : [];
 
       this.registerModelsFromList(items);
 

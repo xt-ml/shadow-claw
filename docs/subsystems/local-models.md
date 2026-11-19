@@ -161,6 +161,8 @@ Client / CLI Agent
               └── Executes inference via TextStreamer
 ```
 
+- **Static Baseline & Dynamic Cache TTL**: `fetchDynamicModels()` merges `STATIC_MODELS` with dynamic Hugging Face discovery (`author=onnx-community`) and caches results in memory and on disk (`assets/cache/transformers.js/models.json` with a `cachedAt` timestamp). Cached catalogs expire after a 24-hour TTL (`DEFAULT_TRANSFORMERS_JS_MODELS_CACHE_TTL_MS`, overridable via `TRANSFORMERS_JS_MODELS_CACHE_TTL_MS` or `{ forceRefresh: true }`).
+
 ### 3. Unified Local Model Tool Calling (`parseLocalModelToolCalls`)
 
 Located at `src/subsystems/providers/utils/parse-local-model-tool-call.ts`, this utility standardizes tool invocation formatting, schema normalization, and parsing across local models:
@@ -179,6 +181,7 @@ Located at `src/server/services/llamafile-manager.ts`, `src/server/routes/llamaf
   - **Server Mode**: Forwards `tools` schemas directly to `/v1/chat/completions` when connected to a running Llamafile server, parsing OpenAI-standard `tool_calls`. Upstream built-in tools (`read_file`, `grep_search`, `exec_shell_command`, etc.) are exposed through the proxy via `GET /llamafile-proxy/tools` and `POST /llamafile-proxy/tools`.
   - **CLI Mode**: When running directly against local binaries without a daemon, `buildCliPrompt` formats system tool declarations directly into the prompt. Output is parsed by `parseLocalModelToolCalls` (recovering both `call:name{...}` and `<tool_call>` formats), and `createToolCallStreamFilter` suppresses raw tool syntax from leaking over SSE streams.
   - **Headless In-Process Execution**: `executeNodeLlamafileCompletion` in `node-llamafile-executor.ts` receives active runtime tool schemas from `handleInvoke` and dispatches them seamlessly to the local Llamafile CLI or server process.
+  - **Curated URL Health Check (`verifyCuratedLlamafileUrls`)**: Sends HTTP `HEAD` requests to all `CURATED_LLAMAFILE_MODELS` Hugging Face `resolve/main` URLs to detect broken or renamed upstream binaries.
   - **POSIX Shell Script Mode Execution**: On POSIX platforms, spawned binary processes launch via `/bin/sh` to bypass Linux `binfmt_misc` / `run-detectors` interpreter resolution errors, ensuring reliable execution of Actually Portable Executable (APE) binaries across host distributions.
 - **Full Agentfile (`.agentfile`) Support**:
   - **Autonomous Agent Binary Execution**: Single-executable autonomous agents built with Mozilla's `agent.cpp` / `agentfile` execute tools internally on the host OS or inside sandboxes (`--tools-runtime <docker|ssh>`).

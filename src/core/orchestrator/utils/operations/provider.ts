@@ -87,12 +87,11 @@ export function getAvailableProviders(): LLMProvider[] {
   return Object.entries(PROVIDERS).map(([id, config]) => ({
     id,
     name: config.name,
-    ...(!config.modelsUrl && {
-      models:
-        Array.isArray(config.models) && config.models.length > 0
-          ? config.models
-          : [config.defaultModel],
-    }),
+    ...(Array.isArray(config.models) && config.models.length > 0
+      ? { models: config.models }
+      : !config.modelsUrl
+        ? { models: [config.defaultModel] }
+        : {}),
     ...(config.modelsUrl && { modelsUrl: config.modelsUrl }),
     ...(config.headers && { headers: config.headers }),
     ...(config.apiKeyHeader && { apiKeyHeader: config.apiKeyHeader }),

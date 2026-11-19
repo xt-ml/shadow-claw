@@ -29,6 +29,7 @@ import {
   fetchRemoteModels,
   promptForAgentModel,
   getCuratedModelToolSupport,
+  verifyCuratedLlamafileUrls,
 } from "./local-models.js";
 
 describe("local-models", () => {
@@ -1339,6 +1340,56 @@ describe("local-models", () => {
       expect(getAgentfileCacheDir(tmpDir)).toBe(
         path.resolve(tmpDir, "agentfile"),
       );
+    });
+  });
+
+  describe("verifyCuratedLlamafileUrls", () => {
+    it("sends HEAD requests to all CURATED_LLAMAFILE_MODELS URLs and reports reachable, HTTP error, and network failure results", async () => {
+      const mockFetch = jest
+        .fn<any>()
+        .mockResolvedValueOnce({ ok: true, status: 200 })
+        .mockResolvedValueOnce({ ok: false, status: 404 })
+        .mockRejectedValueOnce(new Error("Network timeout"))
+        .mockResolvedValue({ ok: true, status: 200 });
+
+      const results = await verifyCuratedLlamafileUrls({
+        fetch: mockFetch,
+        timeoutMs: 3000,
+      });
+
+      expect(mockFetch).toHaveBeenCalledTimes(CURATED_LLAMAFILE_MODELS.length);
+      for (let i = 0; i < CURATED_LLAMAFILE_MODELS.length; i++) {
+        expect(mockFetch).toHaveBeenNthCalledWith(
+          i + 1,
+          CURATED_LLAMAFILE_MODELS[i].url,
+          expect.objectContaining({
+            method: "HEAD",
+            redirect: "follow",
+            headers: expect.objectContaining({
+              "User-Agent": "ShadowClaw-CLI",
+            }),
+          }),
+        );
+      }
+
+      expect(results[0]).toEqual({
+        id: CURATED_LLAMAFILE_MODELS[0].id,
+        url: CURATED_LLAMAFILE_MODELS[0].url,
+        ok: true,
+        status: 200,
+      });
+      expect(results[1]).toEqual({
+        id: CURATED_LLAMAFILE_MODELS[1].id,
+        url: CURATED_LLAMAFILE_MODELS[1].url,
+        ok: false,
+        status: 404,
+      });
+      expect(results[2]).toEqual({
+        id: CURATED_LLAMAFILE_MODELS[2].id,
+        url: CURATED_LLAMAFILE_MODELS[2].url,
+        ok: false,
+        error: "Network timeout",
+      });
     });
   });
 });

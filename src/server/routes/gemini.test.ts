@@ -553,11 +553,20 @@ describe("Gemini proxy", () => {
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.arrayContaining([
+          expect.objectContaining({ id: "gemini-3.5-pro" }),
+          expect.objectContaining({ id: "gemini-3.5-flash" }),
+          expect.objectContaining({ id: "gemini-2.5-pro" }),
+          expect.objectContaining({ id: "gemini-2.5-flash" }),
           expect.objectContaining({ id: "gemini-2.0-flash" }),
-          expect.objectContaining({ id: "gemini-1.5-flash" }),
         ]),
       }),
     );
+
+    const payload = res.json.mock.calls[0][0];
+    const ids = payload.data.map((m: any) => m.id);
+    expect(ids).not.toContain("gemini-1.5-flash");
+    expect(ids).not.toContain("gemini-1.5-pro");
+    expect(ids).not.toContain("gemini-2.0-flash-thinking-preview");
   });
 
   it("returns 502 when models.list() itself throws", async () => {

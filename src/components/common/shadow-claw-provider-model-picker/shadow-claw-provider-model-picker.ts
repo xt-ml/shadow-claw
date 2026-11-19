@@ -420,11 +420,16 @@ export class ShadowClawProviderModelPicker extends ShadowClawElement {
       return [];
     }
 
+    const loaded = this.providerModels.get(provider.id);
+    if (Array.isArray(loaded) && loaded.length > 0) {
+      return loaded;
+    }
+
     if (Array.isArray(provider.models) && provider.models.length > 0) {
       return provider.models as ProviderModelItem[];
     }
 
-    return this.providerModels.get(provider.id) || [];
+    return loaded || [];
   }
 
   private getToolsBadge(model: ProviderModelItem, providerId: string): string {
@@ -433,8 +438,10 @@ export class ShadowClawProviderModelPicker extends ShadowClawElement {
       "transformers_js_browser",
       "ollama",
       "llamafile",
+      "agentfile",
       "prompt_api",
       "litert_lm",
+      "litert_lm_browser",
     ]);
 
     const modelId = this.getModelId(model) || "";

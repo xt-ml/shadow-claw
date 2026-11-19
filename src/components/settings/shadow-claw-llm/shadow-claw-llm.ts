@@ -942,7 +942,9 @@ export class ShadowClawLlm extends ShadowClawElement {
       "transformers_js_browser",
       "ollama",
       "llamafile",
+      "agentfile",
       "prompt_api",
+      "litert_lm_browser",
     ]);
 
     const escapeHtml = (value: string): string =>

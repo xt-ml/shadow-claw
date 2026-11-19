@@ -47,6 +47,7 @@ const TRANSFORMERS_JS_DISCOVERY_DOWNLOAD_FILE = path.resolve(
 );
 const TRANSFORMERS_JS_RUNTIME_IDLE_MS = 10_000;
 const DEFAULT_TRANSFORMERS_JS_REQUEST_TIMEOUT_MS = 300_000;
+export const DEFAULT_TRANSFORMERS_JS_MODELS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 export type TransformersJsRuntime = {
   processor: any;
@@ -172,7 +173,9 @@ export interface TransformersRuntimeService {
     onProgress?: (info: any) => void;
     abortSignal?: AbortSignal;
   }): Promise<{ text: string; promptTokens: number; completionTokens: number }>;
-  fetchDynamicModels(): Promise<TransformersModelMetadata[]>;
+  fetchDynamicModels(options?: {
+    forceRefresh?: boolean;
+  }): Promise<TransformersModelMetadata[]>;
   getDownloadStatus(): TransformersJsDownloadStatus;
   getDiskCacheStatus(): Promise<TransformersJsDiskCacheStatus>;
   prewarmModel(params: {
@@ -196,7 +199,10 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
   const runtimeCache = new Map<string, Promise<TransformersJsRuntime>>();
   const activeRequests = new Map<string, number>();
   const cleanupTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  let modelsCache: { models: TransformersModelMetadata[] } | null = null;
+  let modelsCache: {
+    models: TransformersModelMetadata[];
+    cachedAt: number;
+  } | null = null;
   const downloadStatus: TransformersJsDownloadStatus = {
     status: "idle",
     progress: null,
@@ -1087,21 +1093,38 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
       }
     },
 
-    async fetchDynamicModels() {
-      if (modelsCache) {
+    async fetchDynamicModels(options?: { forceRefresh?: boolean }) {
+      const cacheTtlMs = parsePositiveInteger(
+        env.TRANSFORMERS_JS_MODELS_CACHE_TTL_MS,
+        DEFAULT_TRANSFORMERS_JS_MODELS_CACHE_TTL_MS,
+      );
+
+      if (
+        !options?.forceRefresh &&
+        modelsCache &&
+        Date.now() - modelsCache.cachedAt < cacheTtlMs
+      ) {
         return modelsCache.models;
       }
 
-      try {
-        const raw = await readFile(TRANSFORMERS_JS_MODELS_CACHE_FILE, "utf8");
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed?.models)) {
-          modelsCache = { models: parsed.models };
+      if (!options?.forceRefresh) {
+        try {
+          const raw = await readFile(TRANSFORMERS_JS_MODELS_CACHE_FILE, "utf8");
+          const parsed = JSON.parse(raw);
+          const hasValidTimestamp = typeof parsed?.cachedAt === "number";
+          const isFresh =
+            !hasValidTimestamp || Date.now() - parsed.cachedAt < cacheTtlMs;
+          if (Array.isArray(parsed?.models) && isFresh) {
+            modelsCache = {
+              models: parsed.models,
+              cachedAt: hasValidTimestamp ? parsed.cachedAt : Date.now(),
+            };
 
-          return parsed.models;
+            return parsed.models;
+          }
+        } catch {
+          // Cache miss
         }
-      } catch {
-        // Cache miss
       }
 
       const endpoint =
@@ -1127,7 +1150,8 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
         .sort((a, b) => a.localeCompare(b))
         .map((id) => staticModelsById.get(id) || normalizeModelInfo(id));
 
-      modelsCache = { models };
+      const cachedAt = Date.now();
+      modelsCache = { models, cachedAt };
 
       try {
         await mkdir(path.dirname(TRANSFORMERS_JS_MODELS_CACHE_FILE), {
@@ -1135,7 +1159,7 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
         });
         await writeFile(
           TRANSFORMERS_JS_MODELS_CACHE_FILE,
-          JSON.stringify({ models }, null, 2),
+          JSON.stringify({ models, cachedAt }, null, 2),
           "utf8",
         );
       } catch {}
@@ -1193,6 +1217,7 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
     },
 
     async __resetRuntimeForTests() {
+      modelsCache = null;
       const modelIds = new Set([
         ...runtimeCache.keys(),
         ...cleanupTimers.keys(),

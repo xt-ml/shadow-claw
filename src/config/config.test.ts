@@ -41,6 +41,7 @@ import {
   PROVIDER_AUTH_CAPABILITIES,
   PROVIDERS,
   SCHEDULER_INTERVAL,
+  SHARED_TRANSFORMERS_JS_MODELS,
   TRANSFORMERS_JS_PROXY_MODELS_URL,
   TRANSFORMERS_JS_PROXY_URL,
   TRIGGER_PATTERN,
@@ -267,6 +268,7 @@ describe("config.js", () => {
       expect(provider.format).toBe("openai");
       expect(provider.requiresApiKey).toBe(false);
       expect(provider.defaultModel).toBe("onnx-community/Qwen3-0.6B-ONNX");
+      expect(provider.models).toEqual(SHARED_TRANSFORMERS_JS_MODELS);
     });
 
     it("transformers js browser provider should have required fields", () => {
@@ -276,6 +278,40 @@ describe("config.js", () => {
       expect(provider.format).toBe("transformers_js");
       expect(provider.requiresApiKey).toBe(false);
       expect(provider.defaultModel).toBe("onnx-community/Qwen3-0.6B-ONNX");
+      expect(provider.models).toEqual(SHARED_TRANSFORMERS_JS_MODELS);
+    });
+
+    it("exports SHARED_TRANSFORMERS_JS_MODELS as a non-empty ONNX baseline shared across transformers.js providers", () => {
+      expect(Array.isArray(SHARED_TRANSFORMERS_JS_MODELS)).toBe(true);
+      expect(SHARED_TRANSFORMERS_JS_MODELS.length).toBeGreaterThan(0);
+      expect(SHARED_TRANSFORMERS_JS_MODELS).toContain(
+        "onnx-community/Qwen3-0.6B-ONNX",
+      );
+      expect(PROVIDERS.transformers_js_local.models).toEqual(
+        SHARED_TRANSFORMERS_JS_MODELS,
+      );
+      expect(PROVIDERS.transformers_js_browser.models).toEqual(
+        SHARED_TRANSFORMERS_JS_MODELS,
+      );
+    });
+
+    it("litert_lm_browser should configure HuggingFace litert-community modelsUrl and static baseline models", () => {
+      const provider = PROVIDERS.litert_lm_browser;
+      expect(provider.id).toBe("litert_lm_browser");
+      expect(provider.modelsUrl).toBe(
+        "https://huggingface.co/api/models?author=litert-community",
+      );
+      expect(provider.models).toEqual([
+        "litert-community/gemma-4-E2B-it-litert-lm",
+        "litert-community/gemma-4-E4B-it-litert-lm",
+      ]);
+    });
+
+    it("uses current-generation defaultModel pins for gemini_proxy and huggingface", () => {
+      expect(PROVIDERS.gemini_proxy.defaultModel).toBe("gemini-2.5-flash");
+      expect(PROVIDERS.huggingface.defaultModel).toBe(
+        "meta-llama/Llama-3.3-70B-Instruct",
+      );
     });
 
     it("prompt api provider should be keyless and experimental", () => {

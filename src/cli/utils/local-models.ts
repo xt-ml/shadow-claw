@@ -134,6 +134,54 @@ export const CURATED_LLAMAFILE_MODELS: LlamafileModelDefinition[] = [
   },
 ];
 
+export interface CuratedUrlCheckResult {
+  id: string;
+  url: string;
+  ok: boolean;
+  status?: number;
+  error?: string;
+}
+
+/**
+ * Verify that all curated Llamafile HuggingFace download URLs resolve via HTTP HEAD.
+ */
+export async function verifyCuratedLlamafileUrls(
+  options: {
+    fetch?: typeof globalThis.fetch;
+    timeoutMs?: number;
+  } = {},
+): Promise<CuratedUrlCheckResult[]> {
+  const fetchFn = options.fetch || globalThis.fetch;
+  const timeoutMs = options.timeoutMs || 8000;
+
+  return Promise.all(
+    CURATED_LLAMAFILE_MODELS.map(async (model) => {
+      try {
+        const res = await fetchFn(model.url, {
+          method: "HEAD",
+          headers: { "User-Agent": "ShadowClaw-CLI" },
+          redirect: "follow",
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+
+        return {
+          id: model.id,
+          url: model.url,
+          ok: res.ok,
+          status: res.status,
+        };
+      } catch (err) {
+        return {
+          id: model.id,
+          url: model.url,
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+    }),
+  );
+}
+
 /**
  * Return whether a model ID is known in our curated definitions to support tool calling.
  * Returns `true` if explicitly supported, `false` if explicitly not supported,

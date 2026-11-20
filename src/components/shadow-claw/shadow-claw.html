@@ -2,8 +2,16 @@
   <div class="app">
     <!-- Header -->
     <header class="header">
-      <button aria-label="Open menu" title="Open menu" id="menu-button">
+      <button
+        aria-label="Open menu"
+        aria-expanded="false"
+        aria-controls="sidebar"
+        title="Open menu"
+        id="menu-button"
+        type="button"
+      >
         <svg
+          aria-hidden="true"
           height="1.5rem"
           fill="currentColor"
           viewBox="0 -960 960 960"
@@ -114,7 +122,7 @@
     <!-- Main Body -->
     <div class="app-body">
       <!-- Sidebar -->
-      <aside class="sidebar">
+      <aside class="sidebar" id="sidebar" aria-label="Sidebar">
         <div class="sidebar-boot-skeleton" aria-hidden="true">
           <div class="skeleton-nav-wrapper">
             <div class="skeleton-item skeleton-nav"></div>
@@ -130,7 +138,7 @@
           </div>
         </div>
 
-        <nav>
+        <nav aria-label="Primary">
           <ul class="nav-menu">
             <li class="nav-item active" data-page="pages">📚 Pages</li>
             <li class="nav-item" data-page="chat">💬 Chat</li>
@@ -150,7 +158,15 @@
           </button>
         </div>
       </aside>
-      <div class="sidebar-resize-handle" title="Drag to resize sidebar"></div>
+      <div
+        class="sidebar-resize-handle"
+        role="separator"
+        aria-orientation="vertical"
+        aria-controls="sidebar"
+        aria-label="Resize sidebar width"
+        tabindex="0"
+        title="Drag to resize sidebar"
+      ></div>
 
       <!-- Main Content -->
       <main class="main-content">

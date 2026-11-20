@@ -78,15 +78,43 @@ export function bindEventListeners(
   const sidebar = shadow.querySelector(".sidebar");
 
   if (menuButton && sidebar) {
+    // Responsive matchMedia handler for orientation/resizing
+    const matchMedia = win.matchMedia
+      ? win.matchMedia("(min-width: 56rem)")
+      : ({
+          matches: false,
+          addEventListener: () => {},
+          removeEventListener: () => {},
+        } as unknown as MediaQueryList);
+
+    const syncSidebarDrawerState = (open: boolean) => {
+      sidebar.classList.toggle("open", open);
+      menuButton.setAttribute("aria-expanded", String(open));
+      const label = open ? "Close menu" : "Open menu";
+      menuButton.setAttribute("aria-label", label);
+      menuButton.setAttribute("title", label);
+
+      if (open) {
+        sidebar.removeAttribute("aria-hidden");
+        sidebar.toggleAttribute("inert", false);
+      } else if (
+        matchMedia.matches &&
+        sidebar.classList.contains("collapsed")
+      ) {
+        sidebar.setAttribute("aria-hidden", "true");
+        sidebar.toggleAttribute("inert", true);
+      }
+    };
+
     menuButton.addEventListener("click", () => {
-      sidebar.classList.toggle("open");
+      syncSidebarDrawerState(!sidebar.classList.contains("open"));
     });
 
     // Close sidebar when an item is tapped (only on mobile)
     shadow.querySelectorAll(".nav-item, .settings-btn").forEach((item) => {
       item.addEventListener("click", () => {
         if (win.innerWidth < 896) {
-          sidebar.classList.remove("open");
+          syncSidebarDrawerState(false);
         }
       });
     });
@@ -97,7 +125,7 @@ export function bindEventListeners(
         win.innerWidth < 896 &&
         target?.closest("a, button, .nav-item, .sidebar-link, .sidebar-item")
       ) {
-        sidebar.classList.remove("open");
+        syncSidebarDrawerState(false);
       }
     });
 
@@ -108,7 +136,7 @@ export function bindEventListeners(
           win.innerWidth < 896 &&
           target?.closest('[slot^="sidebar"] a, .sidebar-custom-sections a')
         ) {
-          sidebar.classList.remove("open");
+          syncSidebarDrawerState(false);
         }
       });
     }
@@ -125,22 +153,24 @@ export function bindEventListeners(
         !path.includes(sidebar) &&
         !path.includes(menuButton)
       ) {
-        sidebar.classList.remove("open");
+        syncSidebarDrawerState(false);
       }
     });
 
-    // Responsive matchMedia handler for orientation/resizing
-    const matchMedia = win.matchMedia
-      ? win.matchMedia("(min-width: 56rem)")
-      : ({
-          matches: false,
-          addEventListener: () => {},
-          removeEventListener: () => {},
-        } as unknown as MediaQueryList);
+    doc.addEventListener("keydown", (e: KeyboardEvent) => {
+      if (
+        e.key === "Escape" &&
+        win.innerWidth < 896 &&
+        sidebar.classList.contains("open")
+      ) {
+        syncSidebarDrawerState(false);
+        (menuButton as HTMLElement).focus?.();
+      }
+    });
 
     const handleMediaQuery = (e: MediaQueryListEvent | MediaQueryList) => {
       if (e.matches) {
-        sidebar.classList.remove("open"); // Desktop view handles visibility implicitly
+        syncSidebarDrawerState(false); // Desktop view handles visibility implicitly
       }
     };
 

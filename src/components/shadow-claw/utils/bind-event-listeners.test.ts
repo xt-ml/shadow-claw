@@ -340,6 +340,128 @@ describe("bindEventListeners", () => {
         expect.any(Function),
       );
     });
+
+    it("should toggle sidebar open state, aria-expanded, and clear aria-hidden/inert on menu button click", () => {
+      (win as any).innerWidth = 375;
+      const menuButton = document.createElement("button");
+      menuButton.id = "menu-button";
+      const sidebar = document.createElement("aside");
+      sidebar.className = "sidebar collapsed";
+      sidebar.setAttribute("aria-hidden", "true");
+      sidebar.setAttribute("inert", "");
+      shadow.getElementById.mockReturnValue(menuButton);
+      shadow.querySelector.mockImplementation((sel: string) =>
+        sel === ".sidebar" ? sidebar : null,
+      );
+
+      bindEventListeners(
+        win,
+        doc,
+        shadow,
+        shadowClaw,
+        db,
+        oStore,
+        fStore,
+        tStore,
+        url,
+      );
+
+      menuButton.click();
+      expect(sidebar.classList.contains("open")).toBe(true);
+      expect(menuButton.getAttribute("aria-expanded")).toBe("true");
+      expect(menuButton.getAttribute("aria-label")).toBe("Close menu");
+      expect(sidebar.hasAttribute("aria-hidden")).toBe(false);
+      expect(sidebar.hasAttribute("inert")).toBe(false);
+
+      menuButton.click();
+      expect(sidebar.classList.contains("open")).toBe(false);
+      expect(menuButton.getAttribute("aria-expanded")).toBe("false");
+      expect(menuButton.getAttribute("aria-label")).toBe("Open menu");
+    });
+
+    it("should close mobile drawer and sync aria-expanded on outside click", () => {
+      (win as any).innerWidth = 375;
+      const menuButton = document.createElement("button");
+      menuButton.id = "menu-button";
+      const sidebar = document.createElement("aside");
+      sidebar.className = "sidebar";
+      shadow.getElementById.mockReturnValue(menuButton);
+      shadow.querySelector.mockImplementation((sel: string) =>
+        sel === ".sidebar" ? sidebar : null,
+      );
+
+      bindEventListeners(
+        win,
+        doc,
+        shadow,
+        shadowClaw,
+        db,
+        oStore,
+        fStore,
+        tStore,
+        url,
+      );
+
+      menuButton.click();
+      expect(sidebar.classList.contains("open")).toBe(true);
+      expect(menuButton.getAttribute("aria-expanded")).toBe("true");
+
+      const outsideClickListener = (
+        doc.addEventListener as jest.Mock
+      ).mock.calls.find(
+        (call: any[]) =>
+          call[0] === "click" && call[1] !== shadowClaw.fallbackClickListener,
+      )?.[1] as ((e: MouseEvent) => void) | undefined;
+
+      expect(outsideClickListener).toBeDefined();
+      outsideClickListener!({
+        composedPath: () => [document.body],
+      } as unknown as MouseEvent);
+
+      expect(sidebar.classList.contains("open")).toBe(false);
+      expect(menuButton.getAttribute("aria-expanded")).toBe("false");
+    });
+
+    it("should close mobile drawer, sync aria-expanded, and restore focus on Escape key", () => {
+      (win as any).innerWidth = 375;
+      const menuButton = document.createElement("button");
+      menuButton.id = "menu-button";
+      const focusSpy = jest.spyOn(menuButton, "focus");
+      const sidebar = document.createElement("aside");
+      sidebar.className = "sidebar";
+      shadow.getElementById.mockReturnValue(menuButton);
+      shadow.querySelector.mockImplementation((sel: string) =>
+        sel === ".sidebar" ? sidebar : null,
+      );
+
+      bindEventListeners(
+        win,
+        doc,
+        shadow,
+        shadowClaw,
+        db,
+        oStore,
+        fStore,
+        tStore,
+        url,
+      );
+
+      menuButton.click();
+      expect(sidebar.classList.contains("open")).toBe(true);
+      expect(menuButton.getAttribute("aria-expanded")).toBe("true");
+
+      const keydownListener = (
+        doc.addEventListener as jest.Mock
+      ).mock.calls.find((call: any[]) => call[0] === "keydown")?.[1] as
+        ((e: KeyboardEvent) => void) | undefined;
+
+      expect(keydownListener).toBeDefined();
+      keydownListener!(new KeyboardEvent("keydown", { key: "Escape" }));
+
+      expect(sidebar.classList.contains("open")).toBe(false);
+      expect(menuButton.getAttribute("aria-expanded")).toBe("false");
+      expect(focusSpy).toHaveBeenCalled();
+    });
   });
 
   describe("settings button", () => {

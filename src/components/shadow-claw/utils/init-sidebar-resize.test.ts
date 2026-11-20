@@ -17,7 +17,8 @@ describe("initSidebarResize", () => {
   let mockGetConfig: jest.Mock<any>;
 
   const DEFAULT_SIDEBAR_WIDTH_PX = 300;
-  const MIN_SIDEBAR_WIDTH_PX = 200;
+  const MIN_SIDEBAR_WIDTH_PX = 175;
+  const SIDEBAR_COLLAPSED_WIDTH_PX = 0;
 
   beforeEach(async () => {
     jest.resetModules();
@@ -39,7 +40,8 @@ describe("initSidebarResize", () => {
 
     jest.unstable_mockModule("../constants.js", () => ({
       DEFAULT_SIDEBAR_WIDTH_PX: 300,
-      MIN_SIDEBAR_WIDTH_PX: 200,
+      MIN_SIDEBAR_WIDTH_PX: 175,
+      SIDEBAR_COLLAPSED_WIDTH_PX: 0,
     }));
 
     mockClampSidebarWidth = (await import("./clamp-sidebar-width.js"))
@@ -101,6 +103,11 @@ describe("initSidebarResize", () => {
   });
 
   afterEach(() => {
+    for (const [fn] of mockShadowClaw?.addCleanup?.mock?.calls ?? []) {
+      if (typeof fn === "function") {
+        fn();
+      }
+    }
     jest.clearAllMocks();
   });
 
@@ -138,7 +145,7 @@ describe("initSidebarResize", () => {
     // Verify ARIA value attributes
     expect(setAttributeSpy).toHaveBeenCalledWith(
       "aria-valuemin",
-      String(MIN_SIDEBAR_WIDTH_PX),
+      String(SIDEBAR_COLLAPSED_WIDTH_PX),
     );
 
     expect(mockSetSidebarWidthMock).toHaveBeenCalledWith(
@@ -388,7 +395,7 @@ describe("initSidebarResize", () => {
     mockHandle.dispatchEvent(home);
     expect(mockSetSidebarWidth).toHaveBeenCalledWith(
       mockShadow,
-      MIN_SIDEBAR_WIDTH_PX,
+      SIDEBAR_COLLAPSED_WIDTH_PX,
     );
 
     // End
@@ -444,5 +451,259 @@ describe("initSidebarResize", () => {
       "pointercancel",
       expect.any(Function),
     );
+  });
+
+  it("should set aria-controls, aria-valuetext, and handle title for expanded and collapsed states", async () => {
+    const dummyDb: ShadowClawDatabase = {} as any;
+    mockGetConfig.mockResolvedValue(undefined);
+    mockClampSidebarWidth.mockReturnValue(300);
+    mockAppBody.style.getPropertyValue.mockReturnValue("300px");
+
+    await initSidebarResize(mockShadow, mockShadowClaw, mockSidebar, dummyDb);
+
+    expect(mockHandle.setAttribute).toHaveBeenCalledWith(
+      "aria-controls",
+      "sidebar",
+    );
+    expect(mockHandle.setAttribute).toHaveBeenCalledWith(
+      "aria-valuetext",
+      "300px",
+    );
+    expect(mockHandle.title).toBe("Drag to resize sidebar");
+  });
+
+  it("should ignore saved sidebar widths below MIN_SIDEBAR_WIDTH_PX (e.g. 0 or 120) and fall back to default", async () => {
+    const dummyDb: ShadowClawDatabase = {} as any;
+    mockClampSidebarWidth.mockImplementation((_s, w) => w);
+
+    mockGetConfig.mockResolvedValue(0);
+    mockAppBody.style.getPropertyValue.mockReturnValue("300px");
+    await initSidebarResize(mockShadow, mockShadowClaw, mockSidebar, dummyDb);
+    expect(mockSetSidebarWidth).toHaveBeenCalledWith(
+      mockShadow,
+      DEFAULT_SIDEBAR_WIDTH_PX,
+    );
+
+    mockSetSidebarWidth.mockClear();
+    mockGetConfig.mockResolvedValue(120);
+    await initSidebarResize(mockShadow, mockShadowClaw, mockSidebar, dummyDb);
+    expect(mockSetSidebarWidth).toHaveBeenCalledWith(
+      mockShadow,
+      DEFAULT_SIDEBAR_WIDTH_PX,
+    );
+  });
+
+  it("should snap shut to 0 and remove sidebar-resizing when dragging below 175px", async () => {
+    Object.defineProperty(window, "innerWidth", {
+      writable: true,
+      configurable: true,
+      value: 1024,
+    });
+    mockGetConfig.mockResolvedValue(200);
+    mockAppBody.style.getPropertyValue.mockReturnValue("200px");
+    mockSidebar.getBoundingClientRect.mockReturnValue({ width: 200 });
+    mockClampSidebarWidth.mockImplementation((_s, w) => w);
+    mockSetSidebarWidth.mockImplementation((_s, w) => {
+      mockAppBody.style.getPropertyValue.mockReturnValue(`${w}px`);
+    });
+
+    await initSidebarResize(mockShadow, mockShadowClaw, mockSidebar, {} as any);
+    mockSetSidebarWidth.mockClear();
+
+    const pointerDown = new Event("pointerdown") as any;
+    pointerDown.pointerId = 1;
+    pointerDown.pointerType = "mouse";
+    pointerDown.button = 0;
+    pointerDown.clientX = 200;
+    mockHandle.dispatchEvent(pointerDown);
+
+    expect(mockAppBody.classList.contains("sidebar-resizing")).toBe(true);
+
+    // Dragging within [175, 560] keeps sidebar-resizing enabled
+    const moveInsideRange = new Event("pointermove") as any;
+    moveInsideRange.pointerId = 1;
+    moveInsideRange.clientX = 185;
+    document.dispatchEvent(moveInsideRange);
+    expect(mockSetSidebarWidth).toHaveBeenCalledWith(mockShadow, 185);
+    expect(mockAppBody.classList.contains("sidebar-resizing")).toBe(true);
+
+    // Dragging below 175 snaps shut to 0 and removes sidebar-resizing so CSS animates collapse
+    const moveBelowMin = new Event("pointermove") as any;
+    moveBelowMin.pointerId = 1;
+    moveBelowMin.clientX = 170;
+    document.dispatchEvent(moveBelowMin);
+    expect(mockSetSidebarWidth).toHaveBeenCalledWith(mockShadow, 0);
+    expect(mockAppBody.classList.contains("sidebar-resizing")).toBe(false);
+    expect(mockHandle.setAttribute).toHaveBeenCalledWith("aria-valuenow", "0");
+    expect(mockHandle.setAttribute).toHaveBeenCalledWith(
+      "aria-valuetext",
+      "Collapsed (0px)",
+    );
+    expect(mockHandle.title).toBe("Drag or double-click to expand sidebar");
+  });
+
+  it("should not persist collapsed 0 width on pointerup, while persisting widths >= 175", async () => {
+    Object.defineProperty(window, "innerWidth", {
+      writable: true,
+      configurable: true,
+      value: 1024,
+    });
+    const dummyDb: ShadowClawDatabase = {} as any;
+    mockAppBody.style.getPropertyValue.mockReturnValue("0px");
+
+    await initSidebarResize(mockShadow, mockShadowClaw, mockSidebar, dummyDb);
+
+    const pointerDown = new Event("pointerdown") as any;
+    pointerDown.pointerId = 1;
+    pointerDown.pointerType = "mouse";
+    pointerDown.button = 0;
+    pointerDown.clientX = 0;
+    mockHandle.dispatchEvent(pointerDown);
+
+    const pointerUp = new Event("pointerup") as any;
+    pointerUp.pointerId = 1;
+    mockHandle.dispatchEvent(pointerUp);
+
+    expect(mockPersistSidebarWidth).not.toHaveBeenCalled();
+
+    mockAppBody.style.getPropertyValue.mockReturnValue("250px");
+    const pointerDown2 = new Event("pointerdown") as any;
+    pointerDown2.pointerId = 2;
+    pointerDown2.pointerType = "mouse";
+    pointerDown2.button = 0;
+    pointerDown2.clientX = 250;
+    mockHandle.dispatchEvent(pointerDown2);
+
+    const pointerUp2 = new Event("pointerup") as any;
+    pointerUp2.pointerId = 2;
+    mockHandle.dispatchEvent(pointerUp2);
+
+    expect(mockPersistSidebarWidth).toHaveBeenCalledWith(dummyDb, 250);
+  });
+
+  it("should re-open sidebar by dragging right across 175px from 0 width", async () => {
+    Object.defineProperty(window, "innerWidth", {
+      writable: true,
+      configurable: true,
+      value: 1024,
+    });
+    mockGetConfig.mockResolvedValue(undefined);
+    mockAppBody.style.getPropertyValue.mockReturnValue("0px");
+    mockSidebar.getBoundingClientRect.mockReturnValue({ width: 0 });
+    mockClampSidebarWidth.mockImplementation((_s, w) => w);
+    mockSetSidebarWidth.mockImplementation((_s, w) => {
+      mockAppBody.style.getPropertyValue.mockReturnValue(`${w}px`);
+    });
+
+    await initSidebarResize(mockShadow, mockShadowClaw, mockSidebar, {} as any);
+    mockSetSidebarWidth.mockClear();
+    mockAppBody.style.getPropertyValue.mockReturnValue("0px");
+
+    const pointerDown = new Event("pointerdown") as any;
+    pointerDown.pointerId = 1;
+    pointerDown.pointerType = "mouse";
+    pointerDown.button = 0;
+    pointerDown.clientX = 0;
+    mockHandle.dispatchEvent(pointerDown);
+
+    // Below 175 stays snapped at 0
+    const moveStillCollapsed = new Event("pointermove") as any;
+    moveStillCollapsed.pointerId = 1;
+    moveStillCollapsed.clientX = 100;
+    document.dispatchEvent(moveStillCollapsed);
+    expect(mockSetSidebarWidth).toHaveBeenCalledWith(mockShadow, 0);
+
+    // Crossing >= 175 opens to 220 and removes sidebar-resizing for snap-open transition
+    const moveOpen = new Event("pointermove") as any;
+    moveOpen.pointerId = 1;
+    moveOpen.clientX = 220;
+    document.dispatchEvent(moveOpen);
+    expect(mockSetSidebarWidth).toHaveBeenCalledWith(mockShadow, 220);
+    expect(mockAppBody.classList.contains("sidebar-resizing")).toBe(false);
+  });
+
+  it("should snap shut below 175px on ArrowLeft/Home without persisting, snap to 175px on ArrowRight, and toggle via Enter/Space", async () => {
+    Object.defineProperty(window, "innerWidth", {
+      writable: true,
+      configurable: true,
+      value: 1024,
+    });
+    const dummyDb: ShadowClawDatabase = {} as any;
+    mockGetConfig.mockResolvedValue(180);
+    mockAppBody.style.getPropertyValue.mockReturnValue("180px");
+    mockClampSidebarWidth.mockImplementation((_s, w) => w);
+    mockSetSidebarWidth.mockImplementation((_s, w) => {
+      mockAppBody.style.getPropertyValue.mockReturnValue(`${w}px`);
+    });
+
+    await initSidebarResize(mockShadow, mockShadowClaw, mockSidebar, dummyDb);
+
+    // ArrowLeft from 180 -> 168 (< 175) snaps shut to 0 and does not persist
+    mockSetSidebarWidth.mockClear();
+    mockPersistSidebarWidth.mockClear();
+    const arrowLeft = new KeyboardEvent("keydown", { key: "ArrowLeft" });
+    mockHandle.dispatchEvent(arrowLeft);
+    expect(mockSetSidebarWidth).toHaveBeenCalledWith(mockShadow, 0);
+    expect(mockPersistSidebarWidth).not.toHaveBeenCalled();
+
+    // ArrowRight from 0 snaps open to MIN_SIDEBAR_WIDTH_PX (175) and persists 175
+    mockSetSidebarWidth.mockClear();
+    mockPersistSidebarWidth.mockClear();
+    const arrowRight = new KeyboardEvent("keydown", { key: "ArrowRight" });
+    mockHandle.dispatchEvent(arrowRight);
+    expect(mockSetSidebarWidth).toHaveBeenCalledWith(
+      mockShadow,
+      MIN_SIDEBAR_WIDTH_PX,
+    );
+    expect(mockPersistSidebarWidth).toHaveBeenCalledWith(
+      dummyDb,
+      MIN_SIDEBAR_WIDTH_PX,
+    );
+
+    // Expand to 300 via ArrowRight/mock then collapse with Enter
+    mockAppBody.style.getPropertyValue.mockReturnValue("300px");
+    mockSetSidebarWidth.mockClear();
+    mockPersistSidebarWidth.mockClear();
+    const enterCollapse = new KeyboardEvent("keydown", { key: "Enter" });
+    jest.spyOn(enterCollapse, "preventDefault");
+    mockHandle.dispatchEvent(enterCollapse);
+
+    expect(enterCollapse.preventDefault).toHaveBeenCalled();
+    expect(mockSetSidebarWidth).toHaveBeenCalledWith(mockShadow, 0);
+    expect(mockPersistSidebarWidth).not.toHaveBeenCalled();
+
+    // Enter from 0 restores last expanded width (300) and persists 300
+    mockSetSidebarWidth.mockClear();
+    mockPersistSidebarWidth.mockClear();
+    const enterExpand = new KeyboardEvent("keydown", { key: "Enter" });
+    mockHandle.dispatchEvent(enterExpand);
+    expect(mockSetSidebarWidth).toHaveBeenCalledWith(mockShadow, 300);
+    expect(mockPersistSidebarWidth).toHaveBeenCalledWith(dummyDb, 300);
+
+    // Home collapses to 0 without persisting
+    mockSetSidebarWidth.mockClear();
+    mockPersistSidebarWidth.mockClear();
+    const home = new KeyboardEvent("keydown", { key: "Home" });
+    mockHandle.dispatchEvent(home);
+    expect(mockSetSidebarWidth).toHaveBeenCalledWith(mockShadow, 0);
+    expect(mockPersistSidebarWidth).not.toHaveBeenCalled();
+
+    // Space toggles back open to 300 and persists 300
+    mockSetSidebarWidth.mockClear();
+    mockPersistSidebarWidth.mockClear();
+    const spaceExpand = new KeyboardEvent("keydown", { key: " " });
+    jest.spyOn(spaceExpand, "preventDefault");
+    mockHandle.dispatchEvent(spaceExpand);
+    expect(spaceExpand.preventDefault).toHaveBeenCalled();
+    expect(mockSetSidebarWidth).toHaveBeenCalledWith(mockShadow, 300);
+    expect(mockPersistSidebarWidth).toHaveBeenCalledWith(dummyDb, 300);
+
+    // Space again collapses to 0 without persisting
+    mockSetSidebarWidth.mockClear();
+    mockPersistSidebarWidth.mockClear();
+    const spaceCollapse = new KeyboardEvent("keydown", { key: " " });
+    mockHandle.dispatchEvent(spaceCollapse);
+    expect(mockSetSidebarWidth).toHaveBeenCalledWith(mockShadow, 0);
+    expect(mockPersistSidebarWidth).not.toHaveBeenCalled();
   });
 });

@@ -48,6 +48,7 @@ export {
   DEFAULT_SIDEBAR_WIDTH_PX,
   MIN_SIDEBAR_WIDTH_PX,
   MAX_SIDEBAR_WIDTH_PX,
+  SIDEBAR_COLLAPSED_WIDTH_PX,
 } from "./constants.js";
 
 import shadowClawStyles from "./shadow-claw.css" with { type: "css" };

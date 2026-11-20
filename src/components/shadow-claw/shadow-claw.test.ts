@@ -422,6 +422,57 @@ describe("shadow-claw", () => {
     expect(style?.textContent).toContain("display: block");
   });
 
+  it("renders mobile-first collapsible sidebar markup with ARIA attributes and styles", async () => {
+    const component = new ShadowClaw();
+    component.orchestrator = createOrchestratorStub();
+
+    document.body.appendChild(component);
+
+    const root = component.shadowRoot!;
+    const menuButton = root.getElementById("menu-button");
+    const menuSvg = menuButton?.querySelector("svg");
+    const sidebar = root.querySelector("aside.sidebar");
+    const nav = sidebar?.querySelector("nav");
+    const resizeHandle = root.querySelector(".sidebar-resize-handle");
+    const styleText = root.querySelector("style")?.textContent ?? "";
+
+    expect(menuButton?.getAttribute("type")).toBe("button");
+    expect(menuButton?.getAttribute("aria-controls")).toBe("sidebar");
+    expect(menuButton?.getAttribute("aria-expanded")).toBe("false");
+    expect(menuSvg?.getAttribute("aria-hidden")).toBe("true");
+
+    expect(sidebar?.getAttribute("id")).toBe("sidebar");
+    expect(sidebar?.getAttribute("aria-label")).toBe("Sidebar");
+    expect(nav?.getAttribute("aria-label")).toBe("Primary");
+
+    expect(resizeHandle?.getAttribute("role")).toBe("separator");
+    expect(resizeHandle?.getAttribute("aria-orientation")).toBe("vertical");
+    expect(resizeHandle?.getAttribute("aria-controls")).toBe("sidebar");
+    expect(resizeHandle?.getAttribute("aria-label")).toBe(
+      "Resize sidebar width",
+    );
+    expect(resizeHandle?.getAttribute("tabindex")).toBe("0");
+
+    expect(styleText).toContain("container: sidebar / inline-size");
+    expect(styleText).toContain("--sidebar-min-width");
+    expect(styleText).toContain(
+      ".app-body.sidebar-resizing:not(.sidebar-collapsed) .sidebar",
+    );
+    expect(styleText).toContain(".sidebar.collapsed");
+    expect(styleText).toContain(
+      ".app-body.sidebar-collapsed .sidebar-resize-handle",
+    );
+    expect(styleText).toContain("@media (min-width: 56rem)");
+    expect(styleText).toContain(
+      "@media (min-width: 56rem) and (pointer: coarse)",
+    );
+    expect(styleText).not.toMatch(
+      /@media\s*\(max-width:\s*55\.9375rem\)\s*\{\s*\.sidebar\b/,
+    );
+
+    document.body.removeChild(component);
+  });
+
   it("opens files when orchestrator emits open-file", async () => {
     const originalMatchMedia = globalThis.matchMedia;
     globalThis.matchMedia =

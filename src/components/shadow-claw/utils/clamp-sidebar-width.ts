@@ -10,10 +10,12 @@ export function clampSidebarWidth(
     return Math.max(MIN_SIDEBAR_WIDTH_PX, Math.min(MAX_SIDEBAR_WIDTH_PX, px));
   }
 
-  const maxByContainer = Math.max(
-    MIN_SIDEBAR_WIDTH_PX,
-    appBody.getBoundingClientRect().width - 260,
-  );
+  const containerWidth = appBody.getBoundingClientRect().width;
+  if (containerWidth <= 0) {
+    return Math.max(MIN_SIDEBAR_WIDTH_PX, Math.min(MAX_SIDEBAR_WIDTH_PX, px));
+  }
+
+  const maxByContainer = Math.max(MIN_SIDEBAR_WIDTH_PX, containerWidth - 260);
 
   return Math.max(
     MIN_SIDEBAR_WIDTH_PX,

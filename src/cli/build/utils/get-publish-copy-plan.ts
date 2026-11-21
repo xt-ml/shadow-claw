@@ -206,6 +206,28 @@ export function getPublishCopyPlan({
       ],
       dest: "dist/public/favicon.ico",
     },
+    {
+      sources: [
+        "pages/resources/assets/icons/apple-touch-icon.png",
+        "pages/deps/assets/icons/apple-touch-icon.png",
+        "resources/assets/icons/apple-touch-icon.png",
+        "deps/assets/icons/apple-touch-icon.png",
+        "pages/resources/assets/apple-touch-icon.png",
+        "pages/resources/apple-touch-icon.png",
+        "pages/deps/apple-touch-icon.png",
+        "resources/apple-touch-icon.png",
+        "deps/apple-touch-icon.png",
+        "pages/apple-touch-icon.png",
+        "pages/main/apple-touch-icon.png",
+        "pages/resources/assets/icons/180.png",
+        "pages/deps/assets/icons/180.png",
+        "resources/assets/icons/180.png",
+        "deps/assets/icons/180.png",
+        "assets/icons/apple-touch-icon.png",
+        "assets/icons/180.png",
+      ],
+      dest: "dist/public/apple-touch-icon.png",
+    },
   ];
 
   if (!contentRoot && !toolchainRoot && distPublicDir === "dist/public") {
@@ -218,6 +240,7 @@ export function getPublishCopyPlan({
     "dist/public/robots.txt",
     "dist/public/favicon.svg",
     "dist/public/favicon.ico",
+    "dist/public/apple-touch-icon.png",
   ]);
 
   return basePlan.map((entry) => {

@@ -8,6 +8,7 @@ module.exports = {
     "theme-init.js",
     "manifest.json",
     "favicon.ico",
+    "apple-touch-icon.png",
     "assets/icons/*.png",
   ],
   globIgnores: [

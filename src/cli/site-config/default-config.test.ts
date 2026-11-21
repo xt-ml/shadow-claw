@@ -59,14 +59,27 @@ describe("shadow-claw default root configuration", () => {
     expect(patched).toContain("M165.9 397.4c0 2-2.3 3.6-5.2 3.6");
   });
 
-  it("keeps the favicon and apple-touch-icon links identical to the current hardcoded values", () => {
+  it("keeps the favicon, manifest, and apple-touch-icon links root-relative and placed before theme-init.js", () => {
     const patched = patchIndexHtml(originalIndexHtml, config);
 
+    expect(patched).toContain('<link rel="manifest" href="/manifest.json" />');
     expect(patched).toContain(
-      '<link href="assets/icons/favicon.ico" rel="icon" type="image/x-icon" />',
+      '<link rel="icon" href="/assets/icons/favicon.ico" type="image/x-icon" />',
     );
     expect(patched).toContain(
-      '<link href="assets/icons/180.png" rel="apple-touch-icon" />',
+      '<link rel="apple-touch-icon" sizes="180x180" href="/assets/icons/180.png" />',
+    );
+    expect(patched).toContain(
+      '<link rel="apple-touch-icon" sizes="152x152" href="/assets/icons/152.png" />',
+    );
+    expect(patched).toContain(
+      '<link rel="apple-touch-icon" href="/assets/icons/180.png" />',
+    );
+    expect(patched.indexOf('<link rel="manifest"')).toBeLessThan(
+      patched.indexOf('<script src="theme-init.js">'),
+    );
+    expect(patched.indexOf('<link rel="apple-touch-icon"')).toBeLessThan(
+      patched.indexOf('<script src="theme-init.js">'),
     );
   });
 

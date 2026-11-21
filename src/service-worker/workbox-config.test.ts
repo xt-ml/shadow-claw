@@ -241,6 +241,7 @@ describe("workbox runtime caching rules", () => {
     expect(workboxConfig.globPatterns).not.toContain("**/*.css");
     expect(workboxConfig.globPatterns).toContain("index.html");
     expect(workboxConfig.globPatterns).toContain("index.js");
+    expect(workboxConfig.globPatterns).toContain("apple-touch-icon.png");
   });
 
   it("uses CacheFirst in shadow-claw-chunks-cache for root hashed JS chunks and excludes unhashed/consumer scripts", () => {

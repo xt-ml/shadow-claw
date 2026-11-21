@@ -240,7 +240,7 @@ describe("apply-site-config", () => {
       expect(patched).toContain("kherrick.github.io");
     });
 
-    it("patches favicon tag with SVG type when faviconPath is svg", () => {
+    it("patches favicon tag with SVG type and root-relative hrefs when faviconPath is svg", () => {
       const htmlWithFavicon = `${baseHtml.replace("</head>", '<link href="assets/icons/favicon.ico" rel="icon" type="image/x-icon" /></head>')}`;
       const config = {
         branding: {
@@ -251,10 +251,10 @@ describe("apply-site-config", () => {
 
       const patched = patchIndexHtml(htmlWithFavicon, config);
       expect(patched).toContain(
-        '<link href="favicon.svg" rel="icon" type="image/svg+xml" />',
+        '<link rel="icon" href="/favicon.svg" type="image/svg+xml" />',
       );
       expect(patched).toContain(
-        '<link href="favicon.svg" rel="apple-touch-icon" />',
+        '<link rel="apple-touch-icon" href="/favicon.svg" />',
       );
     });
 
@@ -635,11 +635,155 @@ describe("apply-site-config", () => {
       );
 
       expect(patched).toContain(
-        '<link href="assets/icons/favicon.svg" rel="icon" type="image/svg+xml" />',
+        '<link rel="icon" href="/assets/icons/favicon.svg" type="image/svg+xml" />',
       );
       expect(patched).toContain(
-        '<link href="assets/icons/180.png" rel="apple-touch-icon" />',
+        '<link rel="apple-touch-icon" sizes="180x180" href="/assets/icons/180.png" />',
       );
+      expect(patched).toContain(
+        '<link rel="apple-touch-icon" href="/assets/icons/180.png" />',
+      );
+    });
+
+    it("emits base-path-prefixed root-relative manifest, icon, and multi-size apple-touch-icon tags early in head", () => {
+      const htmlWithBaseAndLinks = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>ShadowClaw</title>
+    <base href="/" />
+    <script src="theme-init.js"></script>
+    <link rel="manifest" href="manifest.json" />
+    <link href="assets/icons/favicon.ico" rel="icon" type="image/x-icon" />
+    <link href="assets/icons/180.png" rel="apple-touch-icon" />
+  </head>
+  <body><shadow-claw></shadow-claw></body>
+</html>`;
+
+      const patched = patchIndexHtml(
+        htmlWithBaseAndLinks,
+        {
+          branding: {
+            siteUrl: "https://xt-ml.github.io/shadow-claw-daw/",
+            faviconPath: "assets/icons/favicon.svg",
+            appleTouchIconPath: "assets/icons/180.png",
+          },
+          pwa: {
+            manifestPath: "manifest.json",
+          },
+        },
+        undefined,
+        {
+          isProduction: true,
+          appleTouchIcons: [
+            { sizes: "180x180", href: "assets/icons/180.png" },
+            { sizes: "167x167", href: "assets/icons/167.png" },
+            { sizes: "152x152", href: "assets/icons/152.png" },
+            { href: "assets/icons/180.png" },
+          ],
+        },
+      );
+
+      expect(patched).toContain(
+        '<link rel="manifest" href="/shadow-claw-daw/manifest.json" />',
+      );
+      expect(patched).toContain(
+        '<link rel="icon" href="/shadow-claw-daw/assets/icons/favicon.svg" type="image/svg+xml" />',
+      );
+      expect(patched).toContain(
+        '<link rel="apple-touch-icon" sizes="180x180" href="/shadow-claw-daw/assets/icons/180.png" />',
+      );
+      expect(patched).toContain(
+        '<link rel="apple-touch-icon" sizes="167x167" href="/shadow-claw-daw/assets/icons/167.png" />',
+      );
+      expect(patched).toContain(
+        '<link rel="apple-touch-icon" sizes="152x152" href="/shadow-claw-daw/assets/icons/152.png" />',
+      );
+      expect(patched).toContain(
+        '<link rel="apple-touch-icon" href="/shadow-claw-daw/assets/icons/180.png" />',
+      );
+
+      // Rewrites existing links cleanly without leaving old relative links behind
+      expect(patched).not.toContain('href="manifest.json"');
+      expect(patched).not.toContain('href="assets/icons/180.png"');
+
+      // When injected into head without prior tags, tags are placed before site-config and theme-init.js
+      const freshHtml = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>ShadowClaw</title>
+    <base href="/" />
+    <script src="theme-init.js"></script>
+  </head>
+  <body><shadow-claw></shadow-claw></body>
+</html>`;
+      const injected = patchIndexHtml(
+        freshHtml,
+        {
+          branding: {
+            faviconPath: "assets/icons/favicon.svg",
+            appleTouchIconPath: "assets/icons/180.png",
+          },
+          pwa: { manifestPath: "manifest.json" },
+        },
+        undefined,
+        {
+          basePath: "/shadow-claw-daw/",
+          appleTouchIcons: [
+            { sizes: "180x180", href: "assets/icons/180.png" },
+            { sizes: "167x167", href: "assets/icons/167.png" },
+            { sizes: "152x152", href: "assets/icons/152.png" },
+            { href: "assets/icons/180.png" },
+          ],
+        },
+      );
+      const baseIdx = injected.indexOf('<base href="/shadow-claw-daw/" />');
+      const manifestIdx = injected.indexOf(
+        '<link rel="manifest" href="/shadow-claw-daw/manifest.json" />',
+      );
+      const appleIdx = injected.indexOf(
+        '<link rel="apple-touch-icon" sizes="180x180" href="/shadow-claw-daw/assets/icons/180.png" />',
+      );
+      const siteConfigIdx = injected.indexOf('id="shadow-claw-site-config"');
+      const themeInitIdx = injected.indexOf('<script src="theme-init.js">');
+      expect(baseIdx).toBeGreaterThan(-1);
+      expect(manifestIdx).toBeGreaterThan(baseIdx);
+      expect(appleIdx).toBeGreaterThan(baseIdx);
+      expect(appleIdx).toBeLessThan(siteConfigIdx);
+      expect(siteConfigIdx).toBeLessThan(themeInitIdx);
+    });
+
+    it("rewrites existing relative manifest and icon links to basePath even when omitted from config, without double-prefixing or mutating external URLs", () => {
+      const html = `<!doctype html>
+<html>
+  <head>
+    <base href="/shadow-claw-daw/" />
+    <link rel="manifest" href="manifest.json" />
+    <link href="https://cdn.example.com/favicon.png" rel="icon" type="image/png" />
+    <link href="/shadow-claw-daw/assets/icons/180.png" rel="apple-touch-icon" sizes="180x180" />
+    <link href="assets/icons/152.png" rel="apple-touch-icon" sizes="152x152" />
+  </head>
+  <body></body>
+</html>`;
+
+      const patched = patchIndexHtml(html, {}, undefined, {
+        basePath: "/shadow-claw-daw/",
+      });
+
+      expect(patched).toContain(
+        '<link rel="manifest" href="/shadow-claw-daw/manifest.json" />',
+      );
+      expect(patched).toContain(
+        '<link rel="icon" href="https://cdn.example.com/favicon.png" type="image/png" />',
+      );
+      expect(patched).toContain(
+        '<link rel="apple-touch-icon" sizes="180x180" href="/shadow-claw-daw/assets/icons/180.png" />',
+      );
+      expect(patched).toContain(
+        '<link rel="apple-touch-icon" sizes="152x152" href="/shadow-claw-daw/assets/icons/152.png" />',
+      );
+      expect(patched).not.toContain("/shadow-claw-daw/shadow-claw-daw/");
     });
 
     it("supports custom branding.ogImagePath when resolving og:image and twitter:image", () => {
@@ -730,10 +874,16 @@ describe("apply-site-config", () => {
       );
       expect(patched).toContain('<base href="/shadow-claw-light-meter/" />');
       expect(patched).toContain(
-        '<link href="assets/icons/favicon.svg" rel="icon" type="image/svg+xml" />',
+        '<link rel="manifest" href="/shadow-claw-light-meter/manifest.json" />',
       );
       expect(patched).toContain(
-        '<link href="assets/icons/180.png" rel="apple-touch-icon" />',
+        '<link rel="icon" href="/shadow-claw-light-meter/assets/icons/favicon.svg" type="image/svg+xml" />',
+      );
+      expect(patched).toContain(
+        '<link rel="apple-touch-icon" sizes="180x180" href="/shadow-claw-light-meter/assets/icons/180.png" />',
+      );
+      expect(patched).toContain(
+        '<link rel="apple-touch-icon" href="/shadow-claw-light-meter/assets/icons/180.png" />',
       );
       expect(patched).toContain(
         '<meta name="apple-mobile-web-app-title" content="LightMeter" />',
@@ -1806,17 +1956,88 @@ https://example.com/about`;
       await applySiteConfig(distPublicDir, siteConfigPath);
 
       const patchedIndex = await readFile(indexPath, "utf8");
-      // apple-touch-icon should resolve to raster 180.png instead of .svg
+      // apple-touch-icon should resolve to raster 180.png instead of .svg with multi-size iOS links
       expect(patchedIndex).toContain(
-        '<link href="assets/icons/180.png" rel="apple-touch-icon" />',
+        '<link rel="apple-touch-icon" sizes="180x180" href="/assets/icons/180.png" />',
+      );
+      expect(patchedIndex).toContain(
+        '<link rel="apple-touch-icon" sizes="167x167" href="/assets/icons/167.png" />',
+      );
+      expect(patchedIndex).toContain(
+        '<link rel="apple-touch-icon" sizes="152x152" href="/assets/icons/152.png" />',
+      );
+      expect(patchedIndex).toContain(
+        '<link rel="apple-touch-icon" href="/assets/icons/180.png" />',
       );
       expect(patchedIndex).toContain(
         '<meta name="apple-mobile-web-app-title" content="LightMeter" />',
       );
 
-      // And 180.png in dist/public/assets/icons/ must no longer be the red lobster icon
+      // And 180.png + root apple-touch-icon.png must exist and not be the red lobster icon
       const updated180 = await readFile(path.join(distIconsDir, "180.png"));
       expect(isDefaultShadowClawIconBuffer(updated180)).toBe(false);
+
+      const rootAppleTouch = await readFile(
+        path.join(distPublicDir, "apple-touch-icon.png"),
+      );
+      expect(isDefaultShadowClawIconBuffer(rootAppleTouch)).toBe(false);
+    });
+
+    it("prefixes multi-size apple-touch-icon and manifest links with basePath in applySiteConfig", async () => {
+      const distPublicDir = path.join(tmpDir, "dist/public");
+      await mkdir(distPublicDir, { recursive: true });
+
+      const indexPath = path.join(distPublicDir, "index.html");
+      await writeFile(
+        indexPath,
+        '<!doctype html><html><head><base href="/" /><link rel="manifest" href="manifest.json" /><link href="assets/icons/favicon.ico" rel="icon" type="image/x-icon" /><link href="assets/icons/180.png" rel="apple-touch-icon" /><script src="theme-init.js"></script></head><body><shadow-claw></shadow-claw></body></html>',
+        "utf8",
+      );
+
+      const siteConfigPath = path.join(tmpDir, "shadow-claw.config.json");
+      await writeFile(
+        siteConfigPath,
+        JSON.stringify({
+          site: { title: "ShadowClaw DAW", themeColor: "#0e1415" },
+          branding: {
+            siteUrl: "https://xt-ml.github.io/shadow-claw-daw/",
+            faviconPath: "assets/icons/favicon.svg",
+            appleTouchIconPath: "assets/icons/180.png",
+            logoSlotHtml:
+              '<svg class="header-title-logo" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="8" fill="#1a2121"/><path d="M10 20V12M14 24V8" stroke="#9df0f8" stroke-width="2"/></svg>',
+          },
+          pwa: { manifestPath: "manifest.json" },
+        }),
+        "utf8",
+      );
+
+      await applySiteConfig(distPublicDir, siteConfigPath, {
+        isProduction: true,
+        basePath: "/shadow-claw-daw/",
+      });
+
+      const patchedIndex = await readFile(indexPath, "utf8");
+      expect(patchedIndex).toContain(
+        '<link rel="manifest" href="/shadow-claw-daw/manifest.json" />',
+      );
+      expect(patchedIndex).toContain(
+        '<link rel="icon" href="/shadow-claw-daw/assets/icons/favicon.svg" type="image/svg+xml" />',
+      );
+      expect(patchedIndex).toContain(
+        '<link rel="apple-touch-icon" sizes="180x180" href="/shadow-claw-daw/assets/icons/180.png" />',
+      );
+      expect(patchedIndex).toContain(
+        '<link rel="apple-touch-icon" sizes="167x167" href="/shadow-claw-daw/assets/icons/167.png" />',
+      );
+      expect(patchedIndex).toContain(
+        '<link rel="apple-touch-icon" sizes="152x152" href="/shadow-claw-daw/assets/icons/152.png" />',
+      );
+      expect(patchedIndex).toContain(
+        '<link rel="apple-touch-icon" href="/shadow-claw-daw/assets/icons/180.png" />',
+      );
+      expect(
+        await stat(path.join(distPublicDir, "apple-touch-icon.png")),
+      ).toBeTruthy();
     });
   });
 });

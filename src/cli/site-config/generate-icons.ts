@@ -5,7 +5,17 @@ import { deflateSync } from "node:zlib";
 
 import type { SiteConfig } from "./apply.js";
 
-export const ICON_SIZES = [48, 72, 96, 128, 152, 180, 192, 512, 1024] as const;
+export const ICON_SIZES = [
+  48, 72, 96, 128, 152, 167, 180, 192, 512, 1024,
+] as const;
+
+export const APPLE_TOUCH_ICON_SIZES: ReadonlySet<number> = new Set([
+  152, 167, 180,
+]);
+
+export interface RenderIconPngOptions {
+  opaqueBackground?: boolean;
+}
 
 /**
  * Exact SHA-256 hex digests of ShadowClaw's bundled default red lobster icons
@@ -278,13 +288,19 @@ export async function renderIconPngBuffer(
   source: { type: "svg"; svg: string } | { type: "png"; png: Buffer },
   size: number,
   backgroundColor?: string,
+  options?: RenderIconPngOptions,
 ): Promise<Buffer> {
   const canvasMod = await getCanvasModule();
   if (canvasMod && typeof canvasMod.createCanvas === "function") {
     try {
       const canvas = canvasMod.createCanvas(size, size);
       const ctx = canvas.getContext("2d");
-      ctx.clearRect(0, 0, size, size);
+      if (options?.opaqueBackground) {
+        ctx.fillStyle = backgroundColor || "#0f172a";
+        ctx.fillRect(0, 0, size, size);
+      } else {
+        ctx.clearRect(0, 0, size, size);
+      }
 
       if (source.type === "svg") {
         const preparedSvg = prepareSvgForRasterization(
@@ -454,6 +470,7 @@ export async function ensureTemplateIconSet(
       "icon-192x192.png",
       "180.png",
       "apple-touch-icon.png",
+      "167.png",
       "152.png",
       "128.png",
       "96.png",
@@ -553,12 +570,18 @@ export async function ensureTemplateIconSet(
     }
   }
 
-  const renderedBySize = new Map<number, Buffer>();
-  async function getRenderedSize(size: number): Promise<Buffer> {
-    let cached = renderedBySize.get(size);
+  const renderedBySize = new Map<string, Buffer>();
+  async function getRenderedSize(
+    size: number,
+    opaqueBackground = false,
+  ): Promise<Buffer> {
+    const key = `${size}:${opaqueBackground ? "opaque" : "alpha"}`;
+    let cached = renderedBySize.get(key);
     if (!cached) {
-      cached = await renderIconPngBuffer(renderSource, size, bgColor);
-      renderedBySize.set(size, cached);
+      cached = await renderIconPngBuffer(renderSource, size, bgColor, {
+        opaqueBackground,
+      });
+      renderedBySize.set(key, cached);
     }
     return cached;
   }
@@ -566,7 +589,10 @@ export async function ensureTemplateIconSet(
   for (const size of ICON_SIZES) {
     const destPath = path.join(targetIconsDir, `${size}.png`);
     if (await shouldWriteIconFile(destPath)) {
-      const pngBuf = await getRenderedSize(size);
+      const pngBuf = await getRenderedSize(
+        size,
+        APPLE_TOUCH_ICON_SIZES.has(size),
+      );
       await writeFile(destPath, pngBuf);
       generatedFiles.push(destPath);
     }
@@ -574,7 +600,7 @@ export async function ensureTemplateIconSet(
 
   const appleTouchPath = path.join(targetIconsDir, "apple-touch-icon.png");
   if (await shouldWriteIconFile(appleTouchPath)) {
-    const png180 = await getRenderedSize(180);
+    const png180 = await getRenderedSize(180, true);
     await writeFile(appleTouchPath, png180);
     generatedFiles.push(appleTouchPath);
   }

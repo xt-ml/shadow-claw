@@ -329,11 +329,13 @@ async function embedSingleFileBundle(
 
     let appleReplaced = false;
     idxHtml = idxHtml.replace(
-      /<link\b[^>]*\brel=["']?apple-touch-icon["']?[^>]*\/?>/giu,
-      () => {
+      /(?:\r?\n[ \t]*)?<link\b[^>]*\brel=["']?apple-touch-icon(?:-precomposed)?["']?[^>]*\/?>/giu,
+      (fullMatch) => {
         if (!appleReplaced) {
           appleReplaced = true;
-          return `<link rel="apple-touch-icon" href="${appleTarget}" />`;
+          const leadingMatch = fullMatch.match(/^\r?\n[ \t]*/);
+          const leading = leadingMatch ? leadingMatch[0] : "";
+          return `${leading}<link rel="apple-touch-icon" href="${appleTarget}" />`;
         }
         return "";
       },
@@ -948,7 +950,9 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
             rel === "AGENTS.md" ||
             rel.startsWith("AGENTS.md.") ||
             rel === "AGENTS.MD" ||
-            rel.startsWith("AGENTS.MD.")
+            rel.startsWith("AGENTS.MD.") ||
+            rel === "apple-touch-icon.png" ||
+            rel.startsWith("apple-touch-icon.png.")
           ) {
             return false;
           }

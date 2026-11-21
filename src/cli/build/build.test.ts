@@ -13,6 +13,7 @@ import path from "node:path";
 import { jest } from "@jest/globals";
 
 import { runBuild as runConsumerBuild } from "./build.js";
+import { isDefaultShadowClawIconBuffer } from "../site-config/generate-icons.js";
 
 const projectRoot = path.resolve(new URL("../../..", import.meta.url).pathname);
 
@@ -1120,6 +1121,83 @@ describe("build without and with pages", () => {
       } else {
         await rm(toolchainSwPath, { force: true });
       }
+      logSpy.mockRestore();
+      await rm(tempConsumerRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("publishes non-lobster root apple-touch-icon.png and early base-path-prefixed iOS icon links in branded production consumer builds", async () => {
+    const tempConsumerRoot = await mkdtemp(
+      path.join(os.tmpdir(), "shadow-claw-ios-icons-"),
+    );
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      await writeFile(
+        path.join(tempConsumerRoot, "shadow-claw.config.json"),
+        JSON.stringify({
+          site: {
+            title: "ShadowClaw DAW",
+            description: "In-browser Digital Audio Workstation.",
+            themeColor: "#0e1415",
+          },
+          branding: {
+            titleText: "ShadowClaw DAW",
+            siteUrl: "https://xt-ml.github.io/shadow-claw-daw/",
+            faviconPath: "assets/icons/favicon.svg",
+            appleTouchIconPath: "assets/icons/180.png",
+            logoSlotHtml:
+              '<svg class="header-title-logo" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="32" height="32" rx="8" fill="#1a2121"/><path d="M10 20V12M14 24V8" stroke="#9df0f8" stroke-width="2" stroke-linecap="round"/></svg>',
+          },
+          pwa: {
+            manifestPath: "manifest.json",
+          },
+        }),
+        "utf8",
+      );
+
+      await runConsumerBuild({
+        contentRoot: tempConsumerRoot,
+        toolchainRoot: tempProjectRoot,
+        isProduction: true,
+        basePath: "/shadow-claw-daw/",
+        pagesOrigin: "https://xt-ml.github.io/shadow-claw-daw/",
+        quiet: true,
+        stdio: "pipe",
+      });
+
+      const distDir = path.join(tempConsumerRoot, "dist/public");
+      const rootApplePath = path.join(distDir, "apple-touch-icon.png");
+      expect(fs.existsSync(rootApplePath)).toBe(true);
+      const rootAppleBuf = await readFile(rootApplePath);
+      expect(isDefaultShadowClawIconBuffer(rootAppleBuf)).toBe(false);
+
+      const indexHtml = await readFile(
+        path.join(distDir, "index.html"),
+        "utf8",
+      );
+      expect(indexHtml).toContain(
+        '<link rel="manifest" href="/shadow-claw-daw/manifest.json" />',
+      );
+      expect(indexHtml).toContain(
+        '<link rel="apple-touch-icon" sizes="180x180" href="/shadow-claw-daw/assets/icons/180.png" />',
+      );
+      expect(indexHtml).toContain(
+        '<link rel="apple-touch-icon" sizes="167x167" href="/shadow-claw-daw/assets/icons/167.png" />',
+      );
+      expect(indexHtml).toContain(
+        '<link rel="apple-touch-icon" sizes="152x152" href="/shadow-claw-daw/assets/icons/152.png" />',
+      );
+      expect(indexHtml).toContain(
+        '<link rel="apple-touch-icon" href="/shadow-claw-daw/assets/icons/180.png" />',
+      );
+
+      const appleIdx = indexHtml.indexOf('rel="apple-touch-icon"');
+      const themeInitIdx = indexHtml.indexOf("ShadowClawThemeInit");
+      expect(appleIdx).toBeGreaterThan(-1);
+      expect(themeInitIdx).toBeGreaterThan(-1);
+      expect(appleIdx).toBeLessThan(themeInitIdx);
+    } finally {
       logSpy.mockRestore();
       await rm(tempConsumerRoot, { recursive: true, force: true });
     }

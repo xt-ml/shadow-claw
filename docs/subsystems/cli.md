@@ -830,7 +830,7 @@ npx shadow-claw skills:index --out-file custom/discovery/index.json
 
 ### `shadow-claw icons [dir]`
 
-Generates or refreshes template-specific raster and vector icons, including `favicon.svg`, `favicon.ico`, `apple-touch-icon.png`, and a full suite of PWA PNG icons (`48.png`, `72.png`, `96.png`, `128.png`, `152.png`, `180.png`, `192.png`, `512.png`, `1024.png`).
+Generates or refreshes template-specific raster and vector icons, including `favicon.svg`, `favicon.ico`, `apple-touch-icon.png`, and a full suite of PWA PNG icons (`48.png`, `72.png`, `96.png`, `128.png`, `152.png`, `167.png`, `180.png`, `192.png`, `512.png`, `1024.png`).
 
 ```bash
 # Generate or refresh icon suite in default location (pages/resources/assets/icons)
@@ -856,7 +856,7 @@ npx shadow-claw icons --force
 2. **Custom High-Resolution PNG**: Searches for custom PNGs (`1024.png`, `512.png`, `192.png`, `180.png`, `apple-touch-icon.png`, etc.) that do not match the built-in ShadowClaw lobster icon fingerprints.
 3. **Dynamic Monogram Fallback**: If no custom icon is found and the site is configured with a custom title (`pwa.shortName`, `branding.titleText`, `site.title`, or `pwa.name`), generates an initial-letter monogram SVG using the site's accent and background colors.
 
-Generated icon suites include a multi-resolution `favicon.ico` (embedding 16x16, 32x32, and 48x48 PNG frames), `apple-touch-icon.png` (180x180), and standard PWA manifest icons. During site builds (`src/cli/site-config/apply.ts`), `ensureTemplateIconSet` runs automatically to ensure consumer template sites always ship consistent, isolated branding.
+Generated icon suites include a multi-resolution `favicon.ico` (embedding 16x16, 32x32, and 48x48 PNG frames), opaque-background Apple touch icons (`152.png`, `167.png`, `180.png`, and `apple-touch-icon.png`), and standard PWA manifest icons. During site builds (`src/cli/site-config/apply.ts`), `ensureTemplateIconSet` runs automatically to ensure consumer template sites always ship consistent, isolated branding, publishing `apple-touch-icon.png` at the site root and emitting base-path-prefixed root-relative `<link>` tags early in `<head>`.
 
 ---
 

@@ -318,11 +318,284 @@ export function patchBaseHref(html: string, basePath: string): string {
   );
 }
 
+export interface AppleTouchIconLink {
+  href: string;
+  sizes?: string;
+}
+
 export interface PatchIndexHtmlOptions {
   basePath?: string;
   pagesOrigin?: string;
   isProduction?: boolean;
   resolvedAppleTouchIconPath?: string;
+  appleTouchIcons?: AppleTouchIconLink[];
+}
+
+export function resolveRootRelativeAssetHref(
+  rawHref: string,
+  basePath = "/",
+): string {
+  const trimmed = String(rawHref || "").trim();
+  if (!trimmed) {
+    return "";
+  }
+  if (/^(?:https?:)?\/\/|^(?:data|blob):/iu.test(trimmed)) {
+    return trimmed;
+  }
+
+  const normalizedBase = normalizeBasePathString(basePath);
+  const cleaned = trimmed
+    .replace(/^pages\/main\//u, "")
+    .replace(/^(?:\.\/)+/u, "")
+    .replace(/^\/+/u, "");
+
+  if (!cleaned) {
+    return normalizedBase;
+  }
+
+  if (normalizedBase !== "/" && cleaned.startsWith(normalizedBase.slice(1))) {
+    return `/${cleaned}`;
+  }
+
+  return `${normalizedBase}${cleaned}`;
+}
+
+function extractHtmlAttr(tag: string, attrName: string): string | undefined {
+  const m = tag.match(
+    new RegExp(
+      `\\b${attrName}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`,
+      "iu",
+    ),
+  );
+  if (!m) {
+    return undefined;
+  }
+  return m[1] ?? m[2] ?? m[3] ?? "";
+}
+
+function insertHeadAssetLink(html: string, tagBlock: string): string {
+  const closingHeadIdx = findClosingHeadIndex(html);
+  const headEnd = closingHeadIdx !== -1 ? closingHeadIdx : html.length;
+  const headContent = html.slice(0, headEnd);
+
+  const baseMatch = headContent.match(/<base\b[^>]*>/iu);
+  if (baseMatch && baseMatch.index !== undefined) {
+    const afterBaseIdx = baseMatch.index + baseMatch[0].length;
+    const scriptRelMatch = headContent.slice(afterBaseIdx).match(/<script\b/iu);
+    if (scriptRelMatch && scriptRelMatch.index !== undefined) {
+      const insertIdx = afterBaseIdx + scriptRelMatch.index;
+      return (
+        html.slice(0, insertIdx) + `${tagBlock}\n    ` + html.slice(insertIdx)
+      );
+    }
+    return (
+      html.slice(0, afterBaseIdx) +
+      `\n    ${tagBlock}` +
+      html.slice(afterBaseIdx)
+    );
+  }
+
+  const firstScriptMatch = headContent.match(/<script\b/iu);
+  if (firstScriptMatch && firstScriptMatch.index !== undefined) {
+    const insertIdx = firstScriptMatch.index;
+    return (
+      html.slice(0, insertIdx) + `${tagBlock}\n    ` + html.slice(insertIdx)
+    );
+  }
+
+  return insertBeforeClosingHead(html, `  ${tagBlock}`);
+}
+
+function replaceTagOccurrencesInHead(
+  html: string,
+  tagRegex: RegExp,
+  replacementBlock: string,
+): { html: string; replaced: boolean } {
+  const closingHeadIdx = findClosingHeadIndex(html);
+  const headEnd = closingHeadIdx !== -1 ? closingHeadIdx : html.length;
+  const headPart = html.slice(0, headEnd);
+  const restPart = html.slice(headEnd);
+
+  let replaced = false;
+  const linePrefixRe = new RegExp(
+    `(?:\\r?\\n[ \\t]*)?${tagRegex.source}`,
+    tagRegex.flags.includes("g") ? tagRegex.flags : `${tagRegex.flags}g`,
+  );
+
+  const updatedHead = headPart.replace(linePrefixRe, (fullMatch) => {
+    if (!replaced) {
+      replaced = true;
+      const leadingMatch = fullMatch.match(/^\r?\n[ \t]*/);
+      const leading = leadingMatch ? leadingMatch[0] : "";
+      return `${leading}${replacementBlock}`;
+    }
+    return "";
+  });
+
+  return { html: updatedHead + restPart, replaced };
+}
+
+function patchHeadIconAndManifestLinks(
+  html: string,
+  config: SiteConfig,
+  effectiveBasePath: string,
+  options?: PatchIndexHtmlOptions,
+): string {
+  let next = html;
+  const branding = config.branding || {};
+  const pwa = config.pwa || {};
+
+  const getHeadSlice = (doc: string) => {
+    const idx = findClosingHeadIndex(doc);
+    return idx !== -1 ? doc.slice(0, idx) : doc;
+  };
+
+  // 1. Manifest link
+  const manifestTagRe = /<link\b[^>]*\brel=["']?manifest["']?[^>]*\/?>/giu;
+  const existingManifestTags = getHeadSlice(next).match(manifestTagRe) || [];
+  const configuredManifest = pwa.manifestPath || config.manifestPath;
+  if (configuredManifest || existingManifestTags.length > 0) {
+    const rawManifestHref =
+      configuredManifest ||
+      (existingManifestTags[0]
+        ? extractHtmlAttr(existingManifestTags[0], "href")
+        : undefined) ||
+      "manifest.json";
+    const resolvedManifestHref = resolveRootRelativeAssetHref(
+      rawManifestHref,
+      effectiveBasePath,
+    );
+    const newManifestTag = `<link rel="manifest" href="${escapeHtml(resolvedManifestHref)}" />`;
+    if (existingManifestTags.length > 0) {
+      next = replaceTagOccurrencesInHead(
+        next,
+        manifestTagRe,
+        newManifestTag,
+      ).html;
+    } else {
+      next = insertHeadAssetLink(next, newManifestTag);
+    }
+  }
+
+  // 2. Favicon link
+  const faviconTagRe =
+    /<link\b[^>]*\brel=["']?(?:shortcut\s+)?icon(?=["'\s/>])["']?[^>]*\/?>/giu;
+  const existingFaviconTags = getHeadSlice(next).match(faviconTagRe) || [];
+  if (branding.faviconPath || existingFaviconTags.length > 0) {
+    const rawFaviconHref =
+      branding.faviconPath ||
+      (existingFaviconTags[0]
+        ? extractHtmlAttr(existingFaviconTags[0], "href")
+        : undefined) ||
+      "";
+    if (rawFaviconHref) {
+      const cleanFavicon = rawFaviconHref.replace(/^pages\/main\//, "");
+      const iconType = cleanFavicon.endsWith(".svg")
+        ? "image/svg+xml"
+        : cleanFavicon.endsWith(".png")
+          ? "image/png"
+          : "image/x-icon";
+      const resolvedFavicon = resolveRootRelativeAssetHref(
+        cleanFavicon,
+        effectiveBasePath,
+      );
+      const newFaviconTag = `<link rel="icon" href="${escapeHtml(resolvedFavicon)}" type="${iconType}" />`;
+      if (existingFaviconTags.length > 0) {
+        next = replaceTagOccurrencesInHead(
+          next,
+          faviconTagRe,
+          newFaviconTag,
+        ).html;
+      } else {
+        next = insertHeadAssetLink(next, newFaviconTag);
+      }
+    }
+  }
+
+  // 3. Apple touch icon links
+  const appleTagRe =
+    /<link\b[^>]*\brel=["']?apple-touch-icon(?:-precomposed)?["']?[^>]*\/?>/giu;
+  const existingAppleTags = getHeadSlice(next).match(appleTagRe) || [];
+  const effectiveAppleTouchIconPath =
+    options?.resolvedAppleTouchIconPath || branding.appleTouchIconPath;
+
+  let targetIcons: AppleTouchIconLink[] = [];
+  if (options?.appleTouchIcons && options.appleTouchIcons.length > 0) {
+    targetIcons = options.appleTouchIcons.map((item) => ({
+      ...item,
+      href: resolveRootRelativeAssetHref(item.href, effectiveBasePath),
+    }));
+  } else if (effectiveAppleTouchIconPath) {
+    const cleanApple = effectiveAppleTouchIconPath.replace(
+      /^pages\/main\//,
+      "",
+    );
+    const resolvedPrimary = resolveRootRelativeAssetHref(
+      cleanApple,
+      effectiveBasePath,
+    );
+    const isStandardTouchPng = /(?:^|\/)(?:180|apple-touch-icon)\.png$/iu.test(
+      cleanApple,
+    );
+    if (isStandardTouchPng) {
+      const existingSizedStandard: AppleTouchIconLink[] = [];
+      for (const tag of existingAppleTags) {
+        const sizes = extractHtmlAttr(tag, "sizes");
+        const href = extractHtmlAttr(tag, "href");
+        if (
+          sizes &&
+          href &&
+          /(?:^|\/)assets\/icons\/(?:180|167|152)\.png$/iu.test(
+            href.replace(/^\/+/, ""),
+          )
+        ) {
+          existingSizedStandard.push({
+            sizes,
+            href: resolveRootRelativeAssetHref(href, effectiveBasePath),
+          });
+        }
+      }
+      if (existingSizedStandard.length > 0) {
+        targetIcons = [...existingSizedStandard, { href: resolvedPrimary }];
+      } else {
+        targetIcons = [
+          { sizes: "180x180", href: resolvedPrimary },
+          { href: resolvedPrimary },
+        ];
+      }
+    } else {
+      targetIcons = [{ href: resolvedPrimary }];
+    }
+  } else if (existingAppleTags.length > 0) {
+    for (const tag of existingAppleTags) {
+      const rawHref = extractHtmlAttr(tag, "href");
+      const sizes = extractHtmlAttr(tag, "sizes");
+      if (rawHref) {
+        targetIcons.push({
+          ...(sizes ? { sizes } : {}),
+          href: resolveRootRelativeAssetHref(rawHref, effectiveBasePath),
+        });
+      }
+    }
+  }
+
+  if (targetIcons.length > 0) {
+    const renderedTags = targetIcons
+      .map((item) =>
+        item.sizes
+          ? `<link rel="apple-touch-icon" sizes="${escapeHtml(item.sizes)}" href="${escapeHtml(item.href)}" />`
+          : `<link rel="apple-touch-icon" href="${escapeHtml(item.href)}" />`,
+      )
+      .join("\n    ");
+
+    if (existingAppleTags.length > 0) {
+      next = replaceTagOccurrencesInHead(next, appleTagRe, renderedTags).html;
+    } else {
+      next = insertHeadAssetLink(next, renderedTags);
+    }
+  }
+
+  return next;
 }
 
 function upsertMetaNameTag(
@@ -438,60 +711,29 @@ export function patchIndexHtml(
     next = next.replace(/<html\s+lang="[^"]*"/iu, `<html lang="${site.lang}"`);
   }
 
+  let effectiveBasePath = "/";
   if (options?.basePath && options.basePath.trim()) {
-    next = patchBaseHref(next, options.basePath);
+    effectiveBasePath = normalizeBasePathString(options.basePath);
+    next = patchBaseHref(next, effectiveBasePath);
   } else if (isProd && (options?.pagesOrigin || branding.siteUrl)) {
-    const resolvedBasePath = resolveSiteBasePath({
+    effectiveBasePath = resolveSiteBasePath({
       pagesOrigin: options?.pagesOrigin,
       siteUrl: branding.siteUrl,
     });
-    next = patchBaseHref(next, resolvedBasePath);
-  }
-
-  if (branding.faviconPath) {
-    const faviconHref = branding.faviconPath.replace(/^pages\/main\//, "");
-    const iconType = faviconHref.endsWith(".svg")
-      ? "image/svg+xml"
-      : faviconHref.endsWith(".png")
-        ? "image/png"
-        : "image/x-icon";
-    const newTag = `<link href="${escapeHtml(faviconHref)}" rel="icon" type="${iconType}" />`;
-    let faviconReplaced = false;
-    next = next.replace(
-      /<link\b[^>]*\brel=["']?(?:shortcut\s+)?icon["']?[^>]*\/?>/giu,
-      () => {
-        if (!faviconReplaced) {
-          faviconReplaced = true;
-          return newTag;
-        }
-        return "";
-      },
-    );
-    if (!faviconReplaced) {
-      next = insertBeforeClosingHead(next, `  ${newTag}`);
+    next = patchBaseHref(next, effectiveBasePath);
+  } else {
+    const existingBaseMatch = next.match(/<base\s+href="([^"]*)"/iu);
+    if (existingBaseMatch?.[1]) {
+      effectiveBasePath = normalizeBasePathString(existingBaseMatch[1]);
     }
   }
 
-  const effectiveAppleTouchIconPath =
-    options?.resolvedAppleTouchIconPath || branding.appleTouchIconPath;
-  if (effectiveAppleTouchIconPath) {
-    const appleHref = effectiveAppleTouchIconPath.replace(/^pages\/main\//, "");
-    const newTag = `<link href="${escapeHtml(appleHref)}" rel="apple-touch-icon" />`;
-    let appleReplaced = false;
-    next = next.replace(
-      /<link\b[^>]*\brel=["']?apple-touch-icon["']?[^>]*\/?>/giu,
-      () => {
-        if (!appleReplaced) {
-          appleReplaced = true;
-          return newTag;
-        }
-        return "";
-      },
-    );
-    if (!appleReplaced) {
-      next = insertBeforeClosingHead(next, `  ${newTag}`);
-    }
-  }
+  next = patchHeadIconAndManifestLinks(
+    next,
+    config,
+    effectiveBasePath,
+    options,
+  );
 
   if (
     branding.titleText ||
@@ -808,7 +1050,7 @@ export function patchShareTargetHtml(
 
   let effectiveBasePath = "/";
   if (options?.basePath && options.basePath.trim()) {
-    effectiveBasePath = options.basePath;
+    effectiveBasePath = normalizeBasePathString(options.basePath);
   } else if (isProd && (options?.pagesOrigin || branding.siteUrl)) {
     effectiveBasePath = resolveSiteBasePath({
       pagesOrigin: options?.pagesOrigin,
@@ -817,50 +1059,12 @@ export function patchShareTargetHtml(
   }
   next = patchBaseHref(next, effectiveBasePath);
 
-  if (branding.faviconPath) {
-    const faviconHref = branding.faviconPath.replace(/^pages\/main\//, "");
-    const iconType = faviconHref.endsWith(".svg")
-      ? "image/svg+xml"
-      : faviconHref.endsWith(".png")
-        ? "image/png"
-        : "image/x-icon";
-    const newTag = `<link href="${escapeHtml(faviconHref)}" rel="icon" type="${iconType}" />`;
-    let faviconReplaced = false;
-    next = next.replace(
-      /<link\b[^>]*\brel=["']?(?:shortcut\s+)?icon["']?[^>]*\/?>/giu,
-      () => {
-        if (!faviconReplaced) {
-          faviconReplaced = true;
-          return newTag;
-        }
-        return "";
-      },
-    );
-    if (!faviconReplaced) {
-      next = insertBeforeClosingHead(next, `  ${newTag}`);
-    }
-  }
-
-  const effectiveAppleTouchIconPath =
-    options?.resolvedAppleTouchIconPath || branding.appleTouchIconPath;
-  if (effectiveAppleTouchIconPath) {
-    const appleHref = effectiveAppleTouchIconPath.replace(/^pages\/main\//, "");
-    const newTag = `<link href="${escapeHtml(appleHref)}" rel="apple-touch-icon" />`;
-    let appleReplaced = false;
-    next = next.replace(
-      /<link\b[^>]*\brel=["']?apple-touch-icon["']?[^>]*\/?>/giu,
-      () => {
-        if (!appleReplaced) {
-          appleReplaced = true;
-          return newTag;
-        }
-        return "";
-      },
-    );
-    if (!appleReplaced) {
-      next = insertBeforeClosingHead(next, `  ${newTag}`);
-    }
-  }
+  next = patchHeadIconAndManifestLinks(
+    next,
+    config,
+    effectiveBasePath,
+    options,
+  );
 
   const brandName = (
     branding.titleText ||
@@ -1694,7 +1898,7 @@ export async function applySiteConfig(
   });
 
   let resolvedAppleTouchIconPath: string | undefined;
-  const rawAppleTouch = config.branding?.appleTouchIconPath || "";
+  const rawAppleTouch = (config.branding?.appleTouchIconPath || "").trim();
   if (rawAppleTouch.toLowerCase().endsWith(".svg")) {
     const raster180 = await findFirstExisting([
       path.join(distPublicDir, "assets/icons/180.png"),
@@ -1703,6 +1907,67 @@ export async function applySiteConfig(
     if (raster180) {
       resolvedAppleTouchIconPath = `assets/icons/${path.basename(raster180)}`;
     }
+  }
+
+  const effectiveAppleTouch = (
+    resolvedAppleTouchIconPath || rawAppleTouch
+  ).trim();
+  const rootAppleDest = path.join(distPublicDir, "apple-touch-icon.png");
+  const appleCopyCandidates = [
+    effectiveAppleTouch &&
+    !effectiveAppleTouch.toLowerCase().endsWith(".svg") &&
+    !/^(?:https?:)?\/\//iu.test(effectiveAppleTouch)
+      ? path.join(
+          distPublicDir,
+          effectiveAppleTouch
+            .replace(/^pages\/main\//u, "")
+            .replace(/^\/+/u, ""),
+        )
+      : "",
+    path.join(distPublicDir, "assets/icons/apple-touch-icon.png"),
+    path.join(distPublicDir, "assets/icons/180.png"),
+  ].filter(Boolean);
+  const appleSourceOnDisk = await findFirstExisting(appleCopyCandidates);
+  if (
+    appleSourceOnDisk &&
+    path.resolve(appleSourceOnDisk) !== path.resolve(rootAppleDest)
+  ) {
+    try {
+      await copyFile(appleSourceOnDisk, rootAppleDest);
+    } catch {}
+  }
+
+  let appleTouchIcons: AppleTouchIconLink[] | undefined;
+  const cleanEffectiveApple = effectiveAppleTouch
+    .replace(/^pages\/main\//u, "")
+    .replace(/^\/+/u, "");
+  const isStandardTouchSet =
+    !cleanEffectiveApple ||
+    /(?:^|\/)(?:180|apple-touch-icon)\.png$/iu.test(cleanEffectiveApple);
+
+  if (isStandardTouchSet) {
+    const sizedLinks: AppleTouchIconLink[] = [];
+    for (const size of [180, 167, 152]) {
+      const relIconPath = `assets/icons/${size}.png`;
+      const found = await findFirstExisting([
+        path.join(distPublicDir, relIconPath),
+      ]);
+      if (found) {
+        sizedLinks.push({
+          sizes: `${size}x${size}`,
+          href: relIconPath,
+        });
+      }
+    }
+    const primaryHref = cleanEffectiveApple || "assets/icons/180.png";
+    if (
+      sizedLinks.length > 0 ||
+      (await findFirstExisting([path.join(distPublicDir, primaryHref)]))
+    ) {
+      appleTouchIcons = [...sizedLinks, { href: primaryHref }];
+    }
+  } else {
+    appleTouchIcons = [{ href: cleanEffectiveApple }];
   }
 
   let sidebarHtml: string | undefined;
@@ -1737,6 +2002,7 @@ export async function applySiteConfig(
       pagesOrigin,
       isProduction,
       resolvedAppleTouchIconPath,
+      appleTouchIcons,
     });
     await writeText(indexPath, patched);
     console.log("  Patched index.html");
@@ -1750,6 +2016,7 @@ export async function applySiteConfig(
       pagesOrigin,
       isProduction,
       resolvedAppleTouchIconPath,
+      appleTouchIcons,
     });
     await writeText(shareTargetPath, patched);
     console.log("  Patched share/share-target.html");

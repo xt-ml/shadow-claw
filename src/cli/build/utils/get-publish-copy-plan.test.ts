@@ -33,6 +33,14 @@ describe("getPublishCopyPlan", () => {
     expect(
       plan.find((entry) => entry.dest === "dist/public/favicon.ico"),
     ).toBeTruthy();
+    const appleEntry = plan.find(
+      (entry) => entry.dest === "dist/public/apple-touch-icon.png",
+    );
+    expect(appleEntry).toBeTruthy();
+    expect(appleEntry!.sources).toContain(
+      "pages/resources/assets/icons/apple-touch-icon.png",
+    );
+    expect(appleEntry!.sources).toContain("assets/icons/180.png");
   });
 
   it("resolves sources and dest with custom contentRoot and distPublicDir", () => {

@@ -89,6 +89,12 @@ describe("generate-icons", () => {
     });
   });
 
+  describe("ICON_SIZES", () => {
+    it("includes 167 for iPad Pro Apple touch icons", () => {
+      expect(ICON_SIZES).toContain(167);
+    });
+  });
+
   describe("renderIconPngBuffer & encodeIcoFromPngBuffers", () => {
     it("renders crisp PNG buffers at exact pixel dimensions from an SVG", async () => {
       const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
@@ -101,6 +107,30 @@ describe("generate-icons", () => {
 
       const png512 = await renderIconPngBuffer({ type: "svg", svg }, 512);
       expect(readPngDimensions(png512)).toEqual({ width: 512, height: 512 });
+    });
+
+    it("fills a solid opaque background when opaqueBackground is enabled for rounded-corner SVGs", async () => {
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+        <rect width="32" height="32" rx="8" fill="#1a2121"/>
+        <circle cx="16" cy="16" r="8" fill="#80d4db"/>
+      </svg>`;
+
+      const png180 = await renderIconPngBuffer(
+        { type: "svg", svg },
+        180,
+        "#0e1415",
+        { opaqueBackground: true },
+      );
+      expect(readPngDimensions(png180)).toEqual({ width: 180, height: 180 });
+
+      const canvasMod = await import("canvas");
+      const img = await canvasMod.loadImage(png180);
+      const canvas = canvasMod.createCanvas(180, 180);
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, 180, 180);
+      const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
+      expect(a).toBe(255);
+      expect([r, g, b]).toEqual([14, 20, 21]);
     });
 
     it("encodes a valid multi-frame ICO file from PNG buffers", async () => {
@@ -167,6 +197,23 @@ describe("generate-icons", () => {
         path.join(iconsDir, "apple-touch-icon.png"),
       );
       expect(readPngDimensions(appleBuf)).toEqual({ width: 180, height: 180 });
+
+      const canvasMod = await import("canvas");
+      for (const touchName of [
+        "152.png",
+        "167.png",
+        "180.png",
+        "apple-touch-icon.png",
+      ]) {
+        const touchBuf = await readFile(path.join(iconsDir, touchName));
+        const img = await canvasMod.loadImage(touchBuf);
+        const dim = img.width;
+        const canvas = canvasMod.createCanvas(dim, dim);
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, dim, dim);
+        const cornerPixel = ctx.getImageData(0, 0, 1, 1).data;
+        expect(cornerPixel[3]).toBe(255);
+      }
 
       const icoBuf = await readFile(path.join(iconsDir, "favicon.ico"));
       expect(icoBuf.readUInt16LE(2)).toBe(1);

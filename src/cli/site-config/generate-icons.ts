@@ -15,6 +15,40 @@ export const APPLE_TOUCH_ICON_SIZES: ReadonlySet<number> = new Set([
 
 export interface RenderIconPngOptions {
   opaqueBackground?: boolean;
+  canvasModule?: any | null;
+}
+
+const VECTOR_SHAPE_ELEMENT_RE =
+  /<(?:path|rect|circle|ellipse|polygon|polyline|line|text)\b/iu;
+
+const EMBEDDED_PNG_IMAGE_HREF_RE =
+  /<image\b[^>]*\b(?:xlink:)?href=["']data:image\/png;base64,([A-Za-z0-9+/=\s]+)["']/iu;
+
+export function extractEmbeddedPngFromWrapperSvg(
+  svgText: string,
+): Buffer | null {
+  if (!svgText || typeof svgText !== "string") {
+    return null;
+  }
+  const trimmed = svgText.trim();
+  if (!trimmed || VECTOR_SHAPE_ELEMENT_RE.test(trimmed)) {
+    return null;
+  }
+  const match = trimmed.match(EMBEDDED_PNG_IMAGE_HREF_RE);
+  if (!match) {
+    return null;
+  }
+  const buf = Buffer.from(match[1].replace(/\s+/g, ""), "base64");
+  if (
+    buf.length > 24 &&
+    buf[0] === 0x89 &&
+    buf[1] === 0x50 &&
+    buf[2] === 0x4e &&
+    buf[3] === 0x47
+  ) {
+    return buf;
+  }
+  return null;
 }
 
 /**
@@ -290,7 +324,10 @@ export async function renderIconPngBuffer(
   backgroundColor?: string,
   options?: RenderIconPngOptions,
 ): Promise<Buffer> {
-  const canvasMod = await getCanvasModule();
+  const canvasMod =
+    options && "canvasModule" in options
+      ? options.canvasModule
+      : await getCanvasModule();
   if (canvasMod && typeof canvasMod.createCanvas === "function") {
     try {
       const canvas = canvasMod.createCanvas(size, size);
@@ -303,13 +340,21 @@ export async function renderIconPngBuffer(
       }
 
       if (source.type === "svg") {
-        const preparedSvg = prepareSvgForRasterization(
-          source.svg,
-          size,
-          backgroundColor,
-        );
-        const img = await canvasMod.loadImage(Buffer.from(preparedSvg, "utf8"));
-        ctx.drawImage(img, 0, 0, size, size);
+        const embeddedPng = extractEmbeddedPngFromWrapperSvg(source.svg);
+        if (embeddedPng) {
+          const img = await canvasMod.loadImage(embeddedPng);
+          ctx.drawImage(img, 0, 0, size, size);
+        } else {
+          const preparedSvg = prepareSvgForRasterization(
+            source.svg,
+            size,
+            backgroundColor,
+          );
+          const img = await canvasMod.loadImage(
+            Buffer.from(preparedSvg, "utf8"),
+          );
+          ctx.drawImage(img, 0, 0, size, size);
+        }
       } else {
         const img = await canvasMod.loadImage(source.png);
         ctx.drawImage(img, 0, 0, size, size);
@@ -371,11 +416,14 @@ export interface EnsureTemplateIconSetOptions {
   searchDirs?: string[];
   config?: SiteConfig;
   forceOverwriteAll?: boolean;
+  canvasModule?: any | null;
 }
 
 export interface EnsureTemplateIconSetResult {
   sourceType: "svg" | "logo-slot-svg" | "png" | "monogram" | "none";
   generatedFiles: string[];
+  skippedFiles: string[];
+  canvasAvailable: boolean;
 }
 
 function isCustomNonLobsterSvg(svgText: string): boolean {
@@ -416,6 +464,13 @@ export async function ensureTemplateIconSet(
     new Set([targetIconsDir, ...(options.searchDirs || [])]),
   );
 
+  const canvasMod =
+    "canvasModule" in options ? options.canvasModule : await getCanvasModule();
+  const canvasAvailable = Boolean(
+    canvasMod && typeof canvasMod.createCanvas === "function",
+  );
+  const skippedFiles: string[] = [];
+
   await mkdir(targetIconsDir, { recursive: true });
 
   const bgColor =
@@ -426,8 +481,9 @@ export async function ensureTemplateIconSet(
   const accentColor =
     config?.pwa?.themeColor || config?.site?.themeColor || "#38bdf8";
 
-  // 1. Discover custom SVG icon source
+  // 1. Discover custom SVG icon source (unwrapping pure data-URI PNG wrapper SVGs)
   let svgSource: string | null = null;
+  let embeddedSvgPngFallback: { buf: Buffer; size: number } | null = null;
   let sourceType: EnsureTemplateIconSetResult["sourceType"] = "none";
 
   const svgCandidateNames = ["favicon.svg", "assets/icons/favicon.svg"];
@@ -438,9 +494,22 @@ export async function ensureTemplateIconSet(
         try {
           const text = await readFile(candidate, "utf8");
           if (isCustomNonLobsterSvg(text)) {
-            svgSource = text;
-            sourceType = "svg";
-            break;
+            const embeddedPng = extractEmbeddedPngFromWrapperSvg(text);
+            if (embeddedPng) {
+              if (
+                !embeddedSvgPngFallback &&
+                !isDefaultShadowClawIconBuffer(embeddedPng)
+              ) {
+                embeddedSvgPngFallback = {
+                  buf: embeddedPng,
+                  size: embeddedPng.readUInt32BE(16),
+                };
+              }
+            } else {
+              svgSource = text;
+              sourceType = "svg";
+              break;
+            }
           }
         } catch {}
       }
@@ -503,6 +572,11 @@ export async function ensureTemplateIconSet(
       }
       if (pngSource) break;
     }
+
+    if (!pngSource && embeddedSvgPngFallback) {
+      pngSource = embeddedSvgPngFallback;
+      sourceType = "png";
+    }
   }
 
   // 4. Fallback to generated monogram SVG if this is a non-ShadowClaw site
@@ -518,7 +592,67 @@ export async function ensureTemplateIconSet(
   }
 
   if (!svgSource && !pngSource) {
-    return { sourceType: "none", generatedFiles: [] };
+    return {
+      sourceType: "none",
+      generatedFiles: [],
+      skippedFiles: [],
+      canvasAvailable,
+    };
+  }
+
+  const appleTouchPath = path.join(targetIconsDir, "apple-touch-icon.png");
+  const faviconIcoPath = path.join(targetIconsDir, "favicon.ico");
+  const allRasterPaths = [
+    ...ICON_SIZES.map((size) => path.join(targetIconsDir, `${size}.png`)),
+    appleTouchPath,
+    faviconIcoPath,
+  ];
+
+  async function shouldWriteIconFile(filePath: string): Promise<boolean> {
+    if (forceOverwriteAll) return true;
+    if (!(await fileExists(filePath))) return true;
+    try {
+      const existing = await readFile(filePath);
+      return isDefaultShadowClawIconBuffer(existing);
+    } catch {
+      return true;
+    }
+  }
+
+  async function hasExistingCustomRasterIcon(): Promise<boolean> {
+    const candidateNames = [
+      ...ICON_SIZES.map((size) => `${size}.png`),
+      "apple-touch-icon.png",
+    ];
+    for (const name of candidateNames) {
+      const candidatePath = path.join(targetIconsDir, name);
+      if (await fileExists(candidatePath)) {
+        try {
+          const buf = await readFile(candidatePath);
+          if (
+            buf.length > 8 &&
+            buf[0] === 0x89 &&
+            buf[1] === 0x50 &&
+            !isDefaultShadowClawIconBuffer(buf)
+          ) {
+            return true;
+          }
+        } catch {}
+      }
+    }
+    return false;
+  }
+
+  if (!canvasAvailable && forceOverwriteAll) {
+    console.warn(
+      `Optional 'canvas' dependency is unavailable; skipping forced regeneration of raster icons in ${targetIconsDir} to avoid overwriting custom artwork with placeholder icons.`,
+    );
+    return {
+      sourceType,
+      generatedFiles: [],
+      skippedFiles: allRasterPaths,
+      canvasAvailable: false,
+    };
   }
 
   const generatedFiles: string[] = [];
@@ -555,20 +689,32 @@ export async function ensureTemplateIconSet(
     }
   }
 
+  if (
+    !canvasAvailable &&
+    !forceOverwriteAll &&
+    (await hasExistingCustomRasterIcon())
+  ) {
+    for (const destPath of allRasterPaths) {
+      if (await shouldWriteIconFile(destPath)) {
+        skippedFiles.push(destPath);
+      }
+    }
+    if (skippedFiles.length > 0) {
+      console.warn(
+        `Optional 'canvas' dependency is unavailable; skipping synthesis of ${skippedFiles.length} missing raster icon file(s) in ${targetIconsDir} to avoid emitting placeholder icons.`,
+      );
+    }
+    return {
+      sourceType,
+      generatedFiles,
+      skippedFiles,
+      canvasAvailable: false,
+    };
+  }
+
   const renderSource = svgSource
     ? ({ type: "svg", svg: svgSource } as const)
     : ({ type: "png", png: pngSource!.buf } as const);
-
-  async function shouldWriteIconFile(filePath: string): Promise<boolean> {
-    if (forceOverwriteAll) return true;
-    if (!(await fileExists(filePath))) return true;
-    try {
-      const existing = await readFile(filePath);
-      return isDefaultShadowClawIconBuffer(existing);
-    } catch {
-      return true;
-    }
-  }
 
   const renderedBySize = new Map<string, Buffer>();
   async function getRenderedSize(
@@ -580,6 +726,7 @@ export async function ensureTemplateIconSet(
     if (!cached) {
       cached = await renderIconPngBuffer(renderSource, size, bgColor, {
         opaqueBackground,
+        canvasModule: canvasMod,
       });
       renderedBySize.set(key, cached);
     }
@@ -598,14 +745,12 @@ export async function ensureTemplateIconSet(
     }
   }
 
-  const appleTouchPath = path.join(targetIconsDir, "apple-touch-icon.png");
   if (await shouldWriteIconFile(appleTouchPath)) {
     const png180 = await getRenderedSize(180, true);
     await writeFile(appleTouchPath, png180);
     generatedFiles.push(appleTouchPath);
   }
 
-  const faviconIcoPath = path.join(targetIconsDir, "favicon.ico");
   if (await shouldWriteIconFile(faviconIcoPath)) {
     const png16 = await getRenderedSize(16);
     const png32 = await getRenderedSize(32);
@@ -619,5 +764,5 @@ export async function ensureTemplateIconSet(
     generatedFiles.push(faviconIcoPath);
   }
 
-  return { sourceType, generatedFiles };
+  return { sourceType, generatedFiles, skippedFiles, canvasAvailable };
 }

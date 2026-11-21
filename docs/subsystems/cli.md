@@ -852,11 +852,11 @@ npx shadow-claw icons --force
 
 `ensureTemplateIconSet` automatically determines the primary icon source using the following priority:
 
-1. **Custom Vector SVG**: Searches for non-default SVGs at `favicon.svg`, `logo.svg`, or `branding.faviconPath` across search directories, or extracts inline SVG markup from `branding.logoSlotHtml`.
+1. **Custom Vector SVG**: Searches for non-default SVGs at `favicon.svg`, `logo.svg`, or `branding.faviconPath` across search directories, or extracts inline SVG markup from `branding.logoSlotHtml`. Wrapper SVGs that embed a `data:image/png;base64,...` `<image>` without vector shapes are unwrapped to their underlying PNG buffer before rasterization so `librsvg` never blanks data-URI images.
 2. **Custom High-Resolution PNG**: Searches for custom PNGs (`1024.png`, `512.png`, `192.png`, `180.png`, `apple-touch-icon.png`, etc.) that do not match the built-in ShadowClaw lobster icon fingerprints.
 3. **Dynamic Monogram Fallback**: If no custom icon is found and the site is configured with a custom title (`pwa.shortName`, `branding.titleText`, `site.title`, or `pwa.name`), generates an initial-letter monogram SVG using the site's accent and background colors.
 
-Generated icon suites include a multi-resolution `favicon.ico` (embedding 16x16, 32x32, and 48x48 PNG frames), opaque-background Apple touch icons (`152.png`, `167.png`, `180.png`, and `apple-touch-icon.png`), and standard PWA manifest icons. During site builds (`src/cli/site-config/apply.ts`), `ensureTemplateIconSet` runs automatically to ensure consumer template sites always ship consistent, isolated branding, publishing `apple-touch-icon.png` at the site root and emitting base-path-prefixed root-relative `<link>` tags early in `<head>`.
+Generated icon suites include a multi-resolution `favicon.ico` (embedding 16x16, 32x32, and 48x48 PNG frames), opaque-background Apple touch icons (`152.png`, `167.png`, `180.png`, and `apple-touch-icon.png`), and standard PWA manifest icons. During site builds (`src/cli/site-config/apply.ts`), `ensureTemplateIconSet` runs automatically to ensure consumer template sites always ship consistent, isolated branding, publishing `apple-touch-icon.png` at the site root and emitting base-path-prefixed root-relative `<link>` tags early in `<head>`. If the optional native `canvas` dependency is unavailable (such as when invoking `npx shadow-claw` in CI), builds skip synthesizing missing raster sizes (e.g. `167.png`) when custom PNGs already exist instead of emitting placeholder graphics, and `shadow-claw icons --force` exits safely with an actionable error instead of overwriting existing custom icons.
 
 ---
 

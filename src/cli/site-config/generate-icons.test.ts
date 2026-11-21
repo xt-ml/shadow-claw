@@ -10,6 +10,7 @@ import {
   buildMonogramSvg,
   encodeIcoFromPngBuffers,
   ensureTemplateIconSet,
+  extractEmbeddedPngFromWrapperSvg,
   extractSvgFromLogoSlotHtml,
   isDefaultShadowClawIconBuffer,
   prepareSvgForRasterization,
@@ -89,6 +90,32 @@ describe("generate-icons", () => {
     });
   });
 
+  describe("extractEmbeddedPngFromWrapperSvg", () => {
+    it("extracts the embedded PNG buffer from a pure <image data:image/png;base64,...> wrapper SVG", async () => {
+      const vectorSvg =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#0f172a"/></svg>';
+      const pngBuf = await renderIconPngBuffer(
+        { type: "svg", svg: vectorSvg },
+        64,
+      );
+      const wrapperSvg = [
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">',
+        `  <image width="64" height="64" href="data:image/png;base64,${pngBuf.toString("base64")}"/>`,
+        "</svg>",
+      ].join("\n");
+
+      const extracted = extractEmbeddedPngFromWrapperSvg(wrapperSvg);
+      expect(extracted).not.toBeNull();
+      expect(extracted!.equals(pngBuf)).toBe(true);
+    });
+
+    it("returns null for genuine vector SVGs with shape elements", () => {
+      const vectorSvg =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" fill="#0f172a"/><circle cx="16" cy="16" r="6" fill="#38bdf8"/></svg>';
+      expect(extractEmbeddedPngFromWrapperSvg(vectorSvg)).toBeNull();
+    });
+  });
+
   describe("ICON_SIZES", () => {
     it("includes 167 for iPad Pro Apple touch icons", () => {
       expect(ICON_SIZES).toContain(167);
@@ -131,6 +158,40 @@ describe("generate-icons", () => {
       const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
       expect(a).toBe(255);
       expect([r, g, b]).toEqual([14, 20, 21]);
+    });
+
+    it("unwraps embedded-PNG wrapper SVGs so librsvg never blanks embedded data-URI images", async () => {
+      const canvasMod = await import("canvas");
+      const srcCanvas = canvasMod.createCanvas(64, 64);
+      const srcCtx = srcCanvas.getContext("2d");
+      srcCtx.clearRect(0, 0, 64, 64);
+      srcCtx.fillStyle = "#38bdf8";
+      srcCtx.fillRect(16, 16, 32, 32);
+      const innerPng = srcCanvas.toBuffer("image/png");
+
+      const wrapperSvg = [
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">',
+        `  <image width="64" height="64" href="data:image/png;base64,${innerPng.toString("base64")}"/>`,
+        "</svg>",
+      ].join("\n");
+
+      const png180 = await renderIconPngBuffer(
+        { type: "svg", svg: wrapperSvg },
+        180,
+        "#0a0a0f",
+        { opaqueBackground: true },
+      );
+      const img = await canvasMod.loadImage(png180);
+      const outCanvas = canvasMod.createCanvas(180, 180);
+      const outCtx = outCanvas.getContext("2d");
+      outCtx.drawImage(img, 0, 0, 180, 180);
+
+      expect([...outCtx.getImageData(0, 0, 1, 1).data]).toEqual([
+        10, 10, 15, 255,
+      ]);
+      expect([...outCtx.getImageData(90, 90, 1, 1).data]).toEqual([
+        56, 189, 248, 255,
+      ]);
     });
 
     it("encodes a valid multi-frame ICO file from PNG buffers", async () => {
@@ -326,6 +387,204 @@ describe("generate-icons", () => {
       expect(
         (await stat(path.join(iconsDir, "favicon.ico"))).size,
       ).toBeGreaterThan(100);
+    });
+
+    it("preserves center artwork with opaque corners when favicon.svg wraps an embedded base64 PNG", async () => {
+      const iconsDir = path.join(tmpDir, "assets/icons");
+      await mkdir(iconsDir, { recursive: true });
+
+      const canvasMod = await import("canvas");
+      const srcCanvas = canvasMod.createCanvas(192, 192);
+      const srcCtx = srcCanvas.getContext("2d");
+      srcCtx.clearRect(0, 0, 192, 192);
+      srcCtx.fillStyle = "#38bdf8";
+      srcCtx.fillRect(48, 48, 96, 96);
+      const embeddedPng = srcCanvas.toBuffer("image/png");
+
+      const wrapperSvg = [
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">',
+        `  <image width="192" height="192" href="data:image/png;base64,${embeddedPng.toString("base64")}"/>`,
+        "</svg>",
+      ].join("\n");
+      await writeFile(path.join(iconsDir, "favicon.svg"), wrapperSvg, "utf8");
+
+      const result = await ensureTemplateIconSet({
+        targetIconsDir: iconsDir,
+        config: {
+          site: { title: "Embedded Site", themeColor: "#0a0a0f" },
+          pwa: { backgroundColor: "#0a0a0f" },
+        },
+        forceOverwriteAll: true,
+      });
+
+      expect(result.canvasAvailable).toBe(true);
+      expect(result.sourceType).toBe("png");
+
+      for (const touchFile of [
+        "152.png",
+        "167.png",
+        "180.png",
+        "apple-touch-icon.png",
+      ]) {
+        const buf = await readFile(path.join(iconsDir, touchFile));
+        const img = await canvasMod.loadImage(buf);
+        const dim = img.width;
+        const c = canvasMod.createCanvas(dim, dim);
+        const ctx = c.getContext("2d");
+        ctx.drawImage(img, 0, 0, dim, dim);
+
+        expect([...ctx.getImageData(0, 0, 1, 1).data]).toEqual([
+          10, 10, 15, 255,
+        ]);
+        const mid = [
+          ...ctx.getImageData(Math.floor(dim / 2), Math.floor(dim / 2), 1, 1)
+            .data,
+        ];
+        expect(mid).toEqual([56, 189, 248, 255]);
+      }
+    });
+
+    it("refuses to overwrite custom icons on forceOverwriteAll when canvas is unavailable", async () => {
+      const iconsDir = path.join(tmpDir, "assets/icons");
+      await mkdir(iconsDir, { recursive: true });
+
+      const customSvg =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#111827"/><circle cx="16" cy="16" r="8" fill="#3b82f6"/></svg>';
+      await writeFile(path.join(iconsDir, "favicon.svg"), customSvg, "utf8");
+      const custom180 = await renderIconPngBuffer(
+        { type: "svg", svg: customSvg },
+        180,
+      );
+      const custom512 = await renderIconPngBuffer(
+        { type: "svg", svg: customSvg },
+        512,
+      );
+      await writeFile(path.join(iconsDir, "180.png"), custom180);
+      await writeFile(path.join(iconsDir, "512.png"), custom512);
+
+      const hash180Before = createHash("sha256")
+        .update(custom180)
+        .digest("hex");
+      const hash512Before = createHash("sha256")
+        .update(custom512)
+        .digest("hex");
+
+      const warnSpy = () => {};
+      const origWarn = console.warn;
+      console.warn = warnSpy;
+      let result;
+      try {
+        result = await ensureTemplateIconSet({
+          targetIconsDir: iconsDir,
+          config: {
+            site: { title: "Template Site", themeColor: "#111827" },
+          },
+          forceOverwriteAll: true,
+          canvasModule: null,
+        });
+      } finally {
+        console.warn = origWarn;
+      }
+
+      expect(result.canvasAvailable).toBe(false);
+      expect(result.generatedFiles).toEqual([]);
+      expect(result.skippedFiles.length).toBeGreaterThan(0);
+
+      const after180Hash = createHash("sha256")
+        .update(await readFile(path.join(iconsDir, "180.png")))
+        .digest("hex");
+      const after512Hash = createHash("sha256")
+        .update(await readFile(path.join(iconsDir, "512.png")))
+        .digest("hex");
+      expect(after180Hash).toBe(hash180Before);
+      expect(after512Hash).toBe(hash512Before);
+      await expect(stat(path.join(iconsDir, "167.png"))).rejects.toThrow();
+    });
+
+    it("skips synthesizing missing sizes like 167.png when custom PNGs already exist and canvas is unavailable", async () => {
+      const iconsDir = path.join(tmpDir, "assets/icons");
+      await mkdir(iconsDir, { recursive: true });
+
+      const customSvg =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#1a2121"/><circle cx="16" cy="16" r="8" fill="#80d4db"/></svg>';
+      await writeFile(path.join(iconsDir, "favicon.svg"), customSvg, "utf8");
+      const custom152 = await renderIconPngBuffer(
+        { type: "svg", svg: customSvg },
+        152,
+      );
+      const custom180 = await renderIconPngBuffer(
+        { type: "svg", svg: customSvg },
+        180,
+      );
+      const custom512 = await renderIconPngBuffer(
+        { type: "svg", svg: customSvg },
+        512,
+      );
+      await writeFile(path.join(iconsDir, "152.png"), custom152);
+      await writeFile(path.join(iconsDir, "180.png"), custom180);
+      await writeFile(path.join(iconsDir, "512.png"), custom512);
+
+      const origWarn = console.warn;
+      console.warn = () => {};
+      let result;
+      try {
+        result = await ensureTemplateIconSet({
+          targetIconsDir: iconsDir,
+          config: {
+            site: { title: "Template DAW", themeColor: "#0e1415" },
+          },
+          canvasModule: null,
+        });
+      } finally {
+        console.warn = origWarn;
+      }
+
+      expect(result.canvasAvailable).toBe(false);
+      expect(result.skippedFiles).toContain(path.join(iconsDir, "167.png"));
+      await expect(stat(path.join(iconsDir, "167.png"))).rejects.toThrow();
+      expect(
+        (await readFile(path.join(iconsDir, "180.png"))).equals(custom180),
+      ).toBe(true);
+      expect(
+        (await readFile(path.join(iconsDir, "152.png"))).equals(custom152),
+      ).toBe(true);
+      expect(
+        (await readFile(path.join(iconsDir, "512.png"))).equals(custom512),
+      ).toBe(true);
+    });
+
+    it("still replaces default lobster icons with fallback PNGs when no custom PNGs exist and canvas is unavailable", async () => {
+      const iconsDir = path.join(tmpDir, "assets/icons");
+      await mkdir(iconsDir, { recursive: true });
+
+      const repoRoot = path.resolve(
+        new URL("../../..", import.meta.url).pathname,
+      );
+      const lobster180 = await readFile(
+        path.join(repoRoot, "assets/icons/180.png"),
+      );
+      await writeFile(path.join(iconsDir, "180.png"), lobster180);
+
+      const customSvg =
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#1e293b"/><circle cx="16" cy="16" r="8" fill="#38bdf8"/></svg>';
+      await writeFile(path.join(iconsDir, "favicon.svg"), customSvg, "utf8");
+
+      const result = await ensureTemplateIconSet({
+        targetIconsDir: iconsDir,
+        config: {
+          site: { title: "New Template", themeColor: "#1e293b" },
+        },
+        canvasModule: null,
+      });
+
+      expect(result.canvasAvailable).toBe(false);
+      expect(result.generatedFiles).toContain(path.join(iconsDir, "180.png"));
+      const updated180 = await readFile(path.join(iconsDir, "180.png"));
+      expect(isDefaultShadowClawIconBuffer(updated180)).toBe(false);
+      expect(readPngDimensions(updated180)).toEqual({
+        width: 180,
+        height: 180,
+      });
     });
   });
 });

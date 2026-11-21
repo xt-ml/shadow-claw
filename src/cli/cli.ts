@@ -1250,6 +1250,18 @@ program
         forceOverwriteAll: Boolean(options.force),
       });
 
+      if (!result.canvasAvailable && options.force) {
+        console.error(
+          "Cannot regenerate icons with --force because the optional 'canvas' package is not installed. Install it (e.g. `npm install --no-save canvas`) or run from a ShadowClaw checkout with devDependencies installed.",
+        );
+        process.exit(1);
+      }
+      if (!result.canvasAvailable && result.skippedFiles.length > 0) {
+        console.warn(
+          `Skipped ${result.skippedFiles.length} raster icon file(s) because optional 'canvas' dependency is unavailable.`,
+        );
+      }
+
       console.log(
         `Generated ${result.generatedFiles.length} icon file(s) in ${targetIconsDir} (source: ${result.sourceType}).`,
       );

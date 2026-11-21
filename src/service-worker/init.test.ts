@@ -255,7 +255,7 @@ describe("service-worker init", () => {
     const REPROMPT_MS = 60_000;
     let setIntervalSpy: jest.SpiedFunction<typeof globalThis.setInterval>;
     let intervalCallbacks: Array<() => void | Promise<void>>;
-    let eventHandlers: Record<string, () => void | Promise<void>>;
+    let eventHandlers: Record<string, (event?: any) => void | Promise<void>>;
     let addEventListenerSpy: jest.SpiedFunction<
       typeof globalThis.addEventListener
     >;
@@ -434,6 +434,141 @@ describe("service-worker init", () => {
       await serviceWorkerListeners.controllerchange?.();
 
       expect(requestDialog).not.toHaveBeenCalled();
+    });
+
+    it("registers immediately without 10s delay when a controller is already present", async () => {
+      Object.defineProperty(globalThis.navigator, "serviceWorker", {
+        value: {
+          controller: {},
+          addEventListener: jest.fn((event: string, handler: any) => {
+            serviceWorkerListeners[event] = handler;
+          }),
+        },
+        configurable: true,
+      });
+
+      await importInit();
+
+      expect(mockRegister).toHaveBeenCalledTimes(1);
+      expect(setTimeoutSpy).not.toHaveBeenCalledWith(
+        expect.any(Function),
+        10_000,
+      );
+    });
+
+    it("defers registration by 10s on first install when no controller exists", async () => {
+      await importInit();
+
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 10_000);
+      expect(mockRegister).toHaveBeenCalledTimes(1);
+    });
+
+    it("auto-applies waiting update when controlled and an un-upgraded shadow-claw host deadlocks", async () => {
+      Object.defineProperty(globalThis.navigator, "serviceWorker", {
+        value: {
+          controller: {},
+          addEventListener: jest.fn((event: string, handler: any) => {
+            serviceWorkerListeners[event] = handler;
+          }),
+        },
+        configurable: true,
+      });
+
+      let tick = 0;
+      const now = jest
+        .spyOn(Date, "now")
+        .mockImplementation(() => (tick += 2000));
+      querySpy.mockImplementation((selector) =>
+        selector === "shadow-claw" ? ({} as any) : null,
+      );
+
+      try {
+        await importInit();
+        await listeners.waiting?.();
+
+        expect(requestDialog).not.toHaveBeenCalled();
+        expect(mockMessageSkipWaiting).toHaveBeenCalledTimes(1);
+        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 3000);
+        expect(
+          globalThis.sessionStorage.getItem(UPDATE_INTENT_KEY),
+        ).toBeTruthy();
+      } finally {
+        now.mockRestore();
+      }
+    });
+
+    it("clears Later backoff and checks for updates on shadow-claw-chunk-load-error", async () => {
+      requestDialog.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+      const now = jest.spyOn(Date, "now");
+      now.mockReturnValue(1_000_000);
+
+      try {
+        await importInit();
+
+        await listeners.waiting?.();
+        expect(requestDialog).toHaveBeenCalledTimes(1);
+        expect(mockMessageSkipWaiting).not.toHaveBeenCalled();
+
+        now.mockReturnValue(1_000_000 + 1000);
+        eventHandlers["window:shadow-claw-chunk-load-error"]?.();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(mockUpdate).toHaveBeenCalledTimes(1);
+        expect(requestDialog).toHaveBeenCalledTimes(2);
+        expect(mockMessageSkipWaiting).toHaveBeenCalledTimes(1);
+      } finally {
+        now.mockRestore();
+      }
+    });
+
+    it("registers immediately and checks for updates on dynamic-import unhandledrejection and index.js script errors", async () => {
+      const originalReadyState = Object.getOwnPropertyDescriptor(
+        document,
+        "readyState",
+      );
+      Object.defineProperty(document, "readyState", {
+        configurable: true,
+        value: "loading",
+      });
+
+      try {
+        await importInit();
+        expect(mockRegister).not.toHaveBeenCalled();
+
+        eventHandlers["window:unhandledrejection"]?.({
+          reason: new TypeError(
+            "Failed to fetch dynamically imported module: https://example.com/chunk.js",
+          ),
+        } as any);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(mockRegister).toHaveBeenCalledWith({ immediate: true });
+        expect(mockUpdate).toHaveBeenCalledTimes(1);
+
+        // Unrelated rejection does not trigger another update check
+        mockUpdate.mockClear();
+        eventHandlers["window:unhandledrejection"]?.({
+          reason: new Error("Other unrelated error"),
+        } as any);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(mockUpdate).not.toHaveBeenCalled();
+
+        // Capture-phase script load error for index.js triggers update check
+        eventHandlers["window:error"]?.({
+          target: { tagName: "SCRIPT", src: "https://example.com/index.js" },
+        } as any);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        expect(mockUpdate).toHaveBeenCalledTimes(1);
+      } finally {
+        if (originalReadyState) {
+          Object.defineProperty(document, "readyState", originalReadyState);
+        } else {
+          Object.defineProperty(document, "readyState", {
+            configurable: true,
+            value: "complete",
+          });
+        }
+      }
     });
   });
 

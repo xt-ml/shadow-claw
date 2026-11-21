@@ -43,6 +43,20 @@ export {
 
 let isInitializing = false;
 
+function notifyBootChunkError(error: unknown): void {
+  if (
+    typeof window !== "undefined" &&
+    typeof window.dispatchEvent === "function" &&
+    typeof CustomEvent === "function"
+  ) {
+    window.dispatchEvent(
+      new CustomEvent("shadow-claw-chunk-load-error", {
+        detail: { name: "app-shell", error },
+      }),
+    );
+  }
+}
+
 async function bootstrapApp() {
   await loadAppShell();
   const result = await initializeApp(document, isInitializing);
@@ -57,12 +71,14 @@ if (document.readyState === "loading") {
     } catch (e) {
       console.error("Fatal error during initialization:", e);
       isInitializing = false;
+      notifyBootChunkError(e);
     }
   });
 } else {
   bootstrapApp().catch((err) => {
     console.error("Fatal error during initialization:", err);
     isInitializing = false;
+    notifyBootChunkError(err);
   });
 }
 

@@ -19,6 +19,8 @@ const UPDATE_INTENT_MAX_AGE_MS = 30000;
 const MAX_FALLBACK_RELOAD_ATTEMPTS = 2;
 const UPDATE_FAILURE_KEY = "shadowclaw-sw-update-failure";
 const UPDATE_FAILURE_COOLDOWN_MS = 5 * 60 * 1000;
+const MODULE_LOAD_ERROR_RE =
+  /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed|Unable to preload CSS/i;
 
 let didReloadAfterUpdate = false;
 let updateWaiting = false;
@@ -27,6 +29,11 @@ let nextPromptAt = 0;
 let lastCheckAt = 0;
 let reloadPromptInFlight = false;
 let hadControllerAtStart = false;
+let chunkLoadFailed = false;
+let swRegistered = false;
+let swRegistrationPromise: Promise<unknown> | null = null;
+let pendingRegisterTimeout: ReturnType<typeof globalThis.setTimeout> | null =
+  null;
 let pendingReloadTimeout: ReturnType<typeof globalThis.setTimeout> | null =
   null;
 
@@ -375,6 +382,23 @@ async function promptReloadForNewWorker() {
   }
 }
 
+function isUnupgradedShellHostPresent(): boolean {
+  const el = document.querySelector("shadow-claw") as ShadowClawUiBridge | null;
+
+  return Boolean(el && typeof el.requestDialog !== "function");
+}
+
+function isModuleLoadError(reason: unknown): boolean {
+  const message =
+    reason instanceof Error
+      ? reason.message
+      : typeof reason === "string"
+        ? reason
+        : String((reason as { message?: unknown })?.message ?? "");
+
+  return MODULE_LOAD_ERROR_RE.test(message);
+}
+
 // Shows the update dialog for a waiting worker; honors the re-prompt backoff.
 async function promptForWaitingUpdate(wb: Workbox) {
   if (!updateWaiting || promptInFlight || Date.now() < nextPromptAt) {
@@ -395,6 +419,14 @@ async function promptForWaitingUpdate(wb: Workbox) {
   try {
     const accepted = await confirmServiceWorkerUpdate();
     if (accepted === null) {
+      if (
+        chunkLoadFailed ||
+        (hadControllerAtStart && isUnupgradedShellHostPresent())
+      ) {
+        beginUpdateIntent();
+        await applyPendingUpdate(wb);
+      }
+
       // Bridge not ready: retry on the next check instead of dropping the update.
       return;
     }
@@ -423,6 +455,32 @@ async function checkForUpdate(wb: Workbox, fromFocus: boolean) {
   }
 
   await promptForWaitingUpdate(wb);
+}
+
+function ensureRegistered(wb: Workbox, immediate = false): Promise<unknown> {
+  if (swRegistered) {
+    return swRegistrationPromise ?? Promise.resolve();
+  }
+
+  swRegistered = true;
+  if (pendingRegisterTimeout !== null) {
+    globalThis.clearTimeout(pendingRegisterTimeout);
+    pendingRegisterTimeout = null;
+  }
+
+  startUpdateChecks(wb);
+  swRegistrationPromise = Promise.resolve(
+    immediate ? wb.register({ immediate: true }) : wb.register(),
+  ).catch(() => undefined);
+
+  return swRegistrationPromise;
+}
+
+async function handleChunkLoadError(wb: Workbox): Promise<void> {
+  chunkLoadFailed = true;
+  nextPromptAt = 0;
+  await ensureRegistered(wb, true);
+  await checkForUpdate(wb, false);
 }
 
 function startUpdateChecks(wb: Workbox) {
@@ -473,11 +531,49 @@ try {
       handleServiceWorkerControllerChange();
     });
 
+    globalThis.addEventListener?.("shadow-claw-chunk-load-error", () => {
+      void handleChunkLoadError(wb);
+    });
+
+    globalThis.addEventListener?.(
+      "unhandledrejection",
+      (event: PromiseRejectionEvent) => {
+        if (isModuleLoadError(event?.reason)) {
+          void handleChunkLoadError(wb);
+        }
+      },
+    );
+
+    globalThis.addEventListener?.(
+      "error",
+      (event: Event) => {
+        const target = event?.target as {
+          tagName?: string;
+          src?: string;
+        } | null;
+        if (
+          target &&
+          typeof target.tagName === "string" &&
+          target.tagName.toUpperCase() === "SCRIPT" &&
+          typeof target.src === "string" &&
+          target.src.includes("index.js")
+        ) {
+          void handleChunkLoadError(wb);
+        }
+      },
+      true,
+    );
+
     const registerSW = () => {
-      // Delay registration for 10 seconds to avoid blocking main thread startup.
-      globalThis.setTimeout(() => {
-        wb.register();
-        startUpdateChecks(wb);
+      if (hadControllerAtStart) {
+        void ensureRegistered(wb);
+
+        return;
+      }
+
+      // Delay first-install registration for 10 seconds to avoid blocking main thread startup.
+      pendingRegisterTimeout = globalThis.setTimeout(() => {
+        void ensureRegistered(wb);
       }, 10_000);
     };
 

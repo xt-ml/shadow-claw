@@ -2,6 +2,11 @@ import { createHash } from "node:crypto";
 import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 
+import {
+  collectPrecacheShellChunks,
+  isHashedJsChunk,
+} from "./collect-precache-shell-chunks.js";
+
 interface PrecacheEntry {
   url: string;
   revision?: string | null;
@@ -188,10 +193,49 @@ function parsePrecacheArrayLiteral(rawArray: string): PrecacheEntry[] | null {
   }
 }
 
+const INDEX_REVISION_STMT_RE =
+  /self\.__SHADOWCLAW_PRECACHE_INDEX_REVISION__\s*=\s*"[^"]*";?/;
+
+async function buildPrecacheEntry(
+  distPublicDir: string,
+  entryUrl: string,
+  cleanUrl: string,
+  workspaceDigest: string,
+): Promise<PrecacheEntry | null> {
+  const targetPath = join(distPublicDir, cleanUrl);
+  try {
+    const targetStat = await stat(targetPath);
+    if (!targetStat.isFile()) {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+
+  if (isHashedJsChunk(cleanUrl)) {
+    return {
+      url: entryUrl,
+      revision: null,
+    };
+  }
+
+  const fileBytes = await readFile(targetPath);
+  const md5 = createHash("md5").update(fileBytes);
+  if (cleanUrl === "index.html" && workspaceDigest) {
+    md5.update(workspaceDigest);
+  }
+
+  return {
+    url: entryUrl,
+    revision: md5.digest("hex"),
+  };
+}
+
 /**
  * Updates `precacheAndRoute([...])` revisions inside `service-worker.js` using
  * the actual files in `distPublicDir` (plus `computeDistWorkspaceDigest` for
- * `index.html`), removing entries whose files do not exist.
+ * `index.html`), merges core shell/sidebar/settings chunks, removes entries
+ * whose files do not exist, and stamps the active `index.html` revision.
  */
 export async function syncServiceWorkerPrecacheRevisions(
   distPublicDir: string,
@@ -217,7 +261,10 @@ export async function syncServiceWorkerPrecacheRevisions(
   }
 
   const workspaceDigest = await computeDistWorkspaceDigest(distPublicDir);
+  const shellChunks = await collectPrecacheShellChunks(distPublicDir);
+  const seenUrls = new Set<string>();
   const nextEntries: PrecacheEntry[] = [];
+  let indexRevision = "";
 
   for (const entry of entries) {
     if (!entry || typeof entry.url !== "string" || !entry.url.trim()) {
@@ -225,31 +272,60 @@ export async function syncServiceWorkerPrecacheRevisions(
     }
 
     const cleanUrl = entry.url.replace(/^\/+/, "");
-    const targetPath = join(distPublicDir, cleanUrl);
-    try {
-      const targetStat = await stat(targetPath);
-      if (!targetStat.isFile()) {
-        continue;
-      }
-    } catch {
+    if (seenUrls.has(cleanUrl)) {
       continue;
     }
 
-    const fileBytes = await readFile(targetPath);
-    const md5 = createHash("md5").update(fileBytes);
-    if (cleanUrl === "index.html" && workspaceDigest) {
-      md5.update(workspaceDigest);
+    const nextEntry = await buildPrecacheEntry(
+      distPublicDir,
+      entry.url,
+      cleanUrl,
+      workspaceDigest,
+    );
+    if (!nextEntry) {
+      continue;
     }
 
-    nextEntries.push({
-      url: entry.url,
-      revision: md5.digest("hex"),
-    });
+    seenUrls.add(cleanUrl);
+    nextEntries.push(nextEntry);
+    if (cleanUrl === "index.html" && typeof nextEntry.revision === "string") {
+      indexRevision = nextEntry.revision;
+    }
+  }
+
+  for (const chunkUrl of shellChunks) {
+    const cleanUrl = chunkUrl.replace(/^\/+/, "");
+    if (seenUrls.has(cleanUrl)) {
+      continue;
+    }
+
+    const nextEntry = await buildPrecacheEntry(
+      distPublicDir,
+      chunkUrl,
+      cleanUrl,
+      workspaceDigest,
+    );
+    if (!nextEntry) {
+      continue;
+    }
+
+    seenUrls.add(cleanUrl);
+    nextEntries.push(nextEntry);
   }
 
   const nextArray = JSON.stringify(nextEntries);
-  const nextSource =
+  let nextSource =
     source.slice(0, bounds.start) + nextArray + source.slice(bounds.end + 1);
+
+  if (indexRevision) {
+    const revisionStmt = `self.__SHADOWCLAW_PRECACHE_INDEX_REVISION__=${JSON.stringify(indexRevision)};`;
+    if (INDEX_REVISION_STMT_RE.test(nextSource)) {
+      nextSource = nextSource.replace(INDEX_REVISION_STMT_RE, revisionStmt);
+    } else {
+      nextSource = `${nextSource}\n${revisionStmt}`;
+    }
+  }
+
   if (nextSource === source) {
     return false;
   }

@@ -171,4 +171,125 @@ describe("syncServiceWorkerPrecacheRevisions", () => {
       false,
     );
   });
+
+  it("merges core shell/sidebar/settings chunks with revision null, drops stale chunks, stamps index revision, and is idempotent", async () => {
+    const distDir = await createTempDist();
+    await mkdir(path.join(distDir, ".agents/scripts"), { recursive: true });
+
+    const indexHtml = "<html><body>DAW</body></html>";
+    await writeFile(path.join(distDir, "index.html"), indexHtml, "utf8");
+    await writeFile(
+      path.join(distDir, "index.js"),
+      `import "./boot-Aa11Bb22.js"; import("./shadow-claw-BMxsR6dl.js");`,
+      "utf8",
+    );
+    await writeFile(
+      path.join(distDir, "boot-Aa11Bb22.js"),
+      "export const b = 1;",
+      "utf8",
+    );
+    await writeFile(
+      path.join(distDir, "shadow-claw-BMxsR6dl.js"),
+      `const tabs = { chat: () => import("./shadow-claw-chat-iwjLtwb7.js"), settings: () => import("./shadow-claw-settings-Dt6nG327.js") };`,
+      "utf8",
+    );
+    await writeFile(
+      path.join(distDir, "shadow-claw-chat-iwjLtwb7.js"),
+      `const heavy = () => import("./webllm-C-1-BIAR.js");`,
+      "utf8",
+    );
+    await writeFile(
+      path.join(distDir, "shadow-claw-settings-Dt6nG327.js"),
+      `import("./shadow-claw-llm-CFi3QXIo.js");`,
+      "utf8",
+    );
+    await writeFile(
+      path.join(distDir, "shadow-claw-llm-CFi3QXIo.js"),
+      "export const llm = 1;",
+      "utf8",
+    );
+    await writeFile(
+      path.join(distDir, "webllm-C-1-BIAR.js"),
+      "export const heavy = 1;",
+      "utf8",
+    );
+    await writeFile(
+      path.join(distDir, "agent.worker.js"),
+      "export const worker = 1;",
+      "utf8",
+    );
+    await writeFile(
+      path.join(distDir, ".agents/scripts/scdaw-synth.js"),
+      "export const v = 1;",
+      "utf8",
+    );
+
+    const swPath = path.join(distDir, "service-worker.js");
+    await writeFile(
+      swPath,
+      'define(["./workbox-123"],function(e){e.precacheAndRoute([{url:"index.html",revision:"old"},{url:"index.js",revision:"oldjs"},{url:"stale-chunk-Zz99Yy88.js",revision:null}],{})});',
+      "utf8",
+    );
+
+    expect(await syncServiceWorkerPrecacheRevisions(distDir, swPath)).toBe(
+      true,
+    );
+
+    const swAfterFirstSync = await readFile(swPath, "utf8");
+    const entries = extractPrecacheEntries(swAfterFirstSync);
+    const digest = await computeDistWorkspaceDigest(distDir);
+    const expectedIndexRev = crypto
+      .createHash("md5")
+      .update(indexHtml)
+      .update(digest)
+      .digest("hex");
+
+    expect(entries).toEqual([
+      { url: "index.html", revision: expectedIndexRev },
+      {
+        url: "index.js",
+        revision: md5(
+          `import "./boot-Aa11Bb22.js"; import("./shadow-claw-BMxsR6dl.js");`,
+        ),
+      },
+      { url: "boot-Aa11Bb22.js", revision: null },
+      { url: "shadow-claw-BMxsR6dl.js", revision: null },
+      { url: "shadow-claw-chat-iwjLtwb7.js", revision: null },
+      { url: "shadow-claw-llm-CFi3QXIo.js", revision: null },
+      { url: "shadow-claw-settings-Dt6nG327.js", revision: null },
+    ]);
+    expect(swAfterFirstSync).toContain(
+      `self.__SHADOWCLAW_PRECACHE_INDEX_REVISION__="${expectedIndexRev}";`,
+    );
+
+    // Second run on unchanged dist must be idempotent
+    expect(await syncServiceWorkerPrecacheRevisions(distDir, swPath)).toBe(
+      false,
+    );
+    expect(await readFile(swPath, "utf8")).toBe(swAfterFirstSync);
+
+    // Updating a workspace script updates __SHADOWCLAW_PRECACHE_INDEX_REVISION__ in place
+    await writeFile(
+      path.join(distDir, ".agents/scripts/scdaw-synth.js"),
+      "export const v = 2;",
+      "utf8",
+    );
+    expect(await syncServiceWorkerPrecacheRevisions(distDir, swPath)).toBe(
+      true,
+    );
+    const swAfterScriptUpdate = await readFile(swPath, "utf8");
+    const updatedDigest = await computeDistWorkspaceDigest(distDir);
+    const updatedIndexRev = crypto
+      .createHash("md5")
+      .update(indexHtml)
+      .update(updatedDigest)
+      .digest("hex");
+    expect(swAfterScriptUpdate).toContain(
+      `self.__SHADOWCLAW_PRECACHE_INDEX_REVISION__="${updatedIndexRev}";`,
+    );
+    expect(
+      swAfterScriptUpdate.match(/__SHADOWCLAW_PRECACHE_INDEX_REVISION__/g)
+        ?.length,
+    ).toBe(1);
+  });
 });

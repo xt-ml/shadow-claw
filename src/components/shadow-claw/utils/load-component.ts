@@ -1,3 +1,5 @@
+export const CHUNK_LOAD_ERROR_EVENT = "shadow-claw-chunk-load-error";
+
 const componentLoaders: Record<string, () => Promise<unknown>> = {
   pages: () => import("../../shadow-claw-pages/shadow-claw-pages.js"),
   chat: () => import("../../shadow-claw-chat/shadow-claw-chat.js"),
@@ -17,12 +19,34 @@ const componentLoaders: Record<string, () => Promise<unknown>> = {
 
 const loadingPromises = new Map<string, Promise<void>>();
 
-export async function ensureComponentLoaded(name: string): Promise<void> {
+function dispatchChunkLoadError(name: string, error: unknown): void {
+  if (
+    typeof globalThis.dispatchEvent === "function" &&
+    typeof CustomEvent === "function"
+  ) {
+    globalThis.dispatchEvent(
+      new CustomEvent(CHUNK_LOAD_ERROR_EVENT, {
+        detail: { name, error },
+      }),
+    );
+  }
+}
+
+export async function ensureComponentLoaded(
+  name: string,
+  loaders: Record<string, () => Promise<unknown>> = componentLoaders,
+): Promise<void> {
   let promise = loadingPromises.get(name);
   if (!promise) {
-    const loader = componentLoaders[name];
+    const loader = loaders[name];
     if (loader) {
-      promise = loader().then(() => undefined);
+      promise = loader()
+        .then(() => undefined)
+        .catch((error) => {
+          loadingPromises.delete(name);
+          dispatchChunkLoadError(name, error);
+          throw error;
+        });
       loadingPromises.set(name, promise);
     } else {
       promise = Promise.resolve();

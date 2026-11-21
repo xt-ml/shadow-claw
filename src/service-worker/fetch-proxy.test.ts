@@ -784,4 +784,114 @@ describe("service-worker fetch proxy", () => {
       delete (globalThis as any).caches;
     }
   });
+
+  it("serves precached app shell Cache-First from workbox-precache-* without hitting network", async () => {
+    const precachedShell = new TestResponse("atomic-precached-shell", {
+      status: 200,
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    });
+    const matchWorkboxPrecache = jest.fn(async () => precachedShell);
+
+    Object.defineProperty(globalThis, "caches", {
+      configurable: true,
+      writable: true,
+      value: {
+        match: matchWorkboxPrecache,
+        keys: async () => [
+          "shadow-claw-cache",
+          "workbox-precache-v2-https://xt-ml.github.io/shadow-claw-daw/",
+        ],
+        open: async (name: string) => ({
+          match: name.startsWith("workbox-precache")
+            ? matchWorkboxPrecache
+            : jest.fn(async () => null),
+        }),
+      },
+    });
+
+    try {
+      const navigationRequest = {
+        url: `${globalThis.location.origin}/pages/main/index.html`,
+        method: "GET",
+        mode: "navigate",
+        destination: "document",
+        headers: new TestHeaders(),
+      };
+
+      const response = await dispatchFetch(navigationRequest);
+
+      expect(networkFetch).not.toHaveBeenCalled();
+      expect(await response.text()).toBe("atomic-precached-shell");
+      expect(response.headers.get("Origin-Agent-Cluster")).toBe("?1");
+    } finally {
+      delete (globalThis as any).caches;
+    }
+  });
+
+  it("matches exact __WB_REVISION__ for self.__SHADOWCLAW_PRECACHE_INDEX_REVISION__ when active and waiting revisions coexist", async () => {
+    const revAShell = new TestResponse("shell-rev-A", {
+      status: 200,
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    });
+    const revBShell = new TestResponse("shell-rev-B", {
+      status: 200,
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    });
+
+    const storedEntries = new Map<string, TestResponse>([
+      [
+        `${globalThis.location.origin}/index.html?__WB_REVISION__=revB`,
+        revBShell,
+      ],
+      [
+        `${globalThis.location.origin}/index.html?__WB_REVISION__=revA`,
+        revAShell,
+      ],
+    ]);
+
+    const matchWorkboxPrecache = jest.fn(
+      async (key: string, options?: { ignoreSearch?: boolean }) => {
+        if (!options?.ignoreSearch) {
+          return storedEntries.get(key) ?? null;
+        }
+        // Without exact revision matching, revB inserted first would be returned
+        for (const [entryKey, value] of storedEntries.entries()) {
+          if (entryKey.split("?")[0] === key.split("?")[0]) {
+            return value;
+          }
+        }
+        return null;
+      },
+    );
+
+    (globalThis.self as any).__SHADOWCLAW_PRECACHE_INDEX_REVISION__ = "revA";
+    Object.defineProperty(globalThis, "caches", {
+      configurable: true,
+      writable: true,
+      value: {
+        match: matchWorkboxPrecache,
+        keys: async () => ["workbox-precache-v2-origin"],
+        open: async () => ({ match: matchWorkboxPrecache }),
+      },
+    });
+
+    try {
+      const navigationRequest = {
+        url: `${globalThis.location.origin}/`,
+        method: "GET",
+        mode: "navigate",
+        destination: "document",
+        headers: new TestHeaders(),
+      };
+
+      const response = await dispatchFetch(navigationRequest);
+
+      expect(networkFetch).not.toHaveBeenCalled();
+      expect(await response.text()).toBe("shell-rev-A");
+      expect(response.headers.get("Origin-Agent-Cluster")).toBe("?1");
+    } finally {
+      delete (globalThis.self as any).__SHADOWCLAW_PRECACHE_INDEX_REVISION__;
+      delete (globalThis as any).caches;
+    }
+  });
 });

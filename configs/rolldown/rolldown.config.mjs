@@ -233,6 +233,17 @@ function swWatchPlugin() {
             // build the service worker
             await execAsync("npm run -s build:service-worker");
 
+            try {
+              const { syncServiceWorkerPrecacheRevisions } =
+                await import("./dist/cli/build/utils/sync-service-worker-precache.js");
+              await syncServiceWorkerPrecacheRevisions(
+                "dist/public",
+                "dist/public/service-worker.js",
+              );
+            } catch {
+              // CLI utilities may not be built yet in fresh watch sessions.
+            }
+
             // Post-process the generated service worker so its importScripts calls use
             // TrustedScriptURL values in Trusted Types report-only environments.
             await patchServiceWorkerTrustedTypesFile(

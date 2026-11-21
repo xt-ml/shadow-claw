@@ -207,11 +207,41 @@ async function matchCacheEntry(
   return undefined;
 }
 
-async function matchFirstCachedCandidate(
+async function matchPrecacheOnlyEntry(
+  urlOrRequest: string | Request,
+  options: { ignoreSearch?: boolean } = { ignoreSearch: true },
+): Promise<Response | undefined> {
+  if (typeof caches === "undefined" || typeof caches.keys !== "function") {
+    return undefined;
+  }
+
+  try {
+    const keys = await caches.keys();
+    for (const key of keys) {
+      if (!key.startsWith("workbox-precache")) {
+        continue;
+      }
+      const cache = await caches.open(key);
+      const match = await cache.match(urlOrRequest, options);
+      if (match) {
+        return match;
+      }
+    }
+  } catch {}
+
+  return undefined;
+}
+
+async function matchFirstEntry(
   candidates: string[],
+  matcher: (
+    urlOrRequest: string | Request,
+    options?: { ignoreSearch?: boolean },
+  ) => Promise<Response | undefined>,
+  options: { ignoreSearch?: boolean } = { ignoreSearch: true },
 ): Promise<Response | undefined> {
   for (const candidate of candidates) {
-    const match = await matchCacheEntry(candidate, { ignoreSearch: true });
+    const match = await matcher(candidate, options);
     if (match) {
       return match;
     }
@@ -220,18 +250,63 @@ async function matchFirstCachedCandidate(
   return undefined;
 }
 
-async function findCachedAppShell(): Promise<Response | undefined> {
+async function matchFirstCachedCandidate(
+  candidates: string[],
+): Promise<Response | undefined> {
+  return matchFirstEntry(candidates, matchCacheEntry, { ignoreSearch: true });
+}
+
+function getAppShellCandidates(): {
+  shellPath: string;
+  shellUrl: URL;
+  candidates: string[];
+} {
   const shellPath = applyBasePath("index.html");
   const shellUrl = new URL(shellPath, location.origin);
 
-  return matchFirstCachedCandidate([
-    shellUrl.href,
+  return {
     shellPath,
-    "index.html",
-    "/index.html",
-    "/",
-    `${location.origin}/`,
-  ]);
+    shellUrl,
+    candidates: [
+      shellUrl.href,
+      shellPath,
+      "index.html",
+      "/index.html",
+      "/",
+      `${location.origin}/`,
+    ],
+  };
+}
+
+async function findPrecachedAppShell(): Promise<Response | undefined> {
+  const { shellPath, shellUrl, candidates } = getAppShellCandidates();
+  const rawRevision = (self as any).__SHADOWCLAW_PRECACHE_INDEX_REVISION__;
+  const activeIndexRevision =
+    typeof rawRevision === "string" ? rawRevision.trim() : "";
+
+  if (activeIndexRevision) {
+    const exactMatch = await matchFirstEntry(
+      [
+        `${shellUrl.href}?__WB_REVISION__=${activeIndexRevision}`,
+        `${shellPath}?__WB_REVISION__=${activeIndexRevision}`,
+      ],
+      matchPrecacheOnlyEntry,
+      { ignoreSearch: false },
+    );
+    if (exactMatch) {
+      return exactMatch;
+    }
+  }
+
+  return matchFirstEntry(candidates, matchPrecacheOnlyEntry, {
+    ignoreSearch: true,
+  });
+}
+
+async function findCachedAppShell(): Promise<Response | undefined> {
+  const { candidates } = getAppShellCandidates();
+
+  return matchFirstCachedCandidate(candidates);
 }
 
 async function findCachedNavigationCandidate(
@@ -275,8 +350,14 @@ async function fetchWithOriginAgentCluster(
 }
 
 async function fetchAppShellWithOriginAgentCluster(): Promise<Response> {
-  const shellPath = applyBasePath("index.html");
-  const shellUrl = new URL(shellPath, location.origin);
+  try {
+    const precached = await findPrecachedAppShell();
+    if (precached) {
+      return ensureOriginAgentClusterHeader(precached);
+    }
+  } catch {}
+
+  const { shellUrl } = getAppShellCandidates();
 
   let response: Response | undefined;
   try {

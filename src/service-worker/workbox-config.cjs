@@ -65,6 +65,99 @@ module.exports = {
   // define runtime caching rules
   runtimeCaching: [
     {
+      // Serve immutable content-hashed Rolldown JS chunks Cache-First so
+      // active sessions never 404 when a deployment swaps chunk hashes.
+      urlPattern: ({ url, sameOrigin }) => {
+        if (url.pathname.startsWith("/assets/v86.9pfs/")) {
+          return false;
+        }
+
+        const hostname = url.hostname.toLowerCase();
+
+        const isBypassDomain =
+          hostname === "huggingface.co" ||
+          hostname.endsWith(".huggingface.co") ||
+          hostname.endsWith(".hf.co") ||
+          hostname === "hf.co" ||
+          hostname === "hf-mirror.com" ||
+          hostname.endsWith(".hf-mirror.com") ||
+          hostname === "cdnjs.cloudflare.com" ||
+          hostname === "esm.sh" ||
+          hostname.endsWith(".esm.sh") ||
+          hostname === "unpkg.com" ||
+          hostname === "cdn.jsdelivr.net" ||
+          hostname.endsWith(".jsdelivr.net") ||
+          hostname === "esm.run" ||
+          hostname === "openrouter.ai" ||
+          hostname.endsWith(".openrouter.ai") ||
+          hostname === "api.telegram.org";
+
+        if (isBypassDomain) {
+          return false;
+        }
+
+        if (url.pathname.startsWith("/api/control/")) {
+          return false;
+        }
+
+        const isShareTargetPath = url.pathname.endsWith(
+          "/share/share-target.html",
+        );
+
+        const isProxyPath =
+          url.pathname === "/proxy" ||
+          url.pathname.startsWith("/git-proxy/") ||
+          isShareTargetPath ||
+          url.pathname.startsWith("/push/") ||
+          url.pathname.startsWith("/schedule/") ||
+          url.pathname.startsWith("/telegram/");
+
+        const isLoopback =
+          hostname === "localhost" ||
+          hostname === "127.0.0.1" ||
+          hostname === "::1" ||
+          hostname === "[::1]";
+
+        if (isLoopback && isProxyPath) {
+          return false;
+        }
+
+        if (typeof sameOrigin === "boolean" && !sameOrigin) {
+          return false;
+        }
+
+        if (
+          url.pathname.includes("/.agents/") ||
+          url.pathname.includes("/files/") ||
+          url.pathname.includes("/pages/") ||
+          url.pathname.includes("/assets/") ||
+          url.pathname.includes("/service-worker/")
+        ) {
+          return false;
+        }
+
+        if (
+          url.pathname.endsWith(".worker.js") ||
+          /\/workbox-[^/]+\.js$/i.test(url.pathname)
+        ) {
+          return false;
+        }
+
+        return /\/[^/]+-[A-Za-z0-9_-]{8}\.js$/.test(url.pathname);
+      },
+
+      handler: "CacheFirst",
+
+      options: {
+        cacheName: "shadow-claw-chunks-cache",
+
+        expiration: {
+          maxEntries: 150,
+          maxAgeSeconds: 30 * 24 * 60 * 60,
+        },
+      },
+    },
+    {
       // exclude loopback proxy paths, Hugging Face / model downloads, CDN hosts, and channel endpoints
       urlPattern: ({ url, sameOrigin }) => {
         // Skip VM asset paths to avoid flooding CacheStorage with high-volume chunk requests.
@@ -148,6 +241,28 @@ module.exports = {
           // 365 days
           maxAgeSeconds: 365 * 24 * 60 * 60,
         },
+
+        plugins: [
+          {
+            fetchDidSucceed: async ({ request, response }) => {
+              if (
+                response &&
+                (response.status === 404 || response.status >= 500) &&
+                typeof caches !== "undefined"
+              ) {
+                try {
+                  const cache = await caches.open("shadow-claw-cache");
+                  const cached = await cache.match(request);
+                  if (cached) {
+                    return cached;
+                  }
+                } catch {}
+              }
+
+              return response;
+            },
+          },
+        ],
       },
     },
   ],

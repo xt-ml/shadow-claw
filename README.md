@@ -460,6 +460,14 @@ An in-browser digital audio workstation (DAW) template powered by **ShadowClaw**
 
 [![Shadow Claw DAW screenshot](https://xt-ml.github.io/shadow-claw/assets/screenshots/xt-ml.github.io_shadow-claw-daw-1024x768.png)](https://xt-ml.github.io/shadow-claw-daw/)
 
+### [Shadow Claw Draw](https://xt-ml.github.io/shadow-claw-draw/)
+
+[![Agent Skills](https://img.shields.io/badge/Agent_Skills-Discovery-8b5cf6?style=flat)](https://xt-ml.github.io/shadow-claw-draw/.well-known/agent-skills/index.json)
+
+A dual-page, mobile-first, accessible Vector (SVG) and Bitmap (Canvas 2D) graphical studio built with plain JavaScript and Web Components.
+
+[![Shadow Claw Draw screenshot](https://xt-ml.github.io/shadow-claw/assets/screenshots/xt-ml.github.io_shadow-claw-draw-1024x768.png)](https://xt-ml.github.io/shadow-claw-draw/)
+
 ### [ShadowClaw Agent CLI Weather](https://xt-ml.github.io/shadow-claw-agent-cli-weather/)
 
 [![Agent Skills](https://img.shields.io/badge/Agent_Skills-Discovery-8b5cf6?style=flat)](https://xt-ml.github.io/shadow-claw-agent-cli-weather/.well-known/agent-skills/index.json)

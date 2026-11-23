@@ -573,7 +573,7 @@ Some runtime paths are browser-capability dependent and should be handled simila
 to storage feature gates.
 
 - Prompt API provider depends on `globalThis.LanguageModel` support.
-- WebMCP integration depends on `document.modelContext` support (with `navigator.modelContext` fallback for Chrome < 152, where `navigator.modelContext` was deprecated in Chrome 150 and removed in Chrome 152.0.7943.0). Input schemas support native JavaScript objects (Chrome 154+) and DOMString JSON (Chrome < 154) via `parseWebMcpInputSchema`, and `getWebMcpTools()` degrades gracefully to `[]` when `getTools()` is unavailable.
+- WebMCP integration depends on `document.modelContext` support (with `navigator.modelContext` fallback for Chrome < 152, where `navigator.modelContext` was deprecated in Chrome 150 and removed in Chrome 152.0.7943.0). Chrome 160+ (PR #348) returns `Tool` interface instances (`source` instead of `window`, `null` for omitted schemas/annotations, and non-enumerable prototype attributes); input schemas support native JavaScript objects (Chrome 154+), `null` (Chrome 160+), and DOMString JSON (Chrome < 154) via `parseWebMcpInputSchema`, and `getWebMcpTools()` degrades gracefully to `[]` when `getTools()` is unavailable.
 - In unsupported browsers, tests should verify graceful fallback/error messaging,
   not hard-fail on unavailable platform features.
 

@@ -17,6 +17,7 @@ Object.defineProperty(globalThis, "crypto", {
   value: {
     ...webcrypto,
     subtle: mockSubtle,
+    randomUUID: () => webcrypto.randomUUID(),
     getRandomValues: <T extends ArrayBufferView | null>(array: T): T => {
       if (array && "fill" in array) {
         (array as unknown as Uint8Array).fill(1);

@@ -7,6 +7,7 @@ import { TOOL_DEFINITIONS, type ToolDefinition } from "../tools/tools.js";
 
 const registeredToolControllers: Map<string, AbortController> = new Map();
 const registeredToolNames: Set<string> = new Set();
+const normalizedToRawTool = new WeakMap<object, WebMcpRegisteredTool>();
 
 /**
  * Install the `@w3c/webmcp-polyfill` onto `document.modelContext`.
@@ -42,6 +43,13 @@ function ensurePolyfill(): void {
       } catch {
         // Ignore if read-only
       }
+    }
+
+    if (
+      typeof crypto === "undefined" ||
+      typeof crypto.randomUUID !== "function"
+    ) {
+      return;
     }
 
     if (typeof installWebMCP === "function") {
@@ -147,7 +155,27 @@ export interface WebMcpRegisteredTool {
   name: string;
   title?: string;
   description?: string;
+  origin?: string;
   inputSchema?: unknown;
+  outputSchema?: unknown;
+  annotations?: Record<string, unknown> | null;
+  source?: WindowProxy | null;
+  /** @deprecated Chrome < 160 fallback; use `source` instead. */
+  window?: Window | null;
+  execute?: (
+    input: Record<string, unknown>,
+    context?: WebMcpExecuteContext | AbortSignal,
+  ) => Promise<unknown>;
+}
+
+export type WebMcpTool = WebMcpRegisteredTool;
+
+export interface NormalizedWebMcpRegisteredTool {
+  name: string;
+  title?: string;
+  description?: string;
+  origin?: string;
+  inputSchema: Record<string, unknown>;
   outputSchema?: unknown;
   annotations?: Record<string, unknown>;
   execute?: (
@@ -156,17 +184,85 @@ export interface WebMcpRegisteredTool {
   ) => Promise<unknown>;
 }
 
-export interface NormalizedWebMcpRegisteredTool {
+export interface SerializableWebMcpTool {
   name: string;
-  title?: string;
-  description?: string;
-  inputSchema: Record<string, unknown>;
-  outputSchema?: unknown;
-  annotations?: Record<string, unknown>;
-  execute?: (
-    input: Record<string, unknown>,
-    context?: WebMcpExecuteContext | AbortSignal,
-  ) => Promise<unknown>;
+  title: string;
+  description: string;
+  origin: string;
+  inputSchema: Record<string, unknown> | null;
+  outputSchema: unknown | null;
+  annotations: Record<string, unknown> | null;
+}
+
+/**
+ * Safely resolve the registering window/source from a WebMCP `Tool` interface
+ * (Chrome 160+ / PR #348) or legacy `RegisteredTool` dictionary (Chrome < 160).
+ */
+export function getWebMcpToolSource(
+  tool:
+    WebMcpRegisteredTool | NormalizedWebMcpRegisteredTool | null | undefined,
+): WindowProxy | null {
+  if (!tool || typeof tool !== "object") {
+    return null;
+  }
+
+  const target: WebMcpRegisteredTool =
+    normalizedToRawTool.get(tool) ?? (tool as WebMcpRegisteredTool);
+  // TODO: Remove `target.window` fallback when Chrome 160 reaches Stable (January 5, 2027).
+  return target.source !== undefined ? target.source : (target.window ?? null);
+}
+
+/**
+ * Explicitly extract JSON-serializable metadata from a WebMCP `Tool` interface
+ * or legacy `RegisteredTool` dictionary.
+ *
+ * Chrome 160+ (PR #348) returns `Tool` interface instances whose attributes live
+ * on the prototype: `JSON.stringify(tool)` produces `"{}"`, `{ ...tool }` drops
+ * properties, and `structuredClone(tool)` throws. Missing schemas and
+ * annotations are normalized to `null` and non-serializable members (`source`,
+ * `window`, `execute`) are omitted.
+ */
+export function serializeWebMcpTool(
+  tool: WebMcpRegisteredTool | NormalizedWebMcpRegisteredTool,
+): SerializableWebMcpTool {
+  const target =
+    tool && typeof tool === "object"
+      ? (normalizedToRawTool.get(tool) ?? tool)
+      : tool;
+
+  const name = typeof target?.name === "string" ? target.name : "";
+  const title = typeof target?.title === "string" ? target.title : "";
+  const description =
+    typeof target?.description === "string" ? target.description : "";
+  const origin = typeof target?.origin === "string" ? target.origin : "";
+
+  const rawInputSchema = target?.inputSchema;
+  const inputSchema =
+    rawInputSchema !== undefined && rawInputSchema !== null
+      ? parseWebMcpInputSchema(rawInputSchema)
+      : null;
+
+  const rawOutputSchema = target?.outputSchema;
+  const outputSchema =
+    rawOutputSchema !== undefined && rawOutputSchema !== null
+      ? parseWebMcpOutputSchema(rawOutputSchema)
+      : null;
+
+  const rawAnnotations = target?.annotations;
+  const annotations =
+    rawAnnotations && typeof rawAnnotations === "object"
+      ? { ...rawAnnotations }
+      : null;
+
+  return {
+    name,
+    title,
+    description,
+    origin,
+    inputSchema,
+    outputSchema,
+    annotations,
+  };
 }
 
 /**
@@ -205,8 +301,14 @@ export function extractAbortSignal(
  * - If `getTools()` is absent (older browser builds or polyfills without getTools),
  *   returns an empty array `[]` without throwing.
  * - Supports options dictionary with `fromOrigins` to discover cross-frame/cross-origin tools (Chrome 155+).
- * - Normalizes `RegisteredTool#inputSchema` so caller receives a JavaScript object
- *   whether running on Chrome 154+ (native object) or Chrome < 154 (DOMString JSON).
+ * - Compatible with Chrome 160+ (PR #348) `Tool` interface instances: reads
+ *   attributes explicitly (avoiding `{ ...tool }` / `JSON.stringify(tool)` /
+ *   `structuredClone(tool)`), omits `null` optional fields (`outputSchema`,
+ *   `annotations`), and retains the genuine `Tool` reference in a `WeakMap`
+ *   so `executeWebMcpTool()` and `getWebMcpToolSource()` preserve `Tool` identity.
+ * - Normalizes `Tool#inputSchema` / `RegisteredTool#inputSchema` so callers
+ *   receive a JavaScript object whether running on Chrome 154+ (native object),
+ *   Chrome 160+ (`null` when omitted), or Chrome < 154 (DOMString JSON).
  */
 export async function getWebMcpTools(options?: {
   fromOrigins?: string[];
@@ -227,17 +329,40 @@ export async function getWebMcpTools(options?: {
       return [];
     }
 
-    return rawTools.map((tool) => ({
-      name: tool.name,
-      ...(tool.title ? { title: tool.title } : {}),
-      ...(tool.description ? { description: tool.description } : {}),
-      inputSchema: parseWebMcpInputSchema(tool.inputSchema),
-      ...(tool.outputSchema !== undefined
-        ? { outputSchema: parseWebMcpOutputSchema(tool.outputSchema) }
-        : {}),
-      ...(tool.annotations ? { annotations: tool.annotations } : {}),
-      ...(tool.execute ? { execute: tool.execute } : {}),
-    }));
+    return rawTools.map((tool) => {
+      const name = tool.name;
+      const title = tool.title;
+      const description = tool.description;
+      const origin = tool.origin;
+      const inputSchema = parseWebMcpInputSchema(tool.inputSchema);
+      const outputSchema =
+        tool.outputSchema !== undefined && tool.outputSchema !== null
+          ? parseWebMcpOutputSchema(tool.outputSchema)
+          : undefined;
+      const annotations =
+        tool.annotations && typeof tool.annotations === "object"
+          ? { ...tool.annotations }
+          : undefined;
+      const execute =
+        typeof tool.execute === "function" ? tool.execute : undefined;
+
+      const normalized: NormalizedWebMcpRegisteredTool = {
+        name,
+        ...(title ? { title } : {}),
+        ...(description ? { description } : {}),
+        ...(origin ? { origin } : {}),
+        inputSchema,
+        ...(outputSchema !== undefined ? { outputSchema } : {}),
+        ...(annotations !== undefined ? { annotations } : {}),
+        ...(execute !== undefined ? { execute } : {}),
+      };
+
+      if (tool && typeof tool === "object") {
+        normalizedToRawTool.set(normalized, tool);
+      }
+
+      return normalized;
+    });
   } catch (err) {
     console.warn("Failed to retrieve WebMCP tools via getTools():", err);
 
@@ -346,22 +471,33 @@ export async function executeWebMcpTool(
     inputStr = "{}";
   }
 
+  const targetTool =
+    tool && typeof tool === "object"
+      ? (normalizedToRawTool.get(tool) ?? tool)
+      : tool;
+
   let result: unknown;
   try {
-    result = await modelContext.executeTool(tool, inputObject, options);
+    result = await modelContext.executeTool(targetTool, inputObject, options);
   } catch (err: any) {
     const isParseError =
       typeof err?.message === "string" &&
       err.message.startsWith("Failed to parse input");
-    const isTypeError = err instanceof TypeError;
+    const isToolTypeError =
+      err instanceof TypeError &&
+      typeof err.message === "string" &&
+      /parameter 1|not of type ['"]?(?:Tool|ModelContextTool)['"]?/i.test(
+        err.message,
+      );
+    const isTypeError = err instanceof TypeError && !isToolTypeError;
 
     if (isParseError || isTypeError) {
-      result = await modelContext.executeTool(tool, inputStr, options);
+      result = await modelContext.executeTool(targetTool, inputStr, options);
     } else {
       throw err;
     }
   }
-  validateWebMcpOutput(result, tool);
+  validateWebMcpOutput(result, targetTool);
   return result;
 }
 
@@ -424,15 +560,21 @@ export interface WebMcpEventListenerOptions extends AddEventListenerOptions {
  *    prefers `modelContext` if it supports `addEventListener`, otherwise falls back to `window`.
  * 5. Returns `null` if no valid EventTarget is found.
  */
+function readModelContextSafely(): any {
+  const doc = typeof document !== "undefined" ? document : undefined;
+  const nav = typeof navigator !== "undefined" ? navigator : undefined;
+  try {
+    return (doc as any)?.modelContext ?? (nav as any)?.modelContext;
+  } catch {
+    return undefined;
+  }
+}
+
 export function getWebMcpEventTarget(
   type?: "toolactivated" | "toolcancel" | string,
 ): WebMcpEventTarget | null {
-  const doc = typeof document !== "undefined" ? document : undefined;
   const win = typeof window !== "undefined" ? window : undefined;
-  const nav = typeof navigator !== "undefined" ? navigator : undefined;
-
-  const modelContext: any =
-    (doc as any)?.modelContext ?? (nav as any)?.modelContext;
+  const modelContext: any = readModelContextSafely();
 
   const hasModelContextListener =
     modelContext && typeof modelContext.addEventListener === "function";
@@ -494,10 +636,7 @@ export function addWebMcpEventListener<
     typeof (window as any).addEventListener === "function"
       ? (window as unknown as WebMcpEventTarget)
       : null;
-  const doc = typeof document !== "undefined" ? document : null;
-  const nav = typeof navigator !== "undefined" ? navigator : null;
-  const modelContext: any =
-    (doc as any)?.modelContext ?? (nav as any)?.modelContext;
+  const modelContext: any = readModelContextSafely();
   const hasMc =
     modelContext && typeof modelContext.addEventListener === "function";
 
@@ -637,10 +776,7 @@ export function onWebMcpToolChange(
   listener: (event: Event) => void,
   options?: boolean | AddEventListenerOptions,
 ): () => void {
-  const doc = typeof document !== "undefined" ? document : undefined;
-  const nav = typeof navigator !== "undefined" ? navigator : undefined;
-  const modelContext: any =
-    (doc as any)?.modelContext ?? (nav as any)?.modelContext;
+  const modelContext: any = readModelContextSafely();
 
   if (!modelContext || typeof modelContext.addEventListener !== "function") {
     return () => {};
@@ -903,18 +1039,19 @@ export async function registerWebMcpTools(
         continue;
       }
 
-      // A SecurityError DOMException (typically with an empty message) means
-      // the polyfill's origin-agent-cluster or permissions-policy gate
-      // rejected the registration. This is not recoverable for this session —
-      // bail out cleanly rather than spamming one error per remaining tool.
-      const isSecurityError =
-        err instanceof DOMException && err.name === "SecurityError";
+      // A SecurityError or NotAllowedError DOMException means the browser's
+      // origin-agent-cluster or permissions-policy ("tools") gate rejected
+      // registration. This is not recoverable for this session — bail out
+      // cleanly rather than spamming one error per remaining tool.
+      const isPolicyError =
+        err instanceof DOMException &&
+        (err.name === "SecurityError" || err.name === "NotAllowedError");
 
-      if (isSecurityError) {
+      if (isPolicyError) {
         console.warn(
-          "WebMCP tool registration aborted: browser security policy " +
-            "(SecurityError) prevented registration. Remaining tools will " +
-            "not be registered for this session.",
+          `WebMCP tool registration aborted: browser security policy (${err.name}) ` +
+            "prevented registration. Remaining tools will not be registered " +
+            "for this session.",
           err,
         );
         return false;

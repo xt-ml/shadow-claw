@@ -466,7 +466,7 @@ An in-browser digital audio workstation (DAW) template powered by **ShadowClaw**
 
 A dual-page, mobile-first, accessible Vector (SVG) and Bitmap (Canvas 2D) graphical studio built with plain JavaScript and Web Components.
 
-[![Shadow Claw Draw screenshot](https://xt-ml.github.io/shadow-claw/assets/screenshots/xt-ml.github.io_shadow-claw-draw-1024x768.png)](https://xt-ml.github.io/shadow-claw-draw/)
+[![Shadow Claw Draw screenshot](https://xt-ml.github.io/shadow-claw/assets/screenshots/xt-ml.github.io_shadow-claw-draw-1920x961.png)](https://xt-ml.github.io/shadow-claw-draw/)
 
 ### [ShadowClaw Agent CLI Weather](https://xt-ml.github.io/shadow-claw-agent-cli-weather/)
 

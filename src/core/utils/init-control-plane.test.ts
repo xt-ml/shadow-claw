@@ -944,6 +944,93 @@ describe("initControlPlane", () => {
       }
     });
 
+    it("handles Chrome 160+ Tool interface instances in list-tools and invoke-tool (PR #348)", async () => {
+      const origDocMC = Object.getOwnPropertyDescriptor(
+        document,
+        "modelContext",
+      );
+      const origNavMC = Object.getOwnPropertyDescriptor(
+        navigator,
+        "modelContext",
+      );
+      delete (navigator as any).modelContext;
+
+      class MockChrome160Tool {
+        get name() {
+          return "list_files";
+        }
+        get title() {
+          return "List Files";
+        }
+        get description() {
+          return "List files and directories";
+        }
+        get origin() {
+          return "http://localhost:8888";
+        }
+        get inputSchema() {
+          return null;
+        }
+        get outputSchema() {
+          return null;
+        }
+        get annotations() {
+          return null;
+        }
+        get source() {
+          return globalThis.window as WindowProxy;
+        }
+      }
+
+      const chrome160Tool = new MockChrome160Tool();
+      const mockExecuteTool = jest.fn(async (tool: any, input: any) => {
+        if (tool !== chrome160Tool) {
+          throw new TypeError("parameter 1 is not of type 'Tool'.");
+        }
+        return { ok: true, input };
+      });
+
+      Object.defineProperty(document, "modelContext", {
+        value: {
+          registerTool: jest.fn(),
+          getTools: jest.fn(async () => [chrome160Tool]),
+          executeTool: mockExecuteTool,
+        },
+        configurable: true,
+      });
+
+      try {
+        const listed = await executeClientControlCommand("list-tools", {}, {});
+        expect(listed.tools).toEqual([
+          {
+            name: "list_files",
+            description: "List files and directories",
+            inputSchema: { type: "object", properties: {} },
+          },
+        ]);
+        expect(listed.tools[0]).not.toHaveProperty("outputSchema");
+        expect(listed.tools[0]).not.toHaveProperty("annotations");
+
+        const res = await executeClientControlCommand(
+          "invoke-tool",
+          { toolName: "list_files", input: { path: "src" } },
+          {},
+        );
+        expect(res).toEqual({ result: { ok: true, input: { path: "src" } } });
+        expect(mockExecuteTool).toHaveBeenCalledTimes(1);
+        expect(mockExecuteTool).toHaveBeenCalledWith(
+          chrome160Tool,
+          { path: "src" },
+          undefined,
+        );
+      } finally {
+        if (origDocMC)
+          Object.defineProperty(document, "modelContext", origDocMC);
+        if (origNavMC)
+          Object.defineProperty(navigator, "modelContext", origNavMC);
+      }
+    });
+
     it("refuses to execute tool when tool is not registered on client or not enabled in active conversation", async () => {
       const origDocMC = Object.getOwnPropertyDescriptor(
         document,

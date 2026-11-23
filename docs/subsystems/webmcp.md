@@ -139,16 +139,26 @@ Queries tools registered on `document.modelContext.getTools()` while practicing 
 1. Feature-detects `getTools()` on `modelContext`.
 2. If `getTools()` is absent (older browser builds or basic polyfills), returns an empty array `[]` without throwing.
 3. Supports optional `fromOrigins` filtering to discover cross-frame/cross-origin tools (Chrome 155+).
-4. Normalizes `inputSchema` and optional object or JSON-string `outputSchema`, and returns tool metadata including `name`, `title`, `description`, and `annotations`. If the browser does not expose an output schema, the field is omitted.
+4. Explicitly extracts properties from Chrome 160+ `Tool` interface instances (PR #348) as well as legacy `RegisteredTool` dictionaries without using `JSON.stringify(tool)`, `{ ...tool }`, or `structuredClone(tool)`.
+5. Normalizes `inputSchema` (handling `null`, objects, or legacy DOMString JSON), omits `null` optional fields (`outputSchema`, `annotations`), preserves `origin`, and records the genuine `Tool` instance in a `WeakMap` so `executeWebMcpTool()` and `getWebMcpToolSource()` retain `Tool` identity.
+
+### `getWebMcpToolSource(tool): WindowProxy | null`
+
+Resolves the registering `WindowProxy` for a `Tool` interface instance (Chrome 160+) or legacy `RegisteredTool` dictionary (Chrome < 160) using `tool.source !== undefined ? tool.source : (tool.window ?? null)`. Also unwraps normalized tools returned by `getWebMcpTools()`.
+
+### `serializeWebMcpTool(tool): SerializableWebMcpTool`
+
+Explicitly extracts JSON- and `structuredClone`-safe metadata (`name`, `title`, `description`, `origin`, `inputSchema`, `outputSchema`, `annotations`) from a `Tool` interface instance or legacy `RegisteredTool` dictionary, normalizing omitted schemas and annotations to `null` and omitting non-serializable members (`source`, `window`, `execute`).
 
 ### `executeWebMcpTool(modelContext, tool, input?, options?): Promise<unknown>`
 
-Executes a tool on a WebMCP `ModelContext` instance with backwards compatibility for Chrome 155+ (PR #246 & #251):
+Executes a tool on a WebMCP `ModelContext` instance with backwards compatibility for Chrome 155+ (PR #246 & #251) and Chrome 160+ `Tool` interface identity (PR #348):
 
-1. Accepts an optional JavaScript object directly or a JSON string.
-2. Calls `modelContext.executeTool(tool, inputObject, options)` first.
-3. If the host environment rejects with an error starting with `"Failed to parse input"` (Chrome < 155 / `@mcp-b/webmcp-polyfill`) or a WebIDL `TypeError`, it retries with `JSON.stringify(inputObject)`.
-4. When a tool exposes `outputSchema`, validates the result with a CSP-compatible JSON Schema validator. JSON-serialized results are decoded for validation. A mismatch or unusable schema raises a descriptive error, without retrying the tool; successful results are returned unchanged. With no available schema, results pass through unchanged.
+1. Unwraps normalized tools from `getWebMcpTools()` back to the genuine `Tool` instance so `executeTool()` receives the exact branded `Tool` object with its internal ID.
+2. Accepts an optional JavaScript object directly or a JSON string.
+3. Calls `modelContext.executeTool(targetTool, inputObject, options)` first.
+4. If the host environment rejects with an error starting with `"Failed to parse input"` (Chrome < 155 / early polyfills) or a non-parameter-1 WebIDL `TypeError`, it retries with `JSON.stringify(inputObject)`. Parameter-1 `Tool` interface `TypeError`s are propagated immediately without retrying.
+5. When a tool exposes `outputSchema`, validates the result with a CSP-compatible JSON Schema validator. JSON-serialized results are decoded for validation. A mismatch or unusable schema raises a descriptive error, without retrying the tool; successful results are returned unchanged. With no available schema, results pass through unchanged.
 
 ### `getWebMcpEventTarget(type?): WebMcpEventTarget | null`
 
@@ -501,42 +511,53 @@ ShadowClaw provides `getWebMcpTools()` to safely query registered WebMCP tools a
 2. If `getTools()` is absent (older browser builds or polyfills lacking `getTools`), returns an empty array `[]` without throwing.
 3. Normalizes `inputSchema` on every returned tool so callers receive a JavaScript object regardless of Chrome version or polyfill implementation.
 
+### Tool Interface Compatibility (PR #348 / Chrome 160+)
+
+Starting in Chrome 160.0.8173.0 (PR #348) and `@w3c/webmcp-polyfill@^0.2.0` / `webmcp-types@^0.2.0`, `getTools()` returns instances of the `Tool` WebIDL interface instead of `RegisteredTool` dictionaries:
+
+- **`source` replaces `window`:** `Tool#source` exposes the `WindowProxy` of the registering document (or `null` if no longer active). Use `getWebMcpToolSource(tool)` (or `tool.source ?? tool.window` until Chrome 160 reaches Stable on January 5, 2027) for backwards compatibility.
+- **`null` for omitted fields:** `inputSchema`, `outputSchema`, and `annotations` are `null` instead of `undefined` when not provided at registration. `getWebMcpTools()` omits `null` `outputSchema` and `annotations` fields, while `serializeWebMcpTool()` explicitly normalizes omitted fields to `null`.
+- **Prototype attributes & non-serializability:** Because `Tool` is a WebIDL interface object, `JSON.stringify(tool)` returns `"{}"`, `{ ...tool }` copies no properties, and `structuredClone(tool)` throws. Read attributes explicitly or use `getWebMcpTools()` / `serializeWebMcpTool()`.
+- **Genuine `Tool` identity for `executeTool()`:** Each `Tool` instance carries a unique internal ID/brand that `executeTool()` validates so executions target the exact registration returned by `getTools()`. ShadowClaw preserves raw `Tool` instances in a `WeakMap` so `executeWebMcpTool()` can unwrap normalized tools seamlessly.
+- **Permissions Policy rejections:** Registration failures due to a disallowed `"tools"` permissions policy throw `DOMException("NotAllowedError")` (or `"SecurityError"` in earlier polyfills); `registerWebMcpTools()` bails out cleanly on both.
+
 ### Native Execution Dispatch & Execution Guards
 
 When dispatching tool calls from external hosts via the Control Plane (`invoke-tool`):
 
 1. **Client-Side Gating:** Verifies whether the tool is active in the conversation group (`group.toolTags`) or enabled globally (`toolsStore.enabledToolNames`). Disabled tools are rejected before execution.
-2. **Native Tool Resolution:** Queries `ctx.getTools()` to find the registered `ModelContextTool` object and passes it to `executeWebMcpTool(ctx, matchedTool, input)` (required by native Chromium).
+2. **Native Tool Resolution:** Queries `ctx.getTools()` to find the genuine `Tool` interface instance (or legacy `ModelContextTool` dictionary) and passes it directly to `executeWebMcpTool(ctx, matchedTool, input)` (required by native Chromium and `@w3c/webmcp-polyfill@0.2.0`).
 3. **Compatibility Fallbacks:** If the native call fails or `getTools()` does not yield a tool object, falls back through `{ name: toolName }`, string tool names, `navigator.modelContextTesting.executeTool`, extension `callTool`, or direct Web Worker execution via `executeTool(db, name, input, groupId, { allowedTools })`.
 4. **Interactive Timeout:** Extends timeout up to 300 seconds for interactive tools (`ask_user`) to support user review.
 
 **ShadowClaw's Role:**
-ShadowClaw acts primarily as a **Tool Provider** via `registerTool()`, exposing built-in tools (Bash, Git, etc.) to the browser context for consumption by external AI agents. With `getWebMcpTools()` and `executeWebMcpTool()`, ShadowClaw also acts as a robust tool consumer supporting tool discovery and execution with backwards-compatible schema and argument parsing and graceful degradation when running on older browsers or polyfill targets.
+ShadowClaw acts primarily as a **Tool Provider** via `registerTool()`, exposing built-in tools (Bash, Git, etc.) to the browser context for consumption by external AI agents. With `getWebMcpTools()`, `getWebMcpToolSource()`, `serializeWebMcpTool()`, and `executeWebMcpTool()`, ShadowClaw also acts as a robust tool consumer supporting tool discovery and execution with backwards-compatible schema and argument parsing and graceful degradation when running on older browsers or polyfill targets.
 
 ---
 
 ## Testing WebMCP Integration
 
-When `document.modelContext` is available (with `navigator.modelContext` fallback for Chrome < 152), tools are registered through the browser's Model Context Protocol (via `@w3c/webmcp-polyfill` or native browser support). ShadowClaw provides `parseWebMcpInputSchema` to normalize input schemas across Chrome 154+ (native object) and Chrome < 154 (DOMString JSON) versions, `getWebMcpTools()` to safely query registered tools with graceful degradation, and `executeWebMcpTool()` to execute tools with backwards-compatible argument handling across Chrome 155+ and legacy environments.
+When `document.modelContext` is available (with `navigator.modelContext` fallback for Chrome < 152), tools are registered through the browser's Model Context Protocol (via `@w3c/webmcp-polyfill` or native browser support). ShadowClaw provides `parseWebMcpInputSchema` to normalize input schemas across Chrome 154+ (native object) and Chrome < 154 (DOMString JSON) versions, `getWebMcpTools()` to safely query registered tools with graceful degradation, `getWebMcpToolSource()` / `serializeWebMcpTool()` for Chrome 160+ `Tool` interface compatibility, and `executeWebMcpTool()` to execute tools with backwards-compatible argument handling across Chrome 155+/160+ and legacy environments.
 
 To test registered tools directly from the browser DevTools console:
 
 ```ts
-// get available tools (safely normalizes input schemas across Chrome versions)
+// get available tools (returns Chrome 160+ Tool interface instances or legacy dictionaries)
 var tools = await document.modelContext.getTools();
 
-// format the tool list
+// format the tool list (explicitly read attributes; JSON.stringify(tool) returns "{}")
 var formattedToolsJSON = JSON.stringify(
-  tools.map(
-    ({ annotations, description, inputSchema, name, origin, title }) => ({
-      annotations,
-      description,
-      inputSchema,
-      name,
-      origin,
-      title,
-    }),
-  ),
+  tools.map((tool) => ({
+    name: tool.name,
+    title: tool.title,
+    description: tool.description,
+    origin: tool.origin,
+    inputSchema: tool.inputSchema ?? null,
+    outputSchema: tool.outputSchema ?? null,
+    annotations: tool.annotations ?? null,
+    // TODO: Remove `tool.window` fallback when Chrome 160 reaches Stable (January 5, 2027).
+    hasSource: Boolean(tool.source ?? tool.window),
+  })),
   null,
   2,
 );
@@ -544,7 +565,7 @@ var formattedToolsJSON = JSON.stringify(
 // list available tools
 console.log(formattedToolsJSON);
 
-// get the toast tool
+// get the toast tool (keep the genuine Tool object for executeTool)
 var [toastTool] = tools.filter((v) => v.description.includes("Show a toast"));
 
 // run the toast tool (Chrome 155+ object syntax with backwards-compatible fallback)

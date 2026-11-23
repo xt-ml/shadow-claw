@@ -245,6 +245,107 @@ describe("webmcp integration", () => {
 
       expect(tools).toEqual([]);
     });
+
+    it("reads Chrome 160+ Tool interface instances explicitly and omits null optional fields", async () => {
+      const { getWebMcpTools } = await import("./webmcp.js");
+
+      class MockToolInterface {
+        #data: {
+          name: string;
+          title: string;
+          description: string;
+          origin: string;
+          inputSchema: object | null;
+          outputSchema: object | null;
+          annotations: Record<string, unknown> | null;
+          source: WindowProxy | null;
+        };
+        constructor(data: {
+          name: string;
+          title?: string;
+          description?: string;
+          origin?: string;
+          inputSchema?: object | null;
+          outputSchema?: object | null;
+          annotations?: Record<string, unknown> | null;
+          source?: WindowProxy | null;
+        }) {
+          this.#data = {
+            name: data.name,
+            title: data.title ?? data.name,
+            description: data.description ?? "",
+            origin: data.origin ?? "https://app.example.com",
+            inputSchema: data.inputSchema ?? null,
+            outputSchema: data.outputSchema ?? null,
+            annotations: data.annotations ?? null,
+            source: data.source ?? (globalThis.window as WindowProxy),
+          };
+        }
+        get name() {
+          return this.#data.name;
+        }
+        get title() {
+          return this.#data.title;
+        }
+        get description() {
+          return this.#data.description;
+        }
+        get origin() {
+          return this.#data.origin;
+        }
+        get inputSchema() {
+          return this.#data.inputSchema;
+        }
+        get outputSchema() {
+          return this.#data.outputSchema;
+        }
+        get annotations() {
+          return this.#data.annotations;
+        }
+        get source() {
+          return this.#data.source;
+        }
+      }
+
+      const rawTool = new MockToolInterface({
+        name: "ping",
+        title: "Ping",
+        description: "Health check tool",
+        origin: "https://app.example.com",
+        inputSchema: null,
+        outputSchema: null,
+        annotations: null,
+      });
+
+      // Verify the mock matches Chrome 160+ Tool interface behavior
+      expect(JSON.stringify(rawTool)).toBe("{}");
+      expect({ ...rawTool }).toEqual({});
+
+      Object.defineProperty((globalThis as any).document, "modelContext", {
+        configurable: true,
+        value: {
+          registerTool: mockRegisterTool,
+          getTools: jest.fn(async () => [rawTool]),
+        },
+      });
+
+      const tools = await getWebMcpTools();
+
+      expect(tools).toHaveLength(1);
+      expect(tools[0]).toEqual({
+        name: "ping",
+        title: "Ping",
+        description: "Health check tool",
+        origin: "https://app.example.com",
+        inputSchema: { type: "object", properties: {} },
+      });
+      expect(tools[0]).not.toHaveProperty("outputSchema");
+      expect(tools[0]).not.toHaveProperty("annotations");
+      expect(tools[0]).not.toHaveProperty("source");
+      expect(tools[0]).not.toHaveProperty("window");
+      expect(JSON.parse(JSON.stringify(tools[0]))).toEqual(tools[0]);
+      expect(structuredClone(tools[0])).toEqual(tools[0]);
+    });
   });
 
   it("feature-detects WebMCP support", () => {
@@ -844,6 +945,237 @@ describe("webmcp integration", () => {
 
       expect(res).toBe("with-signal");
     });
+
+    it("unwraps normalized tools from getWebMcpTools() back to genuine Tool interface instances", async () => {
+      const { getWebMcpTools, executeWebMcpTool } = await import("./webmcp.js");
+
+      class MockToolInterface {
+        #name: string;
+        constructor(name: string) {
+          this.#name = name;
+        }
+        get name() {
+          return this.#name;
+        }
+        get title() {
+          return this.#name;
+        }
+        get description() {
+          return "Genuine Tool instance";
+        }
+        get inputSchema() {
+          return null;
+        }
+        get outputSchema() {
+          return null;
+        }
+        get annotations() {
+          return null;
+        }
+        get origin() {
+          return "https://app.example.com";
+        }
+        get source() {
+          return globalThis.window as WindowProxy;
+        }
+      }
+
+      const genuineTool = new MockToolInterface("native_ping");
+      const mockModelContext = {
+        registerTool: mockRegisterTool,
+        getTools: jest.fn(async () => [genuineTool]),
+        executeTool: jest.fn(async (tool: any, input: any) => {
+          if (tool !== genuineTool) {
+            throw new TypeError("parameter 1 is not of type 'Tool'.");
+          }
+          return { ok: true, input };
+        }),
+      };
+
+      Object.defineProperty((globalThis as any).document, "modelContext", {
+        configurable: true,
+        value: mockModelContext,
+      });
+
+      const [normalized] = await getWebMcpTools();
+      const res = await executeWebMcpTool(mockModelContext, normalized, {
+        n: 1,
+      });
+
+      expect(res).toEqual({ ok: true, input: { n: 1 } });
+      expect(mockModelContext.executeTool).toHaveBeenCalledTimes(1);
+      expect(mockModelContext.executeTool).toHaveBeenCalledWith(
+        genuineTool,
+        { n: 1 },
+        undefined,
+      );
+    });
+
+    it("does not retry with stringified JSON when parameter 1 Tool TypeError is thrown", async () => {
+      const { executeWebMcpTool } = await import("./webmcp.js");
+
+      const mockModelContext = {
+        executeTool: jest.fn(async () => {
+          throw new TypeError("parameter 1 is not of type 'Tool'.");
+        }),
+      };
+
+      await expect(
+        executeWebMcpTool(mockModelContext, { name: "forged" }, { a: 1 }),
+      ).rejects.toThrow("parameter 1 is not of type 'Tool'.");
+      expect(mockModelContext.executeTool).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("getWebMcpToolSource and serializeWebMcpTool (PR #348 / Chrome 160+)", () => {
+    it("resolves source on Chrome 160+ Tool instances and falls back to window on Chrome < 160", async () => {
+      const { getWebMcpTools, getWebMcpToolSource } =
+        await import("./webmcp.js");
+
+      const sourceWin = { name: "source-win" } as unknown as WindowProxy;
+      const legacyWin = { name: "legacy-win" } as unknown as Window;
+
+      class MockToolInterface {
+        #name: string;
+        #source: WindowProxy | null;
+        constructor(name: string, source: WindowProxy | null) {
+          this.#name = name;
+          this.#source = source;
+        }
+        get name() {
+          return this.#name;
+        }
+        get inputSchema() {
+          return null;
+        }
+        get outputSchema() {
+          return null;
+        }
+        get annotations() {
+          return null;
+        }
+        get source() {
+          return this.#source;
+        }
+      }
+
+      const chrome160Tool = new MockToolInterface("modern", sourceWin);
+      const navigatedAwayTool = new MockToolInterface("detached", null);
+      const legacyTool = {
+        name: "legacy",
+        window: legacyWin,
+      };
+
+      expect(getWebMcpToolSource(chrome160Tool)).toBe(sourceWin);
+      expect(getWebMcpToolSource(navigatedAwayTool)).toBeNull();
+      expect(getWebMcpToolSource(legacyTool)).toBe(legacyWin);
+      expect(getWebMcpToolSource(null)).toBeNull();
+      expect(getWebMcpToolSource(undefined)).toBeNull();
+
+      Object.defineProperty((globalThis as any).document, "modelContext", {
+        configurable: true,
+        value: {
+          registerTool: mockRegisterTool,
+          getTools: jest.fn(async () => [chrome160Tool, navigatedAwayTool]),
+        },
+      });
+
+      const normalized = await getWebMcpTools();
+      expect(getWebMcpToolSource(normalized[0])).toBe(sourceWin);
+      expect(getWebMcpToolSource(normalized[1])).toBeNull();
+    });
+
+    it("explicitly serializes prototype-getter Tool instances with null defaults", async () => {
+      const { serializeWebMcpTool, getWebMcpTools } =
+        await import("./webmcp.js");
+
+      class MockToolInterface {
+        get name() {
+          return "proto_tool";
+        }
+        get title() {
+          return "Proto Tool";
+        }
+        get description() {
+          return "Prototype getter tool";
+        }
+        get origin() {
+          return "https://example.org";
+        }
+        get inputSchema() {
+          return null;
+        }
+        get outputSchema() {
+          return null;
+        }
+        get annotations() {
+          return null;
+        }
+        get source() {
+          return globalThis.window as WindowProxy;
+        }
+      }
+
+      const protoTool = new MockToolInterface();
+      expect(JSON.stringify(protoTool)).toBe("{}");
+      expect({ ...protoTool }).toEqual({});
+
+      const serialized = serializeWebMcpTool(protoTool);
+      expect(serialized).toEqual({
+        name: "proto_tool",
+        title: "Proto Tool",
+        description: "Prototype getter tool",
+        origin: "https://example.org",
+        inputSchema: null,
+        outputSchema: null,
+        annotations: null,
+      });
+      expect(JSON.parse(JSON.stringify(serialized))).toEqual(serialized);
+      expect(structuredClone(serialized)).toEqual(serialized);
+
+      // Legacy stringified schemas and annotations are also normalized
+      const legacySerialized = serializeWebMcpTool({
+        name: "legacy_tool",
+        description: "Legacy",
+        inputSchema: JSON.stringify({
+          type: "object",
+          properties: { q: { type: "string" } },
+        }),
+        outputSchema: JSON.stringify({ type: "string" }),
+        annotations: { readOnlyHint: true },
+        window: globalThis.window,
+        execute: async () => "ok",
+      });
+      expect(legacySerialized).toEqual({
+        name: "legacy_tool",
+        title: "",
+        description: "Legacy",
+        origin: "",
+        inputSchema: { type: "object", properties: { q: { type: "string" } } },
+        outputSchema: { type: "string" },
+        annotations: { readOnlyHint: true },
+      });
+      expect(structuredClone(legacySerialized)).toEqual(legacySerialized);
+
+      // Also works on normalized tools from getWebMcpTools()
+      Object.defineProperty((globalThis as any).document, "modelContext", {
+        configurable: true,
+        value: {
+          registerTool: mockRegisterTool,
+          getTools: jest.fn(async () => [protoTool]),
+        },
+      });
+      const [normalized] = await getWebMcpTools();
+      expect(serializeWebMcpTool(normalized)).toEqual({
+        name: "proto_tool",
+        title: "Proto Tool",
+        description: "Prototype getter tool",
+        origin: "https://example.org",
+        inputSchema: null,
+        outputSchema: null,
+        annotations: null,
+      });
+    });
   });
 
   describe("resolveWebMcpToolAnnotations", () => {
@@ -970,6 +1302,29 @@ describe("webmcp integration", () => {
       warnSpy.mockRestore();
       errorSpy.mockRestore();
     });
+
+    it("bails out cleanly on NotAllowedError DOMException from registerTool (WebMCP Permissions Policy)", async () => {
+      const notAllowedError = new DOMException(
+        'Access to the feature "tools" is disallowed by permissions policy.',
+        "NotAllowedError",
+      );
+      mockRegisterTool.mockRejectedValueOnce(notAllowedError);
+
+      const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+      const errorSpy = jest
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+
+      const result = await registerWebMcpTools(null, jest.fn());
+
+      expect(result).toBe(false);
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy.mock.calls[0][0]).toContain("NotAllowedError");
+      expect(errorSpy).not.toHaveBeenCalled();
+
+      warnSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
   });
 
   describe("WebMCP lifecycle events (PR #245 / Chrome 156+)", () => {
@@ -1088,6 +1443,33 @@ describe("webmcp integration", () => {
         });
 
         expect(getWebMcpEventTarget("toolactivated")).toBe(window);
+      });
+
+      it("degrades gracefully when document.modelContext getter throws", async () => {
+        const {
+          getWebMcpEventTarget,
+          addWebMcpEventListener,
+          onWebMcpToolChange,
+        } = await import("./webmcp.js");
+
+        Object.defineProperty((globalThis as any).document, "modelContext", {
+          configurable: true,
+          get() {
+            throw new TypeError("crypto.randomUUID is not a function");
+          },
+        });
+
+        expect(getWebMcpEventTarget("toolactivated")).toBe(window);
+
+        const listener = jest.fn();
+        const unsubscribe = addWebMcpEventListener("toolactivated", listener);
+        const unsubscribeChange = onWebMcpToolChange(listener);
+
+        expect(typeof unsubscribe).toBe("function");
+        expect(typeof unsubscribeChange).toBe("function");
+
+        unsubscribe();
+        unsubscribeChange();
       });
     });
 

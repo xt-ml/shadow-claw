@@ -321,10 +321,10 @@ export async function executeClientControlCommand(
               name: t.name,
               description: t.description,
               inputSchema: t.inputSchema,
-              ...(t.outputSchema !== undefined
+              ...(t.outputSchema !== undefined && t.outputSchema !== null
                 ? { outputSchema: t.outputSchema }
                 : {}),
-              annotations: t.annotations,
+              ...(t.annotations ? { annotations: t.annotations } : {}),
             })),
           };
         }
@@ -479,7 +479,7 @@ export async function executeClientControlCommand(
         }
 
         if (typeof ctx.executeTool === "function") {
-          // 1. Pass the actual ModelContextTool object from getTools() if available (required by native Chromium)
+          // 1. Pass the genuine Tool interface instance (Chrome 160+ / PR #348) or legacy ModelContextTool from getTools()
           if (matchedTool) {
             try {
               const res = await executeWebMcpTool(ctx, matchedTool, args.input);

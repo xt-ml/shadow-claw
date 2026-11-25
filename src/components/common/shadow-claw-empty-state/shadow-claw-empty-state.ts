@@ -1,4 +1,4 @@
-import ShadowClawElement from "../../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../../shadow-claw-element.js";
 import shadowClawEmptyStateStyles from "./shadow-claw-empty-state.css" with { type: "css" };
 import shadowClawEmptyStateTemplate from "./shadow-claw-empty-state.html" with { type: "html" };
 
@@ -38,6 +38,4 @@ export class ShadowClawEmptyState extends ShadowClawElement {
   }
 }
 
-if (!customElements.get(elementName)) {
-  customElements.define(elementName, ShadowClawEmptyState);
-}
+defineElement(elementName, ShadowClawEmptyState);

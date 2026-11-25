@@ -42,7 +42,7 @@ import type { AppDialogOptions } from "../../ui/types.js";
 import type { ShadowClawTerminal } from "../shadow-claw-terminal/shadow-claw-terminal.js";
 import type { ProviderHelpType } from "../types.js";
 
-import ShadowClawElement from "../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../shadow-claw-element.js";
 
 export {
   DEFAULT_SIDEBAR_WIDTH_PX,
@@ -610,6 +610,4 @@ export class ShadowClaw extends ShadowClawElement {
   }
 }
 
-if (!customElements.get(elementName)) {
-  customElements.define(elementName, ShadowClaw);
-}
+defineElement(elementName, ShadowClaw);

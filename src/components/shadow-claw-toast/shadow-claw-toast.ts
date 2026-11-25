@@ -1,7 +1,7 @@
 import { effect } from "../../core/effect.js";
 import { toastStore, type Toast, type ToastType } from "../../stores/toast.js";
 
-import ShadowClawElement from "../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../shadow-claw-element.js";
 import shadowClawToastStyles from "./shadow-claw-toast.css" with { type: "css" };
 import shadowClawToastTemplate from "./shadow-claw-toast.html" with { type: "html" };
 
@@ -186,9 +186,7 @@ export class ShadowClawToast extends ShadowClawElement {
   }
 }
 
-if (!customElements.get(elementName)) {
-  customElements.define(elementName, ShadowClawToast);
-}
+defineElement(elementName, ShadowClawToast);
 
 export {
   toastStore,

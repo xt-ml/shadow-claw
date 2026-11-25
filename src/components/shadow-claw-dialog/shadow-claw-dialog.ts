@@ -1,4 +1,6 @@
-export class ShadowClawDialog extends HTMLElement {
+import { BaseElement, defineElement } from "../shadow-claw-element.js";
+
+export class ShadowClawDialog extends BaseElement {
   static get observedAttributes(): string[] {
     return ["dialog-class", "dialog-aria-label", "dialog-aria-labelledby"];
   }
@@ -105,6 +107,4 @@ export class ShadowClawDialog extends HTMLElement {
   }
 }
 
-if (!customElements.get("shadow-claw-dialog")) {
-  customElements.define("shadow-claw-dialog", ShadowClawDialog);
-}
+defineElement("shadow-claw-dialog", ShadowClawDialog);

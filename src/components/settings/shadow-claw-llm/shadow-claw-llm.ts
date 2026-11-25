@@ -68,7 +68,7 @@ import type { ShadowClawDatabase } from "../../../db/types.js";
 import type { LLMProvider } from "../../../subsystems/providers/types.js";
 import type { AppDialogOptions } from "../../../ui/types.js";
 
-import ShadowClawElement from "../../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../../shadow-claw-element.js";
 import shadowClawLlmStyles from "./shadow-claw-llm.css" with { type: "css" };
 import shadowClawLlmTemplate from "./shadow-claw-llm.html" with { type: "html" };
 
@@ -2494,6 +2494,4 @@ export class ShadowClawLlm extends ShadowClawElement {
   }
 }
 
-if (!customElements.get(elementName)) {
-  customElements.define(elementName, ShadowClawLlm);
-}
+defineElement(elementName, ShadowClawLlm);

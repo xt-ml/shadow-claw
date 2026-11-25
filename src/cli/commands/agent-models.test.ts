@@ -354,5 +354,31 @@ describe("agent model command and declarative agent config", () => {
         globalThis.fetch = originalFetch;
       }
     });
+
+    it("migrates legacy local assets/cache models to shared model dir via runAgentModel('migrate')", async () => {
+      const { runAgentModel } = await import("./agent.js");
+      const srcRoot = path.join(tmpDir, "assets/cache");
+      const tgtRoot = path.join(tmpDir, "shared-target");
+      await mkdir(path.join(srcRoot, "llamafile"), { recursive: true });
+      await writeFile(
+        path.join(srcRoot, "llamafile/test.llamafile"),
+        "bin-data",
+        "utf8",
+      );
+
+      const res: any = await runAgentModel("migrate", undefined, {
+        workspace: tmpDir,
+        source: srcRoot,
+        target: tgtRoot,
+        copy: true,
+        quiet: true,
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.migratedFiles).toBe(1);
+      expect(
+        await readFile(path.join(tgtRoot, "llamafile/test.llamafile"), "utf8"),
+      ).toBe("bin-data");
+    });
   });
 });

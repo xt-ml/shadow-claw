@@ -30,7 +30,7 @@ import type { Orchestrator } from "../../../core/orchestrator/orchestrator.js";
 import type { ShadowClawDatabase } from "../../../db/types.js";
 import type { RoomMeta } from "../../../subsystems/channels/types.js";
 
-import ShadowClawElement from "../../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../../shadow-claw-element.js";
 import shadowClawPeerjsStyles from "./shadow-claw-peerjs.css" with { type: "css" };
 import shadowClawPeerjsTemplate from "./shadow-claw-peerjs.html" with { type: "html" };
 
@@ -900,6 +900,4 @@ export class ShadowClawPeerJs extends ShadowClawElement {
   }
 }
 
-if (!customElements.get(elementName)) {
-  customElements.define(elementName, ShadowClawPeerJs);
-}
+defineElement(elementName, ShadowClawPeerJs);

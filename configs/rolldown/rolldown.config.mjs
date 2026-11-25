@@ -316,6 +316,13 @@ export function getLibraryEntries(rootDir = projectRoot) {
       "src/components/shadow-claw-element.ts";
   }
 
+  const baseStylesPath = join(rootDir, "src/components/common/base-styles.ts");
+  if (fs.existsSync(baseStylesPath)) {
+    entries["components/base-styles"] = "src/components/common/base-styles.ts";
+    entries["components/common/base-styles"] =
+      "src/components/common/base-styles.ts";
+  }
+
   const componentDirs = [
     "src/components",
     "src/components/common",
@@ -786,13 +793,15 @@ function rolldownImportAttributes() {
 
         return {
           code: `
-            const doc = new DOMParser().parseFromString(\`${escaped}\`, 'text/html');
-            const templateEl = doc.querySelector('template');
             let elements = [];
-            if (templateEl) {
-              elements = Array.from(templateEl.content.children);
-            } else {
-              elements = Array.from(doc.head.children).concat(Array.from(doc.body.children));
+            if (typeof DOMParser !== "undefined") {
+              const doc = new DOMParser().parseFromString(\`${escaped}\`, 'text/html');
+              const templateEl = doc.querySelector('template');
+              if (templateEl) {
+                elements = Array.from(templateEl.content.children);
+              } else {
+                elements = Array.from(doc.head.children).concat(Array.from(doc.body.children));
+              }
             }
 
             export default elements;
@@ -809,8 +818,14 @@ function rolldownImportAttributes() {
 
         return {
           code: `
-            const sheet = new CSSStyleSheet();
-            sheet.replaceSync(\`${escaped}\`);
+            const sheet =
+              typeof CSSStyleSheet !== "undefined" &&
+              typeof CSSStyleSheet.prototype?.replaceSync === "function"
+                ? new CSSStyleSheet()
+                : null;
+            if (sheet) {
+              sheet.replaceSync(\`${escaped}\`);
+            }
             export default sheet;
           `,
           moduleType: "js",

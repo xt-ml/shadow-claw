@@ -33,7 +33,7 @@ import "../common/shadow-claw-provider-model-picker/shadow-claw-provider-model-p
 import "../common/shadow-claw-provider-module-settings/shadow-claw-provider-module-settings.js";
 import "../shadow-claw-dialog/shadow-claw-dialog.js";
 
-import ShadowClawElement from "../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../shadow-claw-element.js";
 import shadowClawConversationsStyles from "./shadow-claw-conversations.css" with { type: "css" };
 import shadowClawConversationsTemplate from "./shadow-claw-conversations.html" with { type: "html" };
 
@@ -1958,4 +1958,4 @@ export class ShadowClawConversations extends ShadowClawElement {
   }
 }
 
-customElements.define("shadow-claw-conversations", ShadowClawConversations);
+defineElement("shadow-claw-conversations", ShadowClawConversations);

@@ -1,10 +1,11 @@
-import ShadowClawElement from "../../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../../shadow-claw-element.js";
 import shadowClawCardStyles from "./shadow-claw-card.css" with { type: "css" };
 import shadowClawCardTemplate from "./shadow-claw-card.html" with { type: "html" };
 
 const elementName = "shadow-claw-card";
 
 export class ShadowClawCard extends ShadowClawElement {
+  static observedAttributes = ["label", "meta", "badge"];
   static styles = shadowClawCardStyles;
   static template = shadowClawCardTemplate;
 
@@ -39,6 +40,4 @@ export class ShadowClawCard extends ShadowClawElement {
   }
 }
 
-if (!customElements.get(elementName)) {
-  customElements.define(elementName, ShadowClawCard);
-}
+defineElement(elementName, ShadowClawCard);

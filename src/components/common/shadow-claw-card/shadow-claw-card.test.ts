@@ -45,6 +45,18 @@ describe("shadow-claw-card", () => {
     el.attributeChangedCallback();
     expect(label?.textContent).toBe("Updated Label");
 
+    // Browser automatically triggers attributeChangedCallback via observedAttributes
+    expect(ShadowClawCard.observedAttributes).toEqual([
+      "label",
+      "meta",
+      "badge",
+    ]);
+    el.setAttribute("meta", "Updated Meta");
+    el.setAttribute("badge", "Active");
+    expect(meta?.textContent).toBe("Updated Meta");
+    expect(badge?.textContent).toBe("Active");
+    expect(badge?.hasAttribute("hidden")).toBe(false);
+
     el.remove();
   });
 

@@ -39,7 +39,7 @@ import { renderVideo } from "./catalog/basic/video.js";
 import type { A2UIAction, A2UIEnvelope } from "../../ui/a2ui/types.js";
 import type { ScopeContext, SurfaceState } from "../types.js";
 
-import ShadowClawElement from "../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../shadow-claw-element.js";
 import shadowClawA2uiStyles from "./shadow-claw-a2ui.css" with { type: "css" };
 import shadowClawA2uiTemplate from "./shadow-claw-a2ui.html" with { type: "html" };
 
@@ -627,9 +627,7 @@ export class ShadowClawA2UI extends ShadowClawElement {
   }
 }
 
-if (!customElements.get(elementName)) {
-  customElements.define(elementName, ShadowClawA2UI);
-}
+defineElement(elementName, ShadowClawA2UI);
 
 // Register basic catalog components
 globalComponentRegistry.register("Text", (spec, surface) =>

@@ -46,22 +46,44 @@ export class IframeBroadcastProxy {
   }
 
   /**
-   * Declaratively scan tool execution code definitions for BroadcastChannel names
-   * and register them automatically.
+   * Declaratively scan tool execution code definitions and channel lists for
+   * BroadcastChannel names and register them automatically.
    */
   public registerChannelsFromTools(
-    tools: Array<{ execution?: { code?: string }; code?: string }>,
+    tools: Array<{
+      channels?: string[];
+      execution?: { code?: string };
+      code?: string;
+    }>,
   ): void {
     if (!Array.isArray(tools)) return;
 
     const bcRegex = /new\s+BroadcastChannel\s*\(\s*['"`]([^'"`]+)['"`]\s*\)/g;
+    const bridgeChannelRegex =
+      /\b(?:commandsChannel|stateChannel)\s*:\s*['"`]([^'"`]+)['"`]/g;
+
     for (const tool of tools) {
+      if (Array.isArray(tool.channels)) {
+        for (const ch of tool.channels) {
+          if (typeof ch === "string" && ch) {
+            this.registerChannel(ch);
+          }
+        }
+      }
+
       const code = tool.execution?.code || tool.code || "";
       if (!code) continue;
 
       let match: RegExpExecArray | null;
       bcRegex.lastIndex = 0;
       while ((match = bcRegex.exec(code)) !== null) {
+        if (match[1]) {
+          this.registerChannel(match[1]);
+        }
+      }
+
+      bridgeChannelRegex.lastIndex = 0;
+      while ((match = bridgeChannelRegex.exec(code)) !== null) {
         if (match[1]) {
           this.registerChannel(match[1]);
         }

@@ -21,13 +21,8 @@ export async function executeShell(
 ): Promise<ShellResult> {
   try {
     const fs = await createFileSystem(db, groupId);
-    const isJestRuntime = Boolean(
-      (globalThis as any).process?.env?.JEST_WORKER_ID,
-    );
     const bash = new Bash({
       fs,
-      cwd: "/home/user",
-      ...(isJestRuntime ? { defenseInDepth: false } : {}),
       // https://github.com/vercel-labs/just-bash?tab=readme-ov-file#network-access
       network: {
         dangerouslyAllowFullInternetAccess: allowFullInternetAccess,

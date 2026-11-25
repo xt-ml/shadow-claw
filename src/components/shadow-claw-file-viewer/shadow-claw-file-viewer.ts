@@ -70,7 +70,7 @@ import {
   isApprovedScript,
   loadApprovedCustomElementScript,
 } from "../../security/custom-element-security.js";
-import ShadowClawElement from "../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../shadow-claw-element.js";
 import { MonacoEditorController } from "./monaco/monaco-editor-controller.js";
 import type {
   MonacoCustomProperties,
@@ -2722,6 +2722,4 @@ export class ShadowClawFileViewer extends ShadowClawElement {
   }
 }
 
-if (!customElements.get(elementName)) {
-  customElements.define(elementName, ShadowClawFileViewer);
-}
+defineElement(elementName, ShadowClawFileViewer);

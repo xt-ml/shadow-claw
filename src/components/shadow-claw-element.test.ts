@@ -1,190 +1,244 @@
 import { jest } from "@jest/globals";
+import { spawnSync } from "node:child_process";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+import DefaultShadowClawElement, {
+  ShadowClawElement,
+  BaseElement,
+  defineElement,
+} from "./shadow-claw-element.js";
 
-const ShadowClawElement = (await import("./shadow-claw-element.js")).default;
+describe("ShadowClawElement", () => {
+  it("exports named ShadowClawElement, default export, BaseElement, and defineElement", () => {
+    expect(DefaultShadowClawElement).toBe(ShadowClawElement);
+    expect(BaseElement).toBe(HTMLElement);
+    expect(typeof defineElement).toBe("function");
+  });
 
-// ---------------------------------------------------------------------------
-// Concrete testable subclass
-// ---------------------------------------------------------------------------
-const mockSheet = new CSSStyleSheet();
-const mockDiv = document.createElement("div");
-mockDiv.className = "test-template-element";
+  it("adopts static styles as a CSSStyleSheet, a CSS string, or an array (with caching for strings)", () => {
+    const sharedCss = ".box { color: red; }";
+    const extraSheet = new CSSStyleSheet();
+    extraSheet.replaceSync(".extra { display: flex; }");
 
-class TestElement extends (ShadowClawElement as any) {
-  static styles = mockSheet;
-  static template = [mockDiv];
-}
+    class StringStyledElement extends ShadowClawElement {
+      static styles = sharedCss;
+      static template = `<div class="box">Hello</div>`;
+    }
 
-customElements.define("shadow-claw-test-element", TestElement as any);
+    class ArrayStyledElement extends ShadowClawElement {
+      static styles = [sharedCss, extraSheet];
+      static template = `<div class="box extra">World</div>`;
+    }
 
-/** Build and connect a fresh TestElement. Returns it cast to `any`. */
-function makeEl(): any {
-  const el = new (TestElement as any)();
-  document.body.appendChild(el);
+    defineElement("test-string-styled", StringStyledElement);
+    defineElement("test-array-styled", ArrayStyledElement);
 
-  return el;
-}
+    const el1 = new StringStyledElement();
+    const el2 = new StringStyledElement();
+    const el3 = new ArrayStyledElement();
 
-// ---------------------------------------------------------------------------
-// Constructor and Lifecycle
-// ---------------------------------------------------------------------------
-describe("ShadowClawElement constructor", () => {
-  it("attaches an open shadow root", () => {
-    const el = makeEl();
+    expect(el1.shadowRoot?.adoptedStyleSheets.length).toBe(1);
+    expect(el2.shadowRoot?.adoptedStyleSheets.length).toBe(1);
+    // Cached CSSStyleSheet instance reused across instances for identical CSS string
+    expect(el1.shadowRoot?.adoptedStyleSheets[0]).toBe(
+      el2.shadowRoot?.adoptedStyleSheets[0],
+    );
+    expect(el3.shadowRoot?.adoptedStyleSheets.length).toBe(2);
+    expect(el3.shadowRoot?.adoptedStyleSheets[1]).toBe(extraSheet);
+    expect(el1.shadowRoot?.querySelector(".box")?.textContent).toBe("Hello");
+    expect(el3.shadowRoot?.querySelector(".box.extra")?.textContent).toBe(
+      "World",
+    );
+
+    // Clones fresh template nodes per instance
+    expect(el1.shadowRoot?.querySelector(".box")).not.toBe(
+      el2.shadowRoot?.querySelector(".box"),
+    );
+  });
+
+  it("adopts static template from HTMLTemplateElement and clones per instance", () => {
+    const tpl = document.createElement("template");
+    tpl.innerHTML = `<span class="tpl-span">FromTemplate</span>`;
+
+    class TemplateEl extends ShadowClawElement {
+      static template = tpl;
+    }
+
+    defineElement("test-tpl-el", TemplateEl);
+    const a = new TemplateEl();
+    const b = new TemplateEl();
+
+    expect(a.shadowRoot?.querySelector(".tpl-span")?.textContent).toBe(
+      "FromTemplate",
+    );
+    expect(b.shadowRoot?.querySelector(".tpl-span")?.textContent).toBe(
+      "FromTemplate",
+    );
+    expect(a.shadowRoot?.querySelector(".tpl-span")).not.toBe(
+      b.shadowRoot?.querySelector(".tpl-span"),
+    );
+  });
+
+  it("forwards static shadowRootOptions (e.g. delegatesFocus) while enforcing mode: 'open'", () => {
+    class FocusEl extends ShadowClawElement {
+      static shadowRootOptions = {
+        delegatesFocus: true,
+        mode: "closed" as ShadowRootMode,
+      };
+      static template = `<button type="button">Press</button>`;
+    }
+
+    const spy = jest.spyOn(HTMLElement.prototype, "attachShadow");
+    defineElement("test-focus-el", FocusEl);
+    const el = new FocusEl();
+
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        delegatesFocus: true,
+        mode: "open",
+      }),
+    );
     expect(el.shadowRoot).not.toBeNull();
-    el.remove();
+    spy.mockRestore();
   });
 
-  it("synchronously applies the template during construction", () => {
-    const el = makeEl();
-    const root = el.shadowRoot as ShadowRoot;
-
-    // We expect the cloned element to be in the shadow root
-    const injectedDiv = root.querySelector(".test-template-element");
-    expect(injectedDiv).toBeTruthy();
-    expect(injectedDiv).not.toBe(mockDiv); // should be a clone
-    el.remove();
-  });
-
-  it("synchronously applies adoptedStyleSheets during construction", () => {
-    const el = makeEl();
-    const root = el.shadowRoot as ShadowRoot;
-
-    expect((root as any).adoptedStyleSheets).toContain(mockSheet);
-    el.remove();
-  });
-
-  it("runs registered cleanup callbacks on disconnect", () => {
-    const el = makeEl();
+  it("runs registered cleanups on disconnectedCallback", () => {
     const cleanup = jest.fn();
 
-    (el as any).addCleanup(cleanup);
-    (el as any).addCleanup(cleanup);
+    class CleanupEl extends ShadowClawElement {
+      connectedCallback() {
+        super.connectedCallback();
+        this.addCleanup(cleanup);
+      }
+    }
+
+    defineElement("test-cleanup-el", CleanupEl);
+    const el = new CleanupEl();
+    document.body.appendChild(el);
+    expect(cleanup).not.toHaveBeenCalled();
+
     el.remove();
-
-    expect(cleanup).toHaveBeenCalledTimes(2);
+    expect(cleanup).toHaveBeenCalledTimes(1);
   });
 
-  it("removes DSD styles when styles are applied", () => {
-    class DsdElement extends (ShadowClawElement as any) {
-      static styles = mockSheet;
-    }
-    customElements.define("shadow-claw-dsd-test", DsdElement as any);
+  it("automatically installs and cleans up page swipe guard when static disablePageSwipe = true", () => {
+    const viewer = document.createElement("div");
+    viewer.className = "pages__viewer";
 
-    const el = document.createElement("shadow-claw-dsd-test") as any;
-    const dsdStyle = document.createElement("style");
-    dsdStyle.setAttribute("data-dsd-style", "");
-    const dsdLink = document.createElement("link");
-    dsdLink.rel = "stylesheet";
-    el.shadowRoot.appendChild(dsdStyle);
-    el.shadowRoot.appendChild(dsdLink);
-
-    // Call constructor logic/trigger stylesheet removal
-    const el2 = new (DsdElement as any)();
-    expect(
-      el2.shadowRoot.querySelectorAll(
-        'style[data-dsd-style], link[rel="stylesheet"]',
-      ).length,
-    ).toBe(0);
-  });
-
-  it("handles existing shadow root (e.g. Declarative Shadow DOM)", () => {
-    class PreExistingRootElement extends (ShadowClawElement as any) {
-      static styles = mockSheet;
-      static template = [mockDiv];
+    class GuardedEl extends ShadowClawElement {
+      static disablePageSwipe = true;
     }
 
-    // Create element with pre-existing shadowRoot before constructor if possible or test class
-    customElements.define(
-      "shadow-claw-existing-root-test",
-      PreExistingRootElement as any,
-    );
+    defineElement("test-guarded-el", GuardedEl);
+    const el = new GuardedEl();
+    viewer.appendChild(el);
+    document.body.appendChild(viewer);
 
-    // Using custom element with inner template
-    const el = new (PreExistingRootElement as any)();
-    expect(el.shadowRoot).toBeTruthy();
+    expect(el.getAttribute("data-no-swipe")).toBe("true");
+    expect(el.getAttribute("data-no-nav")).toBe("true");
+    expect(viewer.getAttribute("data-no-swipe")).toBe("true");
+    expect(viewer.getAttribute("data-no-nav")).toBe("true");
+
+    el.remove();
+    expect(viewer.hasAttribute("data-no-swipe")).toBe(false);
+    expect(viewer.hasAttribute("data-no-nav")).toBe(false);
+
+    viewer.remove();
   });
 
-  it("works when subclass has no template and no styles", () => {
-    class EmptyElement extends (ShadowClawElement as any) {}
-    customElements.define("shadow-claw-empty-test", EmptyElement as any);
+  it("defineElement registers once and safely no-ops when customElements is unavailable", () => {
+    class OnceEl extends ShadowClawElement {}
+    defineElement("test-once-el", OnceEl);
+    expect(customElements.get("test-once-el")).toBe(OnceEl);
 
-    const el = new (EmptyElement as any)();
-    expect(el.shadowRoot).toBeTruthy();
-    expect(el.shadowRoot.childNodes.length).toBe(0);
-  });
+    // Calling again does not throw
+    expect(() => defineElement("test-once-el", OnceEl)).not.toThrow();
 
-  it("upgrades and calls ensureDialog on shadow-claw-dialog elements in connectedCallback", () => {
-    const ensureDialogMock = jest.fn();
-    class MockDialog extends HTMLElement {
-      ensureDialog = ensureDialogMock;
-    }
-    customElements.define("shadow-claw-dialog", MockDialog);
-
-    const dialogDiv = document.createElement("div");
-    const dialogEl = document.createElement("shadow-claw-dialog");
-    dialogDiv.appendChild(dialogEl);
-
-    class DialogHostElement extends (ShadowClawElement as any) {
-      static template = [dialogDiv];
-    }
-    customElements.define("shadow-claw-dialog-host", DialogHostElement as any);
-
-    const host = new (DialogHostElement as any)();
-    document.body.appendChild(host);
-
-    expect(ensureDialogMock).toHaveBeenCalled();
-    host.remove();
-  });
-
-  it("handles pre-existing shadowRoot before upgrade (DSD)", () => {
-    const preHost = document.createElement("shadow-claw-dsd-pre");
-    preHost.attachShadow({ mode: "open" });
-    document.body.appendChild(preHost);
-
-    class DsdPreElement extends (ShadowClawElement as any) {
-      static styles = mockSheet;
-      static template = [mockDiv];
-    }
-    customElements.define("shadow-claw-dsd-pre", DsdPreElement as any);
-
-    expect(preHost.shadowRoot).toBeTruthy();
-    preHost.remove();
-  });
-
-  it("handles dialogs without ensureDialog function", () => {
-    class NoEnsureDialog extends HTMLElement {}
-    customElements.define("shadow-claw-dialog-no-func", NoEnsureDialog);
-
-    const dialogDiv = document.createElement("div");
-    const fakeDialog = document.createElement("shadow-claw-dialog");
-    // Remove ensureDialog or set it to undefined
-    (fakeDialog as any).ensureDialog = undefined;
-    dialogDiv.appendChild(fakeDialog);
-
-    class DialogHostNoFunc extends (ShadowClawElement as any) {
-      static template = [dialogDiv];
-    }
-    customElements.define(
-      "shadow-claw-dialog-no-func-host",
-      DialogHostNoFunc as any,
-    );
-
-    const host = new (DialogHostNoFunc as any)();
-    expect(() => host.connectedCallback()).not.toThrow();
-  });
-
-  it("safely handles ensureShadowDialogs when shadowRoot is missing", () => {
-    const el = makeEl();
-    const origRoot = el.shadowRoot;
-    Object.defineProperty(el, "shadowRoot", {
-      value: null,
+    const originalCustomElements = globalThis.customElements;
+    Object.defineProperty(globalThis, "customElements", {
+      value: undefined,
       configurable: true,
     });
-    expect(() => el.connectedCallback()).not.toThrow();
-    Object.defineProperty(el, "shadowRoot", {
-      value: origRoot,
+    try {
+      expect(() => defineElement("test-missing-ce", OnceEl)).not.toThrow();
+    } finally {
+      Object.defineProperty(globalThis, "customElements", {
+        value: originalCustomElements,
+        configurable: true,
+      });
+    }
+  });
+
+  it("falls back to <style> when CSSStyleSheet.replaceSync is unavailable", () => {
+    const origDesc = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "CSSStyleSheet",
+    );
+    Object.defineProperty(globalThis, "CSSStyleSheet", {
+      value: undefined,
       configurable: true,
     });
-    el.remove();
+
+    try {
+      class FallbackStyleEl extends ShadowClawElement {
+        static styles = ".fallback { color: blue; }";
+        static template = `<div class="fallback">OK</div>`;
+      }
+      defineElement("test-fallback-style-el", FallbackStyleEl);
+      const el = new FallbackStyleEl();
+      const styleTag = el.shadowRoot?.querySelector("style");
+      expect(styleTag?.textContent).toContain(".fallback { color: blue; }");
+    } finally {
+      if (origDesc) {
+        Object.defineProperty(globalThis, "CSSStyleSheet", origDesc);
+      }
+    }
+  });
+
+  it("runs in pure Node.js without HTMLElement or customElements", () => {
+    const tsFile = path.resolve(
+      process.cwd(),
+      "src/components/shadow-claw-element.ts",
+    );
+    const script = `
+      import fs from "node:fs";
+      import { registerHooks } from "node:module";
+      import { fileURLToPath, pathToFileURL } from "node:url";
+
+      registerHooks({
+        resolve(specifier, context, nextResolve) {
+          if (specifier.startsWith(".") && specifier.endsWith(".js") && context.parentURL) {
+            const parentPath = fileURLToPath(context.parentURL);
+            const candidate = new URL(specifier.replace(/\\.js$/, ".ts"), pathToFileURL(parentPath));
+            if (fs.existsSync(candidate)) {
+              return { shortCircuit: true, url: candidate.href };
+            }
+          }
+          return nextResolve(specifier, context);
+        },
+      });
+
+      const { ShadowClawElement, BaseElement, defineElement } = await import(${JSON.stringify(pathToFileURL(tsFile).href)});
+      if (typeof BaseElement !== "function") throw new Error("BaseElement missing");
+      class MyNodeEl extends ShadowClawElement {
+        static styles = ".a { color: red; }";
+        static disablePageSwipe = true;
+      }
+      defineElement("my-node-el", MyNodeEl);
+      const instance = new MyNodeEl();
+      instance.connectedCallback();
+      instance.disconnectedCallback();
+    `;
+    const res = spawnSync(
+      process.execPath,
+      ["--experimental-strip-types", "--input-type=module", "-e", script],
+      { encoding: "utf8" },
+    );
+    if (res.status !== 0) {
+      throw new Error(
+        res.error?.message || res.stderr || res.stdout || "Node smoke failed",
+      );
+    }
+    expect(res.status).toBe(0);
   });
 });

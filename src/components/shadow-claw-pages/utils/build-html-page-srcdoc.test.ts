@@ -150,4 +150,55 @@ describe("buildHtmlPageSrcdoc", () => {
       /<script\b[^>]*src=["'][^"']*feed-scroller\.js["']/,
     );
   });
+
+  it("injects a nonce-gated absolute importmap into srcdoc when custom element scripts are injected", async () => {
+    setAllowedCustomElements(["block-garden"]);
+    const script = document.createElement("script");
+    script.id = "shadow-claw-site-config";
+    script.type = "application/json";
+    script.textContent = JSON.stringify({
+      customElements: {
+        allowedElements: ["block-garden"],
+        scripts: ["pages/main/block-garden.js"],
+      },
+    });
+    document.head.appendChild(script);
+
+    const html = await buildHtmlPageSrcdoc({
+      content: '<block-garden id="game"></block-garden>',
+      filePath: "index.html",
+      groupId: "main",
+      origin: "http://localhost:8888",
+    });
+
+    const importMapMatch = html.match(
+      /<script type="importmap" nonce="([a-f0-9]+)">([\s\S]*?)<\/script>/,
+    );
+    expect(importMapMatch).not.toBeNull();
+    const parsedMap = JSON.parse(importMapMatch![2]);
+    expect(parsedMap.imports["shadow-claw"]).toBe(
+      "http://localhost:8888/lib/index.js",
+    );
+    expect(parsedMap.imports["shadow-claw/signals"]).toBe(
+      "http://localhost:8888/lib/utils/signals.js",
+    );
+    expect(
+      parsedMap.imports["shadow-claw/components/shadow-claw-status-bar"],
+    ).toBe("http://localhost:8888/lib/components/shadow-claw-status-bar.js");
+    expect(parsedMap.imports["shadow-claw/utils/page-swipe-guard"]).toBe(
+      "http://localhost:8888/lib/utils/page-swipe-guard.js",
+    );
+    expect(parsedMap.imports["shadow-claw/utils/workbench-fullscreen"]).toBe(
+      "http://localhost:8888/lib/utils/workbench-fullscreen.js",
+    );
+    expect(parsedMap.imports["shadow-claw/utils/workspace-fs"]).toBe(
+      "http://localhost:8888/lib/utils/workspace-fs.js",
+    );
+    expect(parsedMap.imports["shadow-claw/utils/tool-adapter-bridge"]).toBe(
+      "http://localhost:8888/lib/utils/tool-adapter-bridge.js",
+    );
+    expect(html.indexOf('<script type="importmap"')).toBeLessThan(
+      html.indexOf('<script type="module"'),
+    );
+  });
 });

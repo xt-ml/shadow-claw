@@ -23,6 +23,13 @@ import { getSiteConfigCandidates } from "./utils/get-site-config-candidates.js";
 import { resolveBuildFlags } from "./utils/resolve-build-flags.js";
 import { syncServiceWorkerPrecacheRevisions } from "./utils/sync-service-worker-precache.js";
 import {
+  buildCdnLibImportMap,
+  buildLocalLibImportMap,
+  collectLibEntryPaths,
+  copyLibToPublic,
+  injectLibImportMap,
+} from "./utils/inject-lib-importmap.js";
+import {
   collectPageSources,
   prerenderDsdShell,
 } from "../prerender/dsd-shell/prerender-dsd-shell.js";
@@ -373,32 +380,18 @@ async function embedSingleFileBundle(
     );
 
     // 7. Inject importmap and module import before </head> if not already present (or update if already present)
-    if (idxHtml.includes('<script type="importmap">')) {
-      idxHtml = idxHtml.replace(
-        /"shadow-claw":\s*"[^"]*?\/dist\/lib\/index\.js"/g,
-        `"shadow-claw": "${cdnBase}/dist/lib/index.js"`,
+    const cdnImports = buildCdnLibImportMap(cdnBase);
+    idxHtml = injectLibImportMap(idxHtml, cdnImports, { kind: "cdn" });
+    if (!idxHtml.includes('import "shadow-claw";')) {
+      idxHtml = insertBeforeClosingHead(
+        idxHtml,
+        [
+          `  <!-- ShadowClaw Library Module -->`,
+          `  <script type="module">`,
+          `    import "shadow-claw";`,
+          `  </script>`,
+        ].join("\n"),
       );
-      idxHtml = idxHtml.replace(
-        /"shadow-claw\/":\s*"[^"]*?"/g,
-        `"shadow-claw/": "${cdnBase}/"`,
-      );
-    } else {
-      const importMapAndModule = [
-        `  <!-- Import Map -->`,
-        `  <script type="importmap">`,
-        `    {`,
-        `      "imports": {`,
-        `        "shadow-claw": "${cdnBase}/dist/lib/index.js",`,
-        `        "shadow-claw/": "${cdnBase}/"`,
-        `      }`,
-        `    }`,
-        `  </script>`,
-        `  <!-- ShadowClaw Library Module -->`,
-        `  <script type="module">`,
-        `    import "shadow-claw";`,
-        `  </script>`,
-      ].join("\n");
-      idxHtml = insertBeforeClosingHead(idxHtml, importMapAndModule);
     }
 
     // 8. Inject DOM dedent script for embedded markdown scripts if indented by formatters
@@ -678,6 +671,14 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
       }
 
       await run("npm run -s rolldown");
+      if (!options.singleFile) {
+        await run("npm run -s rolldown:lib");
+        if (await pathExists("dist/lib")) {
+          await copyLibToPublic("dist/lib", "dist/public/lib", {
+            isProduction,
+          });
+        }
+      }
 
       const siteConfigCandidate = await findFirstExistingPath(
         getSiteConfigCandidates(),
@@ -768,8 +769,16 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
 
       try {
         const idxPath = "dist/public/index.html";
-        const idxHtml = await readFile(idxPath, "utf8");
-        await writeFile(idxPath, patchBaseHref(idxHtml, basePath), "utf8");
+        let idxHtml = patchBaseHref(await readFile(idxPath, "utf8"), basePath);
+        if (!options.singleFile && (await pathExists("dist/public/lib"))) {
+          const libEntries = await collectLibEntryPaths("dist/public/lib");
+          idxHtml = injectLibImportMap(
+            idxHtml,
+            buildLocalLibImportMap(basePath, libEntries),
+            { kind: "local" },
+          );
+        }
+        await writeFile(idxPath, idxHtml, "utf8");
 
         const sharePath = "dist/public/share/share-target.html";
         if (await pathExists(sharePath)) {
@@ -977,6 +986,23 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
           }
         }
       } catch {}
+    }
+
+    // 1b. Ensure library runtime bundles are available and published to /lib/
+    if (!options.singleFile) {
+      const toolchainLib = join(toolchainRoot, "dist/lib");
+      const toolchainLibBuilt = await pathExists(
+        join(toolchainLib, "index.js"),
+      );
+      if (!toolchainLibBuilt) {
+        log("Building ShadowClaw library runtime...");
+        await run("npm run -s rolldown:lib", { cwd: toolchainRoot });
+      }
+      if (await pathExists(toolchainLib)) {
+        await copyLibToPublic(toolchainLib, join(distPublicDir, "lib"), {
+          isProduction,
+        });
+      }
     }
 
     // 2. Ensure default toolchain assets (fonts) are available.
@@ -1305,6 +1331,18 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
           }
         }
       }
+      if (!options.singleFile) {
+        const publicLibDir = join(distPublicDir, "lib");
+        if (await pathExists(publicLibDir)) {
+          const libEntries = await collectLibEntryPaths(publicLibDir);
+          idxHtml = injectLibImportMap(
+            idxHtml,
+            buildLocalLibImportMap(basePath, libEntries),
+            { kind: "local" },
+          );
+        }
+      }
+
       await writeFile(indexPath, idxHtml, "utf8");
 
       const sharePath = join(distPublicDir, "share/share-target.html");

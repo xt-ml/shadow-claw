@@ -52,6 +52,9 @@ describe("app", () => {
     jest.unstable_mockModule("./routes/docs.js", () => ({
       registerDocsRoutes: jest.fn(),
     }));
+    jest.unstable_mockModule("./routes/model-cache.js", () => ({
+      registerModelCacheRoutes: jest.fn(),
+    }));
     jest.unstable_mockModule(
       "../subsystems/notifications/push-store.js",
       () => ({

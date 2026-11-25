@@ -28,7 +28,7 @@ import type {
   RemoteMcpTransport,
 } from "../../../subsystems/mcp/mcp-connections.js";
 
-import ShadowClawElement from "../../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../../shadow-claw-element.js";
 
 import "../../common/shadow-claw-actions/shadow-claw-actions.js";
 import "../../common/shadow-claw-card/shadow-claw-card.js";
@@ -776,6 +776,4 @@ export class ShadowClawMcpRemote extends ShadowClawElement {
   }
 }
 
-if (!customElements.get(elementName)) {
-  customElements.define(elementName, ShadowClawMcpRemote);
-}
+defineElement(elementName, ShadowClawMcpRemote);

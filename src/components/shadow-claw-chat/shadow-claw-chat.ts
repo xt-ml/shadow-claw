@@ -77,7 +77,7 @@ import "../shadow-claw-a2ui/shadow-claw-a2ui.js";
 import "../shadow-claw-dialog/shadow-claw-dialog.js";
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
 
-import ShadowClawElement from "../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../shadow-claw-element.js";
 import shadowClawChatStyles from "./shadow-claw-chat.css" with { type: "css" };
 import shadowClawChatTemplate from "./shadow-claw-chat.html" with { type: "html" };
 
@@ -2891,6 +2891,4 @@ export class ShadowClawChat extends ShadowClawElement {
   }
 }
 
-if (!customElements.get(elementName)) {
-  customElements.define(elementName, ShadowClawChat);
-}
+defineElement(elementName, ShadowClawChat);

@@ -31,6 +31,12 @@ import { registerCspReportRoutes } from "./routes/csp-report.js";
 import { registerOAuthRoutes } from "./routes/oauth.js";
 import { registerBackupRoutes } from "./routes/backup.js";
 import { registerDocsRoutes } from "./routes/docs.js";
+import { registerModelCacheRoutes } from "./routes/model-cache.js";
+import {
+  getLocalModelCacheDir,
+  getSharedUserModelCacheDir,
+  isSharedModelCacheEnabled,
+} from "../cli/utils/model-cache-paths.js";
 
 import type { Express } from "express";
 import type { ServerConfig } from "./config.js";
@@ -118,6 +124,17 @@ export function createApp(config: ServerConfig): {
   registerPushRoutes(app);
   registerTaskScheduleRoutes(app);
   registerDocsRoutes(app);
+  const sharedModels = isSharedModelCacheEnabled();
+  registerModelCacheRoutes(app, {
+    cacheDir: sharedModels
+      ? getSharedUserModelCacheDir()
+      : path.resolve(cacheDir, "models"),
+    transformersCacheDir: getLocalModelCacheDir(),
+    additionalTransformersCacheDirs: sharedModels
+      ? [path.resolve(process.cwd(), "assets/cache/transformers.js")]
+      : [],
+    shared: sharedModels,
+  });
 
   const scheduler = new ServerTaskScheduler({
     getEnabledTasks: getEnabledScheduledTasks,

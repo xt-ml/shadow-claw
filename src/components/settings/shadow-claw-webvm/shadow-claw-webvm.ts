@@ -22,7 +22,7 @@ import { showError, showSuccess, showWarning } from "../../../ui/toast.js";
 import type { Orchestrator } from "../../../core/orchestrator/orchestrator.js";
 import type { ShadowClawDatabase } from "../../../db/types.js";
 
-import ShadowClawElement from "../../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../../shadow-claw-element.js";
 import shadowClawWebvmStyles from "./shadow-claw-webvm.css" with { type: "css" };
 import shadowClawWebvmTemplate from "./shadow-claw-webvm.html" with { type: "html" };
 
@@ -331,6 +331,4 @@ export class ShadowClawWebvm extends ShadowClawElement {
   }
 }
 
-if (!customElements.get(elementName)) {
-  customElements.define(elementName, ShadowClawWebvm);
-}
+defineElement(elementName, ShadowClawWebvm);

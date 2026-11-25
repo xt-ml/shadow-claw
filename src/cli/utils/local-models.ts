@@ -5,6 +5,23 @@ import readline from "node:readline/promises";
 import tty from "node:tty";
 
 import { createCliProgressBar } from "./progress-bar.js";
+import {
+  getAgentfileCacheDir,
+  getLlamafileCacheDir,
+  getLocalModelCacheDir,
+  getSharedUserModelCacheDir,
+  isSharedModelCacheEnabled,
+  type SharedCacheDirOptions,
+} from "./model-cache-paths.js";
+
+export {
+  getAgentfileCacheDir,
+  getLlamafileCacheDir,
+  getLocalModelCacheDir,
+  getSharedUserModelCacheDir,
+  isSharedModelCacheEnabled,
+};
+export type { SharedCacheDirOptions };
 
 export interface LocalModelDefinition {
   id: string;
@@ -208,20 +225,6 @@ export function getCuratedModelToolSupport(
   return undefined;
 }
 
-export function getLocalModelCacheDir(customCacheDir?: string): string {
-  if (customCacheDir) {
-    return path.resolve(customCacheDir);
-  }
-  return path.resolve(process.cwd(), "assets/cache/transformers.js");
-}
-
-export function getLlamafileCacheDir(customCacheDir?: string): string {
-  if (customCacheDir) {
-    return path.resolve(customCacheDir, "llamafile");
-  }
-  return path.resolve(process.cwd(), "assets/cache/llamafile");
-}
-
 export function isLlamafile(modelId?: string): boolean {
   if (!modelId || typeof modelId !== "string") return false;
   return (
@@ -255,9 +258,12 @@ export function isLlamafileLocallyCached(
     } catch {}
   }
 
-  const dir = getLlamafileCacheDir(cacheDir);
-  if (!fs.existsSync(dir)) {
-    return false;
+  const candidateDirs = [getLlamafileCacheDir(cacheDir)];
+  if (!cacheDir && isSharedModelCacheEnabled()) {
+    const legacyDir = path.resolve(process.cwd(), "assets/cache/llamafile");
+    if (!candidateDirs.includes(legacyDir)) {
+      candidateDirs.push(legacyDir);
+    }
   }
 
   const matched = CURATED_LLAMAFILE_MODELS.find(
@@ -269,27 +275,28 @@ export function isLlamafileLocallyCached(
   );
   const base = matched ? matched.fileName : path.basename(modelId);
   const fileName = base.endsWith(".llamafile") ? base : `${base}.llamafile`;
-  const targetPath = path.join(dir, fileName);
-  const partPath = path.join(dir, `${fileName}.part`);
 
-  try {
-    if (fs.existsSync(partPath)) {
-      return false;
+  for (const dir of candidateDirs) {
+    if (!fs.existsSync(dir)) {
+      continue;
     }
-    if (fs.existsSync(targetPath)) {
-      const st = fs.statSync(targetPath);
-      return st.size > 0;
-    }
-  } catch {}
+    const targetPath = path.join(dir, fileName);
+    const partPath = path.join(dir, `${fileName}.part`);
+
+    try {
+      if (fs.existsSync(partPath)) {
+        continue;
+      }
+      if (fs.existsSync(targetPath)) {
+        const st = fs.statSync(targetPath);
+        if (st.size > 0) {
+          return true;
+        }
+      }
+    } catch {}
+  }
 
   return false;
-}
-
-export function getAgentfileCacheDir(customCacheDir?: string): string {
-  if (customCacheDir) {
-    return path.resolve(customCacheDir, "agentfile");
-  }
-  return path.resolve(process.cwd(), "assets/cache/agentfile");
 }
 
 export function isAgentfile(modelId?: string): boolean {
@@ -316,6 +323,16 @@ export function isAgentfileLocallyCached(
   }
 
   const dirs = [getAgentfileCacheDir(cacheDir), getLlamafileCacheDir(cacheDir)];
+  if (!cacheDir && isSharedModelCacheEnabled()) {
+    for (const legacyDir of [
+      path.resolve(process.cwd(), "assets/cache/agentfile"),
+      path.resolve(process.cwd(), "assets/cache/llamafile"),
+    ]) {
+      if (!dirs.includes(legacyDir)) {
+        dirs.push(legacyDir);
+      }
+    }
+  }
 
   const base = path.basename(modelId);
   const fileName = base.endsWith(".agentfile") ? base : `${base}.agentfile`;
@@ -392,26 +409,38 @@ export function isModelLocallyCached(
     return isLlamafileLocallyCached(modelId, cacheDir);
   }
 
-  const dir = getLocalModelCacheDir(cacheDir);
-  if (!fs.existsSync(dir)) {
-    return false;
+  const candidateDirs = [getLocalModelCacheDir(cacheDir)];
+  if (!cacheDir && isSharedModelCacheEnabled()) {
+    const legacyDir = path.resolve(
+      process.cwd(),
+      "assets/cache/transformers.js",
+    );
+    if (!candidateDirs.includes(legacyDir)) {
+      candidateDirs.push(legacyDir);
+    }
   }
 
-  const candidatePaths = [
-    path.join(dir, modelId),
-    path.join(dir, `models--${modelId.replace(/\//g, "--")}`),
-    path.join(dir, modelId.split("/")[1] || modelId),
-  ];
+  for (const dir of candidateDirs) {
+    if (!fs.existsSync(dir)) {
+      continue;
+    }
 
-  for (const p of candidatePaths) {
-    try {
-      if (fs.existsSync(p)) {
-        const { hasPartFiles, hasOnnxFiles } = scanOnnxModelCache(p);
-        if (!hasPartFiles && hasOnnxFiles) {
-          return true;
+    const candidatePaths = [
+      path.join(dir, modelId),
+      path.join(dir, `models--${modelId.replace(/\//g, "--")}`),
+      path.join(dir, modelId.split("/")[1] || modelId),
+    ];
+
+    for (const p of candidatePaths) {
+      try {
+        if (fs.existsSync(p)) {
+          const { hasPartFiles, hasOnnxFiles } = scanOnnxModelCache(p);
+          if (!hasPartFiles && hasOnnxFiles) {
+            return true;
+          }
         }
-      }
-    } catch {}
+      } catch {}
+    }
   }
 
   return false;
@@ -1385,4 +1414,146 @@ export async function promptForAgentModel(
       }
     }
   }
+}
+
+export interface LocalModelMigrationResult {
+  sourceRoot: string;
+  targetRoot: string;
+  mode: "move" | "copy" | "link";
+  dryRun: boolean;
+  migratedFiles: number;
+  skippedFiles: number;
+  totalBytes: number;
+}
+
+/**
+ * Migrate already-downloaded local models (`transformers.js`, `llamafile`,
+ * `agentfile`, `models/hf`) from a workspace `assets/cache` folder into the
+ * shared user model cache directory without re-downloading or overwriting.
+ */
+export function migrateLocalModelCache(
+  options: {
+    sourceRoot?: string;
+    targetRoot?: string;
+    mode?: "move" | "copy" | "link";
+    dryRun?: boolean;
+  } = {},
+): LocalModelMigrationResult {
+  const sourceRoot = path.resolve(
+    options.sourceRoot || path.join(process.cwd(), "assets", "cache"),
+  );
+  const targetRoot = path.resolve(
+    options.targetRoot || getSharedUserModelCacheDir(),
+  );
+  const mode: "move" | "copy" | "link" = options.mode || "move";
+  const dryRun = Boolean(options.dryRun);
+
+  const mappings: Array<[string, string]> = [
+    ["transformers.js", "transformers.js"],
+    ["llamafile", "llamafile"],
+    ["agentfile", "agentfile"],
+    [path.join("models", "hf"), "hf"],
+  ];
+
+  let migratedFiles = 0;
+  let skippedFiles = 0;
+  let totalBytes = 0;
+
+  if (sourceRoot === targetRoot) {
+    return {
+      sourceRoot,
+      targetRoot,
+      mode,
+      dryRun,
+      migratedFiles,
+      skippedFiles,
+      totalBytes,
+    };
+  }
+
+  for (const [srcSub, dstSub] of mappings) {
+    const srcBase = path.join(sourceRoot, srcSub);
+    const dstBase = path.join(targetRoot, dstSub);
+    if (!fs.existsSync(srcBase)) {
+      continue;
+    }
+
+    const walk = (curDir: string) => {
+      let entries: fs.Dirent[];
+      try {
+        entries = fs.readdirSync(curDir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const entry of entries) {
+        const srcPath = path.join(curDir, entry.name);
+        if (entry.isDirectory()) {
+          walk(srcPath);
+          continue;
+        }
+        if (!entry.isFile() && !entry.isSymbolicLink()) {
+          continue;
+        }
+        if (entry.name.endsWith(".part") || entry.name.endsWith(".tmp")) {
+          continue;
+        }
+
+        const rel = path.relative(srcBase, srcPath);
+        const dstPath = path.join(dstBase, rel);
+
+        let srcSize = 0;
+        try {
+          srcSize = fs.statSync(srcPath).size;
+        } catch {
+          continue;
+        }
+
+        if (fs.existsSync(dstPath)) {
+          try {
+            if (fs.statSync(dstPath).size > 0) {
+              skippedFiles += 1;
+              continue;
+            }
+          } catch {}
+        }
+
+        migratedFiles += 1;
+        totalBytes += srcSize;
+
+        if (dryRun) {
+          continue;
+        }
+
+        fs.mkdirSync(path.dirname(dstPath), { recursive: true });
+        if (mode === "link") {
+          fs.symlinkSync(srcPath, dstPath);
+        } else if (mode === "copy") {
+          fs.copyFileSync(srcPath, dstPath);
+        } else {
+          try {
+            fs.renameSync(srcPath, dstPath);
+          } catch (err: any) {
+            if (err?.code === "EXDEV") {
+              fs.copyFileSync(srcPath, dstPath);
+              fs.unlinkSync(srcPath);
+            } else {
+              throw err;
+            }
+          }
+        }
+      }
+    };
+
+    walk(srcBase);
+  }
+
+  return {
+    sourceRoot,
+    targetRoot,
+    mode,
+    dryRun,
+    migratedFiles,
+    skippedFiles,
+    totalBytes,
+  };
 }

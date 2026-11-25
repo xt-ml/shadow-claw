@@ -1,4 +1,9 @@
-export { default as ShadowClawElement } from "./shadow-claw-element.js";
+export {
+  default as ShadowClawElement,
+  ShadowClawElement as ShadowClawBaseElement,
+  BaseElement,
+  defineElement,
+} from "./shadow-claw-element.js";
 export * from "./types.js";
 
 // Top-level custom elements
@@ -28,13 +33,25 @@ export { ShadowClawTools } from "./shadow-claw-tools/shadow-claw-tools.js";
 export { ShadowClawA2UI } from "./shadow-claw-a2ui/shadow-claw-a2ui.js";
 export { ShadowClawA2UIInterceptor } from "./shadow-claw-a2ui-interceptor/shadow-claw-a2ui-interceptor.js";
 
-// Common custom elements
+// Common custom elements & shared styles
+export {
+  SHADOW_CLAW_CSS_TOKENS,
+  shadowClawBaseStyles,
+  getShadowClawBaseStyleSheet,
+} from "./common/base-styles.js";
 export { ShadowClawActions } from "./common/shadow-claw-actions/shadow-claw-actions.js";
 export { ShadowClawCard } from "./common/shadow-claw-card/shadow-claw-card.js";
 export { ShadowClawEmptyState } from "./common/shadow-claw-empty-state/shadow-claw-empty-state.js";
 export { ShadowClawPageHeaderActionButton } from "./common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";
 export { ShadowClawProviderModelPicker } from "./common/shadow-claw-provider-model-picker/shadow-claw-provider-model-picker.js";
 export { ShadowClawProviderModuleSettings } from "./common/shadow-claw-provider-module-settings/shadow-claw-provider-module-settings.js";
+export {
+  ShadowClawResizeHandle,
+  clampSize,
+  computeKeyboardResize,
+  getResizeHandleAriaAttributes,
+} from "./common/shadow-claw-resize-handle/shadow-claw-resize-handle.js";
+export { ShadowClawStatusBar } from "./common/shadow-claw-status-bar/shadow-claw-status-bar.js";
 
 // Settings custom elements
 export { ShadowClawAccounts } from "./settings/shadow-claw-accounts/shadow-claw-accounts.js";

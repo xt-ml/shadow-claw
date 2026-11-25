@@ -82,7 +82,7 @@ const dispose = effect(() => {
 All Web Components extend `ShadowClawElement`, which handles fetching and attaching co-located templates and stylesheets:
 
 ```ts
-export default class ShadowClawElement extends HTMLElement {
+export default class ShadowClawElement extends BaseElement {
   static component: string; // e.g., "shadow-claw-chat"
   static styles: URL | string; // path to .css file
   static template: URL | string; // path to .html file
@@ -112,6 +112,22 @@ Both operations are async and exposed as `onStylesReady` / `onTemplateReady` pro
 This is the preferred pattern for `effect()` disposers, `ResizeObserver` disconnects,
 and event listener teardown.
 
+### Node-Safe Custom Elements & Lifted Library Entrypoints (`/lib/`)
+
+`ShadowClawElement` is Node-safe (`BaseElement` falls back to an empty class when `HTMLElement` is undefined, and `defineElement(tagName, ctor)` guards `customElements`), supports declarative static `styles` (constructable `CSSStyleSheet` or cached string fallback), static `template`, `shadowRootOptions`, and `static disablePageSwipe = true` (which automatically installs and cleans up `installPageSwipeGuard(this)`).
+
+Both `shadow-claw build` and `shadow-claw dev` copy the compiled runtime modules into `<basePath>lib/` and inject a local `<script type="importmap">` (plus nonce-gated fallback mappings in preview iframe `srcdoc` HTML) so downstream template pages and Node `node --test` suites can import canonical primitives with zero build step:
+
+- `shadow-claw/signals` — TC39 `Signal`, `State`, `Computed`, `effect`, `batch`
+- `shadow-claw/components/shadow-claw-element` — `ShadowClawElement`, `BaseElement`, `defineElement`
+- `shadow-claw/components/base-styles` — canonical `--shadow-claw-*` tokens & shared stylesheet
+- `shadow-claw/components/shadow-claw-resize-handle` — accessible `<shadow-claw-resize-handle>` split-pane separator
+- `shadow-claw/components/shadow-claw-status-bar` — container-responsive `<shadow-claw-status-bar>` with polite status and dismissible error alert
+- `shadow-claw/utils/page-swipe-guard` — `installPageSwipeGuard` & `SWIPE_GUARD_ATTRS`
+- `shadow-claw/utils/workbench-fullscreen` — `resolveWorkbenchFullscreenState` & `setupWorkbenchFullscreen`
+- `shadow-claw/utils/workspace-fs` — namespaced OPFS/IndexedDB conversation storage client (`listConversations`, `listWorkspaceFiles`, `readWorkspaceFile`, `saveWorkspaceFile`, `deleteWorkspaceFile`, mock storage hooks, `getAppBasePath`, `getDeploymentNamespace`)
+- `shadow-claw/utils/tool-adapter-bridge` — `createToolAdapterBridge` & `registerNativeWebMcp`
+
 ### Component file structure & stories
 
 Every component lives in its own subdirectory with co-located template, styles, and Storybook stories:
@@ -125,7 +141,7 @@ src/components/shadow-claw-chat/
 └── shadow-claw-chat.css        # Shadow DOM styles (adopted at runtime)
 ```
 
-Shared common primitives reside in `src/components/common/` (e.g., `shadow-claw-actions`, `shadow-claw-card`, `shadow-claw-empty-state`, `shadow-claw-page-header-action-button`, `shadow-claw-provider-model-picker`, `shadow-claw-provider-module-settings`), while settings sections reside in `src/components/settings/`.
+Shared common primitives and stylesheets reside in `src/components/common/` (e.g., `base-styles.css`, `shadow-claw-actions`, `shadow-claw-card`, `shadow-claw-empty-state`, `shadow-claw-page-header-action-button`, `shadow-claw-provider-model-picker`, `shadow-claw-provider-module-settings`, `shadow-claw-resize-handle`, `shadow-claw-status-bar`), while settings sections reside in `src/components/settings/`.
 
 Rolldown's `copy` plugin mirrors `.css` and `.html` files to `dist/public/` preserving the `src/`-relative path, so `fetch("components/shadow-claw-chat/shadow-claw-chat.css")` resolves correctly at runtime.
 
@@ -219,36 +235,38 @@ _profiles (State) ──────────┘
 
 ### Component inventory
 
-| Component                | Element                        | Purpose                                                                   |
-| ------------------------ | ------------------------------ | ------------------------------------------------------------------------- |
-| Main app                 | `<shadow-claw>`                | Shell, navigation, page routing                                           |
-| Chat                     | `<shadow-claw-chat>`           | Message display, smart auto-scroll, streaming bubble, copy/delete actions |
-| Files                    | `<shadow-claw-files>`          | File browser for group workspace                                          |
-| Tasks                    | `<shadow-claw-tasks>`          | Task list with cron scheduling                                            |
-| Settings                 | `<shadow-claw-settings>`       | Main settings navigation and layout                                       |
-| Conversations            | `<shadow-claw-conversations>`  | Sidebar list with CRUD, drag-and-drop                                     |
-| File Viewer              | `<shadow-claw-file-viewer>`    | Code editor + MIME-aware preview                                          |
-| PDF Viewer               | `<shadow-claw-pdf-viewer>`     | PDF preview (pdf.js)                                                      |
-| Terminal                 | `<shadow-claw-terminal>`       | Interactive WebVM terminal                                                |
-| Toast                    | `<shadow-claw-toast>`          | Notification overlay                                                      |
-| Dialog Wrapper           | `<shadow-claw-dialog>`         | Shared wrapper around native `<dialog>` semantics                         |
-| Page Header              | `<shadow-claw-page-header>`    | Reusable mobile-first header                                              |
-| Settings — Accounts      | `<shadow-claw-accounts>`       | General account connection and OAuth flows                                |
-| Settings — Channels      | `<shadow-claw-channel-config>` | Third-party messaging channels configuration                              |
-| Settings — Control Plane | `<shadow-claw-control-plane>`  | CLI and remote control plane client configuration                         |
-| Settings — Git           | `<shadow-claw-git>`            | Git token and proxy settings                                              |
-| Settings — Integrations  | `<shadow-claw-integrations>`   | Special API integrations and Web Search                                   |
-| Settings — LLM           | `<shadow-claw-llm>`            | Provider and model settings                                               |
-| Settings — MCP           | `<shadow-claw-mcp-remote>`     | Remote Model Context Protocol server configuration                        |
-| Settings — Networking    | `<shadow-claw-networking>`     | Networking proxy settings                                                 |
-| Settings — Notifications | `<shadow-claw-notifications>`  | Push notification management                                              |
-| Settings — Storage       | `<shadow-claw-storage>`        | Storage backend and quota                                                 |
-| Settings — Task Server   | `<shadow-claw-task-server>`    | Server-side scheduling configuration                                      |
-| Settings — WebVM         | `<shadow-claw-webvm>`          | VM boot mode and configuration                                            |
-| Tools                    | `<shadow-claw-tools>`          | Tool management and profiles UI                                           |
-| Empty State (common)     | `<shadow-claw-empty-state>`    | Reusable empty/placeholder messaging block                                |
-| Card (common)            | `<shadow-claw-card>`           | Reusable settings item card layout                                        |
-| Actions (common)         | `<shadow-claw-actions>`        | Reusable settings action button group                                     |
+| Component                | Element                        | Purpose                                                                       |
+| ------------------------ | ------------------------------ | ----------------------------------------------------------------------------- |
+| Main app                 | `<shadow-claw>`                | Shell, navigation, page routing                                               |
+| Chat                     | `<shadow-claw-chat>`           | Message display, smart auto-scroll, streaming bubble, copy/delete actions     |
+| Files                    | `<shadow-claw-files>`          | File browser for group workspace                                              |
+| Tasks                    | `<shadow-claw-tasks>`          | Task list with cron scheduling                                                |
+| Settings                 | `<shadow-claw-settings>`       | Main settings navigation and layout                                           |
+| Conversations            | `<shadow-claw-conversations>`  | Sidebar list with CRUD, drag-and-drop                                         |
+| File Viewer              | `<shadow-claw-file-viewer>`    | Code editor + MIME-aware preview                                              |
+| PDF Viewer               | `<shadow-claw-pdf-viewer>`     | PDF preview (pdf.js)                                                          |
+| Terminal                 | `<shadow-claw-terminal>`       | Interactive WebVM terminal                                                    |
+| Toast                    | `<shadow-claw-toast>`          | Notification overlay                                                          |
+| Dialog Wrapper           | `<shadow-claw-dialog>`         | Shared wrapper around native `<dialog>` semantics                             |
+| Page Header              | `<shadow-claw-page-header>`    | Reusable mobile-first header                                                  |
+| Settings — Accounts      | `<shadow-claw-accounts>`       | General account connection and OAuth flows                                    |
+| Settings — Channels      | `<shadow-claw-channel-config>` | Third-party messaging channels configuration                                  |
+| Settings — Control Plane | `<shadow-claw-control-plane>`  | CLI and remote control plane client configuration                             |
+| Settings — Git           | `<shadow-claw-git>`            | Git token and proxy settings                                                  |
+| Settings — Integrations  | `<shadow-claw-integrations>`   | Special API integrations and Web Search                                       |
+| Settings — LLM           | `<shadow-claw-llm>`            | Provider and model settings                                                   |
+| Settings — MCP           | `<shadow-claw-mcp-remote>`     | Remote Model Context Protocol server configuration                            |
+| Settings — Networking    | `<shadow-claw-networking>`     | Networking proxy settings                                                     |
+| Settings — Notifications | `<shadow-claw-notifications>`  | Push notification management                                                  |
+| Settings — Storage       | `<shadow-claw-storage>`        | Storage backend, quota, and opt-in Shared Model Cache                         |
+| Settings — Task Server   | `<shadow-claw-task-server>`    | Server-side scheduling configuration                                          |
+| Settings — WebVM         | `<shadow-claw-webvm>`          | VM boot mode and configuration                                                |
+| Tools                    | `<shadow-claw-tools>`          | Tool management and profiles UI                                               |
+| Empty State (common)     | `<shadow-claw-empty-state>`    | Reusable empty/placeholder messaging block                                    |
+| Card (common)            | `<shadow-claw-card>`           | Reusable settings item card layout                                            |
+| Actions (common)         | `<shadow-claw-actions>`        | Reusable settings action button group                                         |
+| Resize Handle (common)   | `<shadow-claw-resize-handle>`  | Accessible split-pane resize separator with keyboard & coarse-pointer support |
+| Status Bar (common)      | `<shadow-claw-status-bar>`     | Container-responsive telemetry status bar with polite status & error alert    |
 
 ### Rendering strategy
 
@@ -411,7 +429,7 @@ import { namespacedStorage, ulid } from "shadow-claw/utils";
 ### Library Build Pipeline
 
 1. **Type Definitions**: `npm run tsc:lib` runs `tsc -p configs/tsconfig/lib.json` to emit `.d.ts` declaration maps under `dist/lib/`.
-2. **ESM Bundling**: `npm run build:lib` invokes Rolldown with `configs/rolldown/rolldown.lib.config.mjs` to produce tree-shakeable ESM bundles in `dist/lib/` corresponding to package export paths (`.`, `./cli`, `./cli/*`, `./components`, `./components/*`, `./utils`, `./utils/*`). Entry points across `src/components/` and `src/utils/` are dynamically discovered via `getLibraryEntries()`.
+2. **ESM Bundling**: `npm run build:lib` invokes `npm run rolldown:lib` (`rolldown -c configs/rolldown/rolldown.lib.config.mjs`) to produce tree-shakeable ESM bundles in `dist/lib/` corresponding to package export paths (`.`, `./cli`, `./cli/*`, `./components`, `./components/*`, `./signals`, `./utils`, `./utils/*`). Entry points across `src/components/` and `src/utils/` are dynamically discovered via `getLibraryEntries()`.
 
 ## Storybook Component Workbench
 

@@ -71,5 +71,131 @@
         01J...-filename.ext). Default: disabled.
       </div>
     </div>
+
+    <div class="settings-subsection">
+      <h4>🧠 Shared Model Cache (Opt-In)</h4>
+      <div class="form-group">
+        <div class="form-toggle">
+          <input
+            data-setting="shared-model-cache-origin-toggle"
+            id="shared-model-cache-origin-toggle"
+            type="checkbox"
+          />
+          <label class="form-label" for="shared-model-cache-origin-toggle">
+            Share browser models across all apps on this domain
+          </label>
+        </div>
+        <div class="form-helper">
+          Reuses downloaded models across apps hosted on the same domain (for
+          example, all sites on <code>xt-ml.github.io</code> or
+          <code>kherrick.github.io</code>). Turn off to isolate models per site.
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Cross-Domain Shared Model Folder</label>
+        <div class="storage-info-row">
+          <span
+            data-info="shared-model-dir-status"
+            role="status"
+            aria-live="polite"
+            >Not connected</span
+          >
+        </div>
+        <div class="storage-buttons">
+          <button
+            class="settings-btn"
+            data-action="select-shared-model-dir"
+            type="button"
+          >
+            📁 Choose Shared Model Folder
+          </button>
+          <button
+            class="settings-btn hidden"
+            data-action="sync-shared-model-dir"
+            type="button"
+          >
+            📤 Sync Cached Models to Folder
+          </button>
+          <button
+            class="reset-storage-btn settings-btn hidden"
+            data-action="clear-shared-model-dir"
+            type="button"
+          >
+            ✖ Disconnect Folder
+          </button>
+        </div>
+        <div class="form-helper">
+          Zero-server cross-origin sharing in Chromium browsers: pick one local
+          folder to share Hugging Face model files across different domains
+          (such as <code>xt-ml.github.io</code> and
+          <code>kherrick.github.io</code>).
+        </div>
+      </div>
+
+      <div class="form-group">
+        <div class="form-toggle">
+          <input
+            data-setting="shared-model-cache-mirror-toggle"
+            id="shared-model-cache-mirror-toggle"
+            type="checkbox"
+          />
+          <label class="form-label" for="shared-model-cache-mirror-toggle">
+            Use local or self-hosted Model Cache Mirror
+          </label>
+        </div>
+        <label class="form-label" for="shared-model-cache-url"
+          >Mirror Base URL</label
+        >
+        <div class="storage-input-row">
+          <input
+            aria-describedby="shared-model-url-help"
+            autocapitalize="none"
+            autocorrect="off"
+            class="settings-input"
+            data-setting="shared-model-cache-url"
+            enterkeyhint="done"
+            id="shared-model-cache-url"
+            inputmode="url"
+            name="shared-model-cache-url"
+            placeholder="http://localhost:8888/model-cache/hf"
+            spellcheck="false"
+            type="url"
+          />
+          <button
+            class="settings-btn"
+            data-action="save-shared-model-cache-url"
+            type="button"
+          >
+            Save Mirror
+          </button>
+        </div>
+        <div class="form-helper" id="shared-model-url-help">
+          Optional HTTP(S) mirror (such as ShadowClaw server
+          <code>/model-cache/hf</code>) tried before Hugging Face, sharing
+          weights across all browsers and local CLI caches.
+        </div>
+      </div>
+
+      <div class="form-group">
+        <div class="storage-info-row">
+          <span
+            data-info="browser-model-cache-stats"
+            role="status"
+            aria-live="polite"
+            >0 B cached (0 entries)</span
+          >
+        </div>
+        <div class="storage-buttons">
+          <button
+            class="reset-storage-btn settings-btn"
+            data-action="clear-browser-model-cache"
+            type="button"
+          >
+            🗑️ Clear Browser Model Cache
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>

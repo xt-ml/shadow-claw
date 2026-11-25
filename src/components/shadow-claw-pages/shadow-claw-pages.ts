@@ -88,7 +88,7 @@ import { shouldRunAutoRefresh } from "./utils/should-run-auto-refresh.js";
 import { syncIframeTheme } from "./utils/sync-iframe-theme.js";
 import { toggleSidebarState } from "./utils/toggle-sidebar-state.js";
 
-import ShadowClawElement from "../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../shadow-claw-element.js";
 
 import type { Config } from "dompurify";
 
@@ -2080,6 +2080,4 @@ export class ShadowClawPages extends ShadowClawElement {
   }
 }
 
-if (!customElements.get(elementName)) {
-  customElements.define(elementName, ShadowClawPages);
-}
+defineElement(elementName, ShadowClawPages);

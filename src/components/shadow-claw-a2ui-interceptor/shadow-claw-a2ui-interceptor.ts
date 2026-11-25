@@ -1,6 +1,7 @@
 import type { A2UIAction } from "../../ui/a2ui/types.js";
+import { BaseElement, defineElement } from "../shadow-claw-element.js";
 
-export class ShadowClawA2UIInterceptor extends HTMLElement {
+export class ShadowClawA2UIInterceptor extends BaseElement {
   constructor() {
     super();
 
@@ -98,9 +99,4 @@ export class ShadowClawA2UIInterceptor extends HTMLElement {
   };
 }
 
-if (!customElements.get("shadow-claw-a2ui-interceptor")) {
-  customElements.define(
-    "shadow-claw-a2ui-interceptor",
-    ShadowClawA2UIInterceptor,
-  );
-}
+defineElement("shadow-claw-a2ui-interceptor", ShadowClawA2UIInterceptor);

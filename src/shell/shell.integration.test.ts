@@ -114,6 +114,7 @@ describe("just-bash integration", () => {
     it("creates files and directories atomically, rejects duplicates with EEXIST, and persists to storage", async () => {
       const groupId = uniqueGroupId("shell-exclusive");
       const fs = await createFileSystem(db, groupId);
+      fs.mkdirSync("/home/user", { recursive: true });
 
       await (fs as any).createExclusive("/home/user/atomic.txt", {
         mode: 0o600,
@@ -147,16 +148,16 @@ describe("just-bash integration", () => {
 
       const dirRes = await executeShell(
         db,
-        'tmpdir=$(mktemp -d -p /home/user) && basename "$tmpdir"',
+        'tmpdir=$(mktemp -d -p /home/user) && scratch=$(mktemp) && echo "ephemeral" > "$scratch" && basename "$tmpdir"',
         groupId,
       );
       expect(dirRes.exitCode).toBe(0);
       expect(dirRes.stderr).toBe("");
       const createdDir = dirRes.stdout.trim();
       expect(createdDir).toMatch(/^tmp\./);
-      expect(await listGroupFiles(db, groupId, ".")).toContain(
-        `${createdDir}/`,
-      );
+      const entries = await listGroupFiles(db, groupId, ".");
+      expect(entries).toContain(`${createdDir}/`);
+      expect(entries).toEqual([createdFile, `${createdDir}/`].sort());
     });
   });
 

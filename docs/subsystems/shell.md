@@ -37,7 +37,6 @@ export async function executeShell(
   const fs = await createFileSystem(db, groupId);
   const bash = new Bash({
     fs,
-    cwd: "/home/user",
     network: {
       dangerouslyAllowFullInternetAccess: allowFullInternetAccess,
       denyPrivateRanges: !allowFullInternetAccess,

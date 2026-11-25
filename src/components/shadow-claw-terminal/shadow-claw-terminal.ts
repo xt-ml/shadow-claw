@@ -11,7 +11,7 @@ import { extractLastPromptLine } from "./utils/extract-last-prompt-line.js";
 import { isNearBottom } from "./utils/is-near-bottom.js";
 import { normalizeTerminalText } from "./utils/normalize-terminal-text.js";
 
-import ShadowClawElement from "../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../shadow-claw-element.js";
 import shadowClawTerminalStyles from "./shadow-claw-terminal.css" with { type: "css" };
 import shadowClawTerminalTemplate from "./shadow-claw-terminal.html" with { type: "html" };
 
@@ -462,4 +462,4 @@ export class ShadowClawTerminal extends ShadowClawElement {
   }
 }
 
-customElements.define("shadow-claw-terminal", ShadowClawTerminal);
+defineElement("shadow-claw-terminal", ShadowClawTerminal);

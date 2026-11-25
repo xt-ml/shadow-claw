@@ -18,6 +18,8 @@ import {
   getLocalModelCacheDir,
   getLlamafileCacheDir,
   getAgentfileCacheDir,
+  getSharedUserModelCacheDir,
+  isSharedModelCacheEnabled,
   isModelLocallyCached,
   isLlamafileLocallyCached,
   isAgentfileLocallyCached,
@@ -1390,6 +1392,152 @@ describe("local-models", () => {
         ok: false,
         error: "Network timeout",
       });
+    });
+  });
+
+  describe("shared model cache directory resolution", () => {
+    afterEach(() => {
+      delete process.env.SHADOWCLAW_SHARED_MODEL_CACHE;
+      delete process.env.SHADOWCLAW_MODEL_CACHE_DIR;
+      delete process.env.XDG_CACHE_HOME;
+    });
+
+    it("resolves user shared cache directory and opts in via option or env", () => {
+      process.env.XDG_CACHE_HOME = "/tmp/xdg-test";
+      expect(getSharedUserModelCacheDir()).toBe(
+        path.join("/tmp/xdg-test", "shadow-claw", "models"),
+      );
+      expect(isSharedModelCacheEnabled()).toBe(false);
+
+      expect(isSharedModelCacheEnabled({ sharedCache: true })).toBe(true);
+      expect(getLocalModelCacheDir(undefined, { sharedCache: true })).toBe(
+        path.join("/tmp/xdg-test", "shadow-claw", "models", "transformers.js"),
+      );
+      expect(getLlamafileCacheDir(undefined, { sharedCache: true })).toBe(
+        path.join("/tmp/xdg-test", "shadow-claw", "models", "llamafile"),
+      );
+      expect(getAgentfileCacheDir(undefined, { sharedCache: true })).toBe(
+        path.join("/tmp/xdg-test", "shadow-claw", "models", "agentfile"),
+      );
+
+      process.env.SHADOWCLAW_MODEL_CACHE_DIR = "/tmp/custom-shared-models";
+      expect(isSharedModelCacheEnabled()).toBe(true);
+      expect(getSharedUserModelCacheDir()).toBe(
+        path.resolve("/tmp/custom-shared-models"),
+      );
+      expect(
+        getLocalModelCacheDir("/tmp/explicit-dir", { sharedCache: true }),
+      ).toBe(path.resolve("/tmp/explicit-dir"));
+    });
+
+    it("detects legacy assets/cache models when shared mode is enabled and migrates them without overwriting or copying partials", async () => {
+      const { migrateLocalModelCache } = await import("./local-models.js");
+      const sandbox = await mkdtemp(path.join(tmpdir(), "sc-migrate-local-"));
+      const origCwd = process.cwd();
+      try {
+        process.chdir(sandbox);
+        const legacyOnnxDir = path.join(
+          sandbox,
+          "assets/cache/transformers.js/onnx-community/demo",
+        );
+        const legacyPartialDir = path.join(
+          sandbox,
+          "assets/cache/transformers.js/onnx-community/incomplete",
+        );
+        const legacyLlamaDir = path.join(sandbox, "assets/cache/llamafile");
+        fs.mkdirSync(legacyOnnxDir, { recursive: true });
+        fs.mkdirSync(legacyPartialDir, { recursive: true });
+        fs.mkdirSync(legacyLlamaDir, { recursive: true });
+        fs.writeFileSync(path.join(legacyOnnxDir, "model.onnx"), "onnx-bytes");
+        fs.writeFileSync(
+          path.join(legacyPartialDir, "model.onnx.part"),
+          "partial",
+        );
+        fs.writeFileSync(
+          path.join(legacyLlamaDir, "demo.llamafile"),
+          "llama-bytes",
+        );
+
+        const sharedTarget = path.join(sandbox, "shared-home");
+        process.env.SHADOWCLAW_SHARED_MODEL_CACHE = "1";
+        process.env.SHADOWCLAW_MODEL_CACHE_DIR = sharedTarget;
+
+        // Even before migration, legacy workspace models are still recognized as cached!
+        expect(isModelLocallyCached("onnx-community/demo")).toBe(true);
+        expect(isLlamafileLocallyCached("demo.llamafile")).toBe(true);
+
+        // Dry run should not create files
+        const dryRes = migrateLocalModelCache({
+          sourceRoot: path.join(sandbox, "assets/cache"),
+          targetRoot: sharedTarget,
+          mode: "copy",
+          dryRun: true,
+        });
+        expect(dryRes.migratedFiles).toBe(2);
+        expect(
+          fs.existsSync(
+            path.join(
+              sharedTarget,
+              "transformers.js/onnx-community/demo/model.onnx",
+            ),
+          ),
+        ).toBe(false);
+
+        // Copy mode
+        const copyRes = migrateLocalModelCache({
+          sourceRoot: path.join(sandbox, "assets/cache"),
+          targetRoot: sharedTarget,
+          mode: "copy",
+        });
+        expect(copyRes.migratedFiles).toBe(2);
+        expect(
+          fs.readFileSync(
+            path.join(
+              sharedTarget,
+              "transformers.js/onnx-community/demo/model.onnx",
+            ),
+            "utf8",
+          ),
+        ).toBe("onnx-bytes");
+        expect(
+          fs.existsSync(
+            path.join(
+              sharedTarget,
+              "transformers.js/onnx-community/demo/model.onnx.part",
+            ),
+          ),
+        ).toBe(false);
+
+        // Second run skips already-migrated files
+        const secondRes = migrateLocalModelCache({
+          sourceRoot: path.join(sandbox, "assets/cache"),
+          targetRoot: sharedTarget,
+          mode: "copy",
+        });
+        expect(secondRes.migratedFiles).toBe(0);
+        expect(secondRes.skippedFiles).toBe(2);
+
+        // Move mode removes from source to a fresh target
+        const moveTarget = path.join(sandbox, "moved-home");
+        const moveRes = migrateLocalModelCache({
+          sourceRoot: path.join(sandbox, "assets/cache"),
+          targetRoot: moveTarget,
+          mode: "move",
+        });
+        expect(moveRes.migratedFiles).toBe(2);
+        expect(fs.existsSync(path.join(legacyLlamaDir, "demo.llamafile"))).toBe(
+          false,
+        );
+        expect(
+          fs.readFileSync(
+            path.join(moveTarget, "llamafile/demo.llamafile"),
+            "utf8",
+          ),
+        ).toBe("llama-bytes");
+      } finally {
+        process.chdir(origCwd);
+        await rm(sandbox, { recursive: true, force: true });
+      }
     });
   });
 });

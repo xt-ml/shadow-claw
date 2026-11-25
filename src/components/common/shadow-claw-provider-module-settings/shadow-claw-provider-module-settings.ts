@@ -1,4 +1,4 @@
-import ShadowClawElement from "../../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../../shadow-claw-element.js";
 import shadowClawProviderModuleSettingsStyles from "./shadow-claw-provider-module-settings.css" with { type: "css" };
 import shadowClawProviderModuleSettingsTemplate from "./shadow-claw-provider-module-settings.html" with { type: "html" };
 
@@ -210,6 +210,4 @@ export class ShadowClawProviderModuleSettings extends ShadowClawElement {
   }
 }
 
-if (!customElements.get(elementName)) {
-  customElements.define(elementName, ShadowClawProviderModuleSettings);
-}
+defineElement(elementName, ShadowClawProviderModuleSettings);

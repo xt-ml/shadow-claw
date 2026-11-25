@@ -4,7 +4,7 @@ import { installGetOrInsertComputedPolyfill } from "./utils/install-get-or-inser
 
 import type { PdfFile } from "../types.js";
 
-import ShadowClawElement from "../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../shadow-claw-element.js";
 import shadowClawPdfViewerStyles from "./shadow-claw-pdf-viewer.css" with { type: "css" };
 import shadowClawPdfViewerTemplate from "./shadow-claw-pdf-viewer.html" with { type: "html" };
 
@@ -474,6 +474,4 @@ export class ShadowClawPdfViewer extends ShadowClawElement {
   }
 }
 
-if (!customElements.get(elementName)) {
-  customElements.define(elementName, ShadowClawPdfViewer);
-}
+defineElement(elementName, ShadowClawPdfViewer);

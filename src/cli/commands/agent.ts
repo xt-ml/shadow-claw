@@ -2629,7 +2629,34 @@ export async function runAgentModel(
     return { success: true, model: targetModel, configPath };
   }
 
-  const errorMsg = `Unknown model action: "${action}". Available: list, download, set`;
+  if (action === "migrate") {
+    const { getSharedUserModelCacheDir, migrateLocalModelCache } =
+      await import("../utils/local-models.js");
+    const mode = options.link ? "link" : options.copy ? "copy" : "move";
+    const sourceRoot = options.source
+      ? path.resolve(options.source)
+      : path.join(workspaceDir, "assets", "cache");
+    const targetRoot = options.target
+      ? path.resolve(options.target)
+      : getSharedUserModelCacheDir();
+    const res = migrateLocalModelCache({
+      sourceRoot,
+      targetRoot,
+      mode,
+      dryRun: Boolean(options.dryRun),
+    });
+
+    if (!options.quiet) {
+      const prefix = res.dryRun ? "[Dry run] " : "";
+      process.stdout.write(
+        `${prefix}Migrated ${res.migratedFiles} files (${res.skippedFiles} skipped) from ${res.sourceRoot} -> ${res.targetRoot} (mode: ${res.mode})\n`,
+      );
+    }
+
+    return { success: true, ...res };
+  }
+
+  const errorMsg = `Unknown model action: "${action}". Available: list, download, set, migrate`;
   if (!options.quiet) console.error(errorMsg);
   process.exitCode = 1;
   return { success: false, error: errorMsg };

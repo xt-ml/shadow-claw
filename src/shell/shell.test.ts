@@ -71,12 +71,12 @@ describe("executeShell", () => {
     expect(result.stderr).toBe("Bash failed");
   });
 
-  it("configures Bash cwd to /home/user", async () => {
+  it("omits explicit cwd so Bash preserves its default /home/user and /tmp layout", async () => {
     await executeShell({} as any, "pwd", "group1");
 
     expect(mockBashCtor).toHaveBeenCalledWith(
-      expect.objectContaining({
-        cwd: "/home/user",
+      expect.not.objectContaining({
+        cwd: expect.anything(),
       }),
     );
   });

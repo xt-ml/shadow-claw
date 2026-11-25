@@ -1,0 +1,126 @@
+:host {
+  display: inline-flex;
+  align-self: stretch;
+  user-select: none;
+  touch-action: none;
+
+  --_border-color: var(--shadow-claw-border-color, #e2e8f0);
+  --_border-subtle: var(--shadow-claw-border-subtle, rgba(148, 163, 184, 0.25));
+  --_accent-primary: var(--shadow-claw-accent-primary, #334155);
+  --_duration-min: var(--shadow-claw-duration-min, 150ms);
+}
+
+:host([hidden]),
+:host(.hidden) {
+  display: none !important;
+}
+
+:host([disabled]) {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.resize-handle {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  outline: none;
+  touch-action: none;
+}
+
+.resize-handle--vertical {
+  inline-size: 8px;
+  block-size: 100%;
+  min-block-size: 100%;
+  cursor: col-resize;
+}
+
+.resize-handle--horizontal {
+  inline-size: 100%;
+  block-size: 8px;
+  cursor: row-resize;
+}
+
+.resize-handle::before {
+  content: "";
+  position: absolute;
+  background: var(--_border-subtle);
+  transition: background-color var(--_duration-min) ease;
+}
+
+.resize-handle--vertical::before {
+  inset-block: 0;
+  inset-inline-start: 50%;
+  inline-size: 1px;
+  transform: translateX(-50%);
+}
+
+.resize-handle--horizontal::before {
+  inset-inline: 0;
+  inset-block-start: 50%;
+  block-size: 1px;
+  transform: translateY(-50%);
+}
+
+.resize-handle__indicator {
+  position: relative;
+  z-index: 1;
+  background: var(--_border-color);
+  border-radius: 2px;
+  transition:
+    background-color var(--_duration-min) ease,
+    box-shadow var(--_duration-min) ease;
+}
+
+.resize-handle--vertical .resize-handle__indicator {
+  inline-size: 3px;
+  block-size: 36px;
+}
+
+.resize-handle--horizontal .resize-handle__indicator {
+  inline-size: 36px;
+  block-size: 3px;
+}
+
+/* Expanded hit target (>= 24px pointer, >= 44px on coarse touch screens) */
+.resize-handle::after {
+  content: "";
+  position: absolute;
+  z-index: 10;
+}
+
+.resize-handle--vertical::after {
+  inset: 0 -10px;
+}
+
+.resize-handle--horizontal::after {
+  inset: -10px 0;
+}
+
+@media (pointer: coarse) {
+  .resize-handle--vertical::after {
+    inset: 0 -18px;
+  }
+
+  .resize-handle--horizontal::after {
+    inset: -18px 0;
+  }
+}
+
+.resize-handle:hover::before,
+.resize-handle--active::before {
+  background: var(--_accent-primary);
+}
+
+.resize-handle:hover .resize-handle__indicator,
+.resize-handle--active .resize-handle__indicator {
+  background: var(--_accent-primary);
+}
+
+.resize-handle:focus-visible .resize-handle__indicator {
+  background: var(--_accent-primary);
+  outline: 2px solid var(--_accent-primary);
+  outline-offset: 2px;
+}

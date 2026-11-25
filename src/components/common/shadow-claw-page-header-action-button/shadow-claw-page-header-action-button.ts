@@ -1,4 +1,4 @@
-import ShadowClawElement from "../../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../../shadow-claw-element.js";
 import shadowClawPageHeaderActionButtonStyles from "./shadow-claw-page-header-action-button.css" with { type: "css" };
 import shadowClawPageHeaderActionButtonTemplate from "./shadow-claw-page-header-action-button.html" with { type: "html" };
 
@@ -34,6 +34,4 @@ export class ShadowClawPageHeaderActionButton extends ShadowClawElement {
   }
 }
 
-if (!customElements.get(elementName)) {
-  customElements.define(elementName, ShadowClawPageHeaderActionButton);
-}
+defineElement(elementName, ShadowClawPageHeaderActionButton);

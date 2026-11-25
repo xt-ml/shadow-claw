@@ -17,7 +17,7 @@ import type { ShadowClawDatabase } from "../../../db/types.js";
 
 import "../shadow-claw-peerjs/shadow-claw-peerjs.js";
 
-import ShadowClawElement from "../../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../../shadow-claw-element.js";
 import shadowClawChannelConfigStyles from "./shadow-claw-channel-config.css" with { type: "css" };
 import shadowClawChannelConfigTemplate from "./shadow-claw-channel-config.html" with { type: "html" };
 
@@ -501,6 +501,4 @@ function parseCommaSeparatedList(value: string): string[] {
   );
 }
 
-if (!customElements.get(elementName)) {
-  customElements.define(elementName, ShadowClawChannelConfig);
-}
+defineElement(elementName, ShadowClawChannelConfig);

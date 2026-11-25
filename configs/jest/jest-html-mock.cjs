@@ -4,14 +4,16 @@ module.exports = {
 
     return {
       code: `
-        const doc = new DOMParser().parseFromString(\`${escaped}\`, 'text/html');
-        const templateEl = doc.querySelector('template');
         let elements = [];
+        if (typeof DOMParser !== 'undefined') {
+          const doc = new DOMParser().parseFromString(\`${escaped}\`, 'text/html');
+          const templateEl = doc.querySelector('template');
 
-        if (templateEl) {
-          elements = Array.from(templateEl.content.children);
-        } else {
-          elements = Array.from(doc.head.children).concat(Array.from(doc.body.children));
+          if (templateEl) {
+            elements = Array.from(templateEl.content.children);
+          } else {
+            elements = Array.from(doc.head.children).concat(Array.from(doc.body.children));
+          }
         }
 
         module.exports = elements;

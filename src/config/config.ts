@@ -1178,6 +1178,10 @@ export const CONFIG_KEYS = {
   SEARCH_FILES_MAX_FILE_BYTES: "search_files_max_file_bytes",
   SEARCH_FILES_MAX_FILES_VISITED: "search_files_max_files_visited",
   SEARCH_FILES_SKIP_DIRS: "search_files_skip_dirs",
+  SHARED_MODEL_CACHE_DIR_HANDLE: "shared_model_cache_dir_handle",
+  SHARED_MODEL_CACHE_MIRROR_ENABLED: "shared_model_cache_mirror_enabled",
+  SHARED_MODEL_CACHE_SCOPE: "shared_model_cache_scope",
+  SHARED_MODEL_CACHE_URL: "shared_model_cache_url",
 };
 
 /** Default dev server host */

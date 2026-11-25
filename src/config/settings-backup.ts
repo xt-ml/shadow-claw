@@ -41,7 +41,10 @@ async function collectAndStripPasswordData(
   for (const entry of entries) {
     const key = entry.key;
 
-    if (key === CONFIG_KEYS.STORAGE_HANDLE) {
+    if (
+      key === CONFIG_KEYS.STORAGE_HANDLE ||
+      key === CONFIG_KEYS.SHARED_MODEL_CACHE_DIR_HANDLE
+    ) {
       continue;
     }
 

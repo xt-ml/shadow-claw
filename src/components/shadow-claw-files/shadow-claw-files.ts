@@ -35,7 +35,7 @@ import "../shadow-claw-page-header/shadow-claw-page-header.js";
 
 import type { ShadowClawDatabase } from "../../db/types.js";
 
-import ShadowClawElement from "../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../shadow-claw-element.js";
 import shadowClawFilesStyles from "./shadow-claw-files.css" with { type: "css" };
 import shadowClawFilesTemplate from "./shadow-claw-files.html" with { type: "html" };
 
@@ -1818,6 +1818,4 @@ export class ShadowClawFiles extends ShadowClawElement {
   }
 }
 
-if (!customElements.get(elementName)) {
-  customElements.define(elementName, ShadowClawFiles);
-}
+defineElement(elementName, ShadowClawFiles);

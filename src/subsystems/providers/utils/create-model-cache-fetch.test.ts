@@ -394,4 +394,138 @@ describe("createModelCacheFetch", () => {
     expect(resp.status).toBe(200);
     expect(resp.headers.has("content-length")).toBe(false);
   });
+
+  it("serves from opt-in mirror first and falls back to upstream on mirror miss", async () => {
+    const mirrorUrl =
+      "http://localhost:8888/model-cache/hf/onnx-community/demo/resolve/main/model.onnx";
+    const upstreamUrl =
+      "https://huggingface.co/onnx-community/demo/resolve/main/model.onnx";
+
+    mockNativeFetch.mockImplementation(async (url: string) => {
+      if (url === mirrorUrl) {
+        return makeFetchResponse(200, new Uint8Array([9, 8, 7]));
+      }
+      return makeFetchResponse(200, new Uint8Array([1, 2, 3]));
+    });
+
+    const cachedFetch = createModelCacheFetch(mockNativeFetch, {
+      sharedConfig: {
+        scope: "origin",
+        mirrorEnabled: true,
+        mirrorUrl: "http://localhost:8888/model-cache/hf",
+        dirHandle: null,
+      },
+    });
+    const resp = await cachedFetch(upstreamUrl);
+    expect(resp.status).toBe(200);
+    expect(mockNativeFetch).toHaveBeenCalledWith(
+      mirrorUrl,
+      expect.objectContaining({ targetAddressSpace: "loopback" }),
+    );
+
+    const reader = resp.body!.getReader();
+    const collected: number[] = [];
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      collected.push(...value);
+    }
+    expect(collected).toEqual([9, 8, 7]);
+  });
+
+  it("falls back to alternate scope cache and legacy transformers-cache with zero network requests", async () => {
+    const depUrl =
+      "https://huggingface.co/onnx-community/demo/resolve/main/tokenizer.json";
+    const legacyUrl =
+      "https://huggingface.co/onnx-community/legacy/resolve/main/vocab.json";
+    const depPayload = '{"ok":true}';
+    const legacyPayload = '{"legacy":1}';
+
+    (globalThis as any).__SHADOWCLAW_DEPLOY_ID__ = "sub-app";
+
+    const buckets = new Map<
+      string,
+      Map<string, { body: Uint8Array; headers: Headers }>
+    >([
+      [
+        "shadow-claw-browser-models-sub-app",
+        new Map([
+          [
+            `${depUrl}?__sc_meta=1`,
+            {
+              body: encodeText(
+                JSON.stringify({
+                  chunks: 1,
+                  received: depPayload.length,
+                  total: depPayload.length,
+                  acceptsRanges: true,
+                  complete: true,
+                }),
+              ),
+              headers: new Headers({ "content-type": "application/json" }),
+            },
+          ],
+          [
+            `${depUrl}?__sc_chunk=0`,
+            {
+              body: encodeText(depPayload),
+              headers: new Headers({
+                "content-length": String(depPayload.length),
+              }),
+            },
+          ],
+        ]),
+      ],
+      [
+        "transformers-cache",
+        new Map([
+          [
+            legacyUrl,
+            {
+              body: encodeText(legacyPayload),
+              headers: new Headers({
+                "content-length": String(legacyPayload.length),
+              }),
+            },
+          ],
+        ]),
+      ],
+    ]);
+
+    global.caches = {
+      open: jest.fn<any>(async (name: string) => {
+        if (!buckets.has(name)) buckets.set(name, new Map());
+        const map = buckets.get(name)!;
+        return {
+          match: jest.fn<any>(async (key: string) => {
+            const entry = map.get(String(key));
+            if (!entry) return undefined;
+            return {
+              headers: entry.headers,
+              body: makeBodyStream(entry.body),
+              text: async () => decodeBytes(entry.body),
+            };
+          }),
+        };
+      }),
+    } as any;
+
+    try {
+      const cachedFetch = createModelCacheFetch(mockNativeFetch, {
+        sharedConfig: {
+          scope: "origin",
+          mirrorEnabled: false,
+          mirrorUrl: "",
+          dirHandle: null,
+        },
+      });
+      const r1 = await cachedFetch(depUrl);
+      expect(await r1.text()).toBe(depPayload);
+      const r2 = await cachedFetch(legacyUrl);
+      expect(await r2.text()).toBe(legacyPayload);
+      expect(mockNativeFetch).not.toHaveBeenCalled();
+    } finally {
+      delete (globalThis as any).__SHADOWCLAW_DEPLOY_ID__;
+    }
+  });
 });

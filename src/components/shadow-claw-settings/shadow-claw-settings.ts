@@ -75,7 +75,7 @@ async function ensureSettingsTabLoaded(tabId: string): Promise<void> {
   }
 }
 
-import ShadowClawElement from "../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../shadow-claw-element.js";
 import shadowClawSettingsStyles from "./shadow-claw-settings.css" with { type: "css" };
 import shadowClawSettingsTemplate from "./shadow-claw-settings.html" with { type: "html" };
 
@@ -1396,6 +1396,4 @@ export class ShadowClawSettings extends ShadowClawElement {
   }
 }
 
-if (!customElements.get(elementName)) {
-  customElements.define(elementName, ShadowClawSettings);
-}
+defineElement(elementName, ShadowClawSettings);

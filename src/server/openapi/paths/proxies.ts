@@ -1,6 +1,42 @@
 import type { OpenApiPathItem } from "../types.js";
 
 export const proxyPaths: Record<string, OpenApiPathItem> = {
+  "/model-cache/status": {
+    get: {
+      tags: ["Model Proxies"],
+      summary: "Shared Model Cache Status",
+      description:
+        "Returns shared Hugging Face model cache directory location, mode, file count, and total cached bytes.",
+      responses: {
+        "200": {
+          description: "Model cache statistics",
+          content: { "application/json": { schema: { type: "object" } } },
+        },
+      },
+    },
+  },
+  "/model-cache/hf/{*subpath}": {
+    get: {
+      tags: ["Model Proxies"],
+      summary: "Shared Hugging Face Model File Mirror",
+      description:
+        "Serves cached Hugging Face model files (with HTTP byte Range support and atomic upstream download-through).",
+      responses: {
+        "200": {
+          description: "Model file stream",
+          content: {
+            "application/octet-stream": { schema: { type: "string" } },
+          },
+        },
+        "206": {
+          description: "Partial model byte range stream",
+          content: {
+            "application/octet-stream": { schema: { type: "string" } },
+          },
+        },
+      },
+    },
+  },
   "/bedrock-proxy/models": {
     get: {
       tags: ["Model Proxies"],

@@ -12,7 +12,7 @@ import { showError, showSuccess, showWarning } from "../../../ui/toast.js";
 import type { Orchestrator } from "../../../core/orchestrator/orchestrator.js";
 import type { ShadowClawDatabase } from "../../../db/types.js";
 
-import ShadowClawElement from "../../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../../shadow-claw-element.js";
 import shadowClawNetworkingStyles from "./shadow-claw-networking.css" with { type: "css" };
 import shadowClawNetworkingTemplate from "./shadow-claw-networking.html" with { type: "html" };
 
@@ -152,6 +152,4 @@ export class ShadowClawNetworking extends ShadowClawElement {
   }
 }
 
-if (!customElements.get(elementName)) {
-  customElements.define(elementName, ShadowClawNetworking);
-}
+defineElement(elementName, ShadowClawNetworking);

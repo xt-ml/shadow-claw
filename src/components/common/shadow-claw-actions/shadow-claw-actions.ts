@@ -1,4 +1,4 @@
-import ShadowClawElement from "../../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../../shadow-claw-element.js";
 import shadowClawActionsStyles from "./shadow-claw-actions.css" with { type: "css" };
 import shadowClawActionsTemplate from "./shadow-claw-actions.html" with { type: "html" };
 
@@ -7,6 +7,7 @@ const elementName = "shadow-claw-actions";
 type ActionKind = "account" | "connection";
 
 export class ShadowClawActions extends ShadowClawElement {
+  static observedAttributes = ["kind", "is-default", "item-id"];
   static styles = shadowClawActionsStyles;
   static template = shadowClawActionsTemplate;
 
@@ -87,6 +88,4 @@ export class ShadowClawActions extends ShadowClawElement {
   }
 }
 
-if (!customElements.get(elementName)) {
-  customElements.define(elementName, ShadowClawActions);
-}
+defineElement(elementName, ShadowClawActions);

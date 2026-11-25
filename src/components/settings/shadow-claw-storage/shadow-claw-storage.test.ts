@@ -565,4 +565,246 @@ describe("shadow-claw-storage", () => {
     el.db = {} as any;
     await el.updateStorageInfo();
   });
+
+  it("supports opt-in Shared Model Cache settings (origin toggle, mirror toggle/URL, and cache clear)", async () => {
+    (getConfig as any).mockImplementation((_db: any, key: string) => {
+      if (key === CONFIG_KEYS.SHARED_MODEL_CACHE_SCOPE) {
+        return Promise.resolve("deployment");
+      }
+      if (key === CONFIG_KEYS.SHARED_MODEL_CACHE_MIRROR_ENABLED) {
+        return Promise.resolve("true");
+      }
+      if (key === CONFIG_KEYS.SHARED_MODEL_CACHE_URL) {
+        return Promise.resolve("http://localhost:8888/model-cache/hf");
+      }
+      return Promise.resolve(undefined);
+    });
+
+    const el = new ShadowClawStorage() as any;
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 80));
+    await el.updateStorageInfo();
+
+    const root = el.shadowRoot!;
+    const originToggle = root.querySelector(
+      '[data-setting="shared-model-cache-origin-toggle"]',
+    ) as HTMLInputElement;
+    const mirrorToggle = root.querySelector(
+      '[data-setting="shared-model-cache-mirror-toggle"]',
+    ) as HTMLInputElement;
+    const mirrorUrlInput = root.querySelector(
+      '[data-setting="shared-model-cache-url"]',
+    ) as HTMLInputElement;
+    const saveMirrorBtn = root.querySelector(
+      '[data-action="save-shared-model-cache-url"]',
+    ) as HTMLButtonElement;
+
+    expect(originToggle).not.toBeNull();
+    expect(originToggle.checked).toBe(false);
+    expect(mirrorToggle.checked).toBe(true);
+    expect(mirrorUrlInput.value).toBe("http://localhost:8888/model-cache/hf");
+
+    originToggle.checked = true;
+    originToggle.dispatchEvent(new Event("change"));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(setConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      CONFIG_KEYS.SHARED_MODEL_CACHE_SCOPE,
+      "origin",
+    );
+
+    mirrorUrlInput.value = "https://models.example.com/hf/";
+    saveMirrorBtn.click();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(setConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      CONFIG_KEYS.SHARED_MODEL_CACHE_URL,
+      "https://models.example.com/hf",
+    );
+
+    const syncBtn = root.querySelector(
+      '[data-action="sync-shared-model-dir"]',
+    ) as HTMLButtonElement | null;
+    expect(syncBtn).not.toBeNull();
+    expect(syncBtn?.classList.contains("hidden")).toBe(true);
+
+    document.body.removeChild(el);
+  });
+
+  it("migrates browser caches on scope toggle and exports cached models when folder is connected or synced", async () => {
+    (globalThis as any).__SHADOWCLAW_DEPLOY_ID__ = "test-deploy";
+
+    const modelUrl =
+      "https://huggingface.co/onnx-community/demo/resolve/main/model.onnx";
+    const payload = new Uint8Array([1, 2, 3, 4]);
+    const writtenFiles = new Map<string, Uint8Array>();
+
+    const makeMockDir = (prefix = ""): any => ({
+      kind: "directory",
+      name: prefix || "SharedModels",
+      queryPermission: async () => "granted",
+      getDirectoryHandle: async (name: string, opts?: { create?: boolean }) => {
+        const key = prefix ? `${prefix}/${name}` : name;
+        if (!opts?.create && !writtenFiles.has(key)) {
+          const hasChild = Array.from(writtenFiles.keys()).some((k) =>
+            k.startsWith(`${key}/`),
+          );
+          if (!hasChild) throw new DOMException("Not found", "NotFoundError");
+        }
+        return makeMockDir(key);
+      },
+      getFileHandle: async (name: string, opts?: { create?: boolean }) => {
+        const key = prefix ? `${prefix}/${name}` : name;
+        if (!opts?.create && !writtenFiles.has(key)) {
+          throw new DOMException("Not found", "NotFoundError");
+        }
+        return {
+          getFile: async () => {
+            const b = writtenFiles.get(key) || new Uint8Array(0);
+            return { size: b.byteLength, arrayBuffer: async () => b.buffer };
+          },
+          createWritable: async () => {
+            const chunks: Uint8Array[] = [];
+            return {
+              write: async (chunk: Uint8Array) =>
+                chunks.push(new Uint8Array(chunk)),
+              close: async () => {
+                const len = chunks.reduce((s, c) => s + c.byteLength, 0);
+                const merged = new Uint8Array(len);
+                let off = 0;
+                for (const c of chunks) {
+                  merged.set(c, off);
+                  off += c.byteLength;
+                }
+                writtenFiles.set(key, merged);
+              },
+            };
+          },
+        };
+      },
+    });
+    const fakeDirHandle = makeMockDir();
+
+    const buckets = new Map<string, Map<string, Uint8Array>>([
+      [
+        "shadow-claw-browser-models-test-deploy",
+        new Map([
+          [
+            `${modelUrl}?__sc_meta=1`,
+            new TextEncoder().encode(
+              JSON.stringify({
+                chunks: 1,
+                received: payload.byteLength,
+                total: payload.byteLength,
+                acceptsRanges: true,
+                complete: true,
+              }),
+            ),
+          ],
+          [`${modelUrl}?__sc_chunk=0`, payload],
+        ]),
+      ],
+    ]);
+
+    const originalCaches = (globalThis as any).caches;
+    (globalThis as any).caches = {
+      open: jest.fn(async (name: string) => {
+        if (!buckets.has(name)) buckets.set(name, new Map());
+        const map = buckets.get(name)!;
+        return {
+          keys: async () =>
+            Array.from(map.keys()).map((u) => ({ url: u }) as Request),
+          match: async (req: any) => {
+            const k = typeof req === "string" ? req : req.url;
+            const bytes = map.get(k);
+            if (!bytes) return undefined;
+            return {
+              headers: new Headers({
+                "content-length": String(bytes.byteLength),
+              }),
+              body: new ReadableStream<Uint8Array>({
+                start(c) {
+                  c.enqueue(bytes);
+                  c.close();
+                },
+              }),
+              text: async () => new TextDecoder().decode(bytes),
+              arrayBuffer: async () => bytes.buffer,
+            };
+          },
+          put: async (req: any, resp: any) => {
+            const k = typeof req === "string" ? req : req.url;
+            const ab = await resp.arrayBuffer();
+            map.set(k, new Uint8Array(ab));
+          },
+        };
+      }),
+      delete: jest.fn(async (name: string) => buckets.delete(name)),
+    };
+
+    (getConfig as any).mockImplementation((_db: any, key: string) => {
+      if (key === CONFIG_KEYS.SHARED_MODEL_CACHE_SCOPE) {
+        return Promise.resolve("origin");
+      }
+      if (key === CONFIG_KEYS.SHARED_MODEL_CACHE_DIR_HANDLE) {
+        return Promise.resolve(fakeDirHandle);
+      }
+      return Promise.resolve(undefined);
+    });
+
+    (globalThis as any).showDirectoryPicker = jest
+      .fn<any>()
+      .mockResolvedValue(fakeDirHandle);
+
+    try {
+      const el = new ShadowClawStorage() as any;
+      document.body.appendChild(el);
+      await new Promise((r) => setTimeout(r, 80));
+      await el.updateStorageInfo();
+
+      const root = el.shadowRoot!;
+      const syncBtn = root.querySelector(
+        '[data-action="sync-shared-model-dir"]',
+      ) as HTMLButtonElement;
+      expect(syncBtn.classList.contains("hidden")).toBe(false);
+
+      // Migrate deployment -> origin
+      await el.onSharedModelCacheOriginToggle(true);
+      expect(
+        buckets
+          .get("shadow-claw-browser-models")
+          ?.has(`${modelUrl}?__sc_chunk=0`),
+      ).toBe(true);
+      expect(buckets.has("shadow-claw-browser-models-test-deploy")).toBe(false);
+
+      // Migrate origin -> deployment without deleting shared origin bucket
+      await el.onSharedModelCacheOriginToggle(false);
+      expect(buckets.has("shadow-claw-browser-models")).toBe(true);
+      expect(
+        buckets
+          .get("shadow-claw-browser-models-test-deploy")
+          ?.has(`${modelUrl}?__sc_chunk=0`),
+      ).toBe(true);
+
+      // Connecting folder auto-exports cached model
+      await el.handleSelectSharedModelDir();
+      expect(
+        writtenFiles.get("hf/onnx-community/demo/resolve/main/model.onnx"),
+      ).toEqual(payload);
+
+      // Sync button runs again idempotently (0 new, 1 skipped)
+      syncBtn.click();
+      await new Promise((r) => setTimeout(r, 30));
+      expect(showSuccess).toHaveBeenCalledWith(
+        "0 model files synced (1 already present)",
+        3500,
+      );
+
+      document.body.removeChild(el);
+    } finally {
+      (globalThis as any).caches = originalCaches;
+      delete (globalThis as any).showDirectoryPicker;
+      delete (globalThis as any).__SHADOWCLAW_DEPLOY_ID__;
+    }
+  });
 });

@@ -96,6 +96,8 @@ Pre-rendered HTML and Markdown pages automatically run through the image optimiz
 
 In production mode (`--prod`), the build enables Rolldown JS/CSS minification and pre-compresses all static distribution assets into sibling `.br` (Brotli) and `.gz` (Gzip) files (`precompressAssets`) for zero-overhead static server delivery.
 
+Both `shadow-claw build` and `shadow-claw dev` publish the compiled runtime library modules into `<basePath>lib/` and inject a local `<script type="importmap" data-shadow-claw-importmap="local">` into `index.html` and pre-rendered pages (plus matching importmap fallbacks into preview iframe `srcdoc` HTML), enabling template scripts and `node --test` suites to import `shadow-claw/*` subpaths directly with zero build step.
+
 When syndication feeds are enabled (`feed: { enabled: true }` or `feed: true` in `shadow-claw.config.json` or via custom `feedPath`), the build automatically generates RSS 2.0 (`feed/rss.xml`), Atom 1.0 (`feed/atom/atom.xml`), and RDF 1.0 (`feed/rdf/index.xml`) feeds, companion HTML redirect helpers (`feed/index.html`, `feed/atom/index.html`, `feed/rdf/index.html`), and injects `<link rel="alternate">` autodiscovery tags into `index.html` `<head>`. Custom external feeds can also be copied directly to distribution via `feedPath`.
 
 ### `shadow-claw dev [port]` / `shadow-claw run [port]`
@@ -177,10 +179,11 @@ Runs the headless CLI agent participant—executing the same tool-use loop, prom
 npx shadow-claw agent init [dir]
 npx shadow-claw agent init [dir] --download
 
-# Manage local models (list, download with progress bar, set default, query remote)
+# Manage local models (list, download with progress bar, set default, migrate to shared cache, query remote)
 npx shadow-claw agent model list
 npx shadow-claw agent model download onnx-community/gemma-4-E2B-it-ONNX
 npx shadow-claw agent model set onnx-community/gemma-4-E2B-it-ONNX
+npx shadow-claw agent model migrate [--copy|--link|--dry-run]
 npx shadow-claw agent model remote --query gemma
 
 # Run a one-shot agent prompt against the workspace (streams to stdout)
@@ -220,7 +223,7 @@ npx shadow-claw agent import vercel-labs/agent-skills --skills react-best-practi
 | Subcommand        | Arguments           | Description                                                                                                                                                                                                                                                                                     |
 | :---------------- | :------------------ | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `init`            | `[dir]`             | Initializes workspace directory with `.agents/skills`, `.agents/tools`, `database/`, and default `shadow-claw.config.json`. In interactive TTY environments, prompts for default model and offers immediate prewarm downloading (`--download`).                                                 |
-| `model`, `models` | `[action] [id]`     | Inspects, queries, downloads, or configures local models (`list`, `remote`, `download`, `set`). Defaults to `list`.                                                                                                                                                                             |
+| `model`, `models` | `[action] [id]`     | Inspects, queries, downloads, migrates (`migrate [--copy\|--link\|--dry-run]`), or configures local models (`list`, `remote`, `download`, `set`, `migrate`). Defaults to `list`.                                                                                                                |
 | `run`             | `<prompt>`          | Executes a one-shot agent invocation. Persists messages to SQLite, formats conversation history, runs tool loop, streams output to stdout, and exits. Accepts `-` to read the prompt from stdin, or combines `<prompt>` with piped stdin data.                                                  |
 | `clear`           | none                | Deletes all stored messages for the `--group` conversation (default `server:main`).                                                                                                                                                                                                             |
 | `skills`          | `[action] [args]`   | Also available as top-level `shadow-claw skills`. Lists skills in `.agents/skills/` (flat and `main/`) with `skills-lock.json` provenance (`list`), or manages Open Agent Skills via `add <source>`, `remove <name>`, `find [query]`, `init [name]`, `sync`, `update`, `check`, and `restore`.  |

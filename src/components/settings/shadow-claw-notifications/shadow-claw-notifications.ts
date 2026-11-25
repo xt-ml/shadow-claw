@@ -14,7 +14,7 @@ import { showError, showSuccess } from "../../../ui/toast.js";
 
 import "../../common/shadow-claw-empty-state/shadow-claw-empty-state.js";
 
-import ShadowClawElement from "../../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../../shadow-claw-element.js";
 import shadowClawNotificationsStyles from "./shadow-claw-notifications.css" with { type: "css" };
 import shadowClawNotificationsTemplate from "./shadow-claw-notifications.html" with { type: "html" };
 
@@ -375,4 +375,4 @@ export class ShadowClawNotifications extends ShadowClawElement {
 /**
  * Encode a string safe for use as an HTML attribute value.
  */
-customElements.define(elementName, ShadowClawNotifications);
+defineElement(elementName, ShadowClawNotifications);

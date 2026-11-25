@@ -1,6 +1,6 @@
 {
   "name": "shadow-claw",
-  "version": "1.64.1",
+  "version": "1.65.0",
   "type": "module",
   "license": "AGPL-3.0",
   "description": "ShadowClaw - multi-runtime AI assistant.",
@@ -15,13 +15,25 @@
       "types": "./dist/lib/components/index.d.ts",
       "import": "./dist/lib/components/index.js"
     },
+    "./components/*.js": {
+      "types": "./dist/lib/components/*.d.ts",
+      "import": "./dist/lib/components/*.js"
+    },
     "./components/*": {
       "types": "./dist/lib/components/*.d.ts",
       "import": "./dist/lib/components/*.js"
     },
+    "./signals": {
+      "types": "./dist/lib/utils/signals.d.ts",
+      "import": "./dist/lib/utils/signals.js"
+    },
     "./utils": {
       "types": "./dist/lib/utils/index.d.ts",
       "import": "./dist/lib/utils/index.js"
+    },
+    "./utils/*.js": {
+      "types": "./dist/lib/utils/*.d.ts",
+      "import": "./dist/lib/utils/*.js"
     },
     "./utils/*": {
       "types": "./dist/lib/utils/*.d.ts",
@@ -68,7 +80,8 @@
     "build:clean": "rimraf dist dist-electron",
     "build:cli": "rolldown -c configs/rolldown/rolldown.cli.config.mjs",
     "build:copy:all:assets": "cross-env COPY_ALL_ASSETS=true npm run build",
-    "build:lib": "npm run -s tsc:lib && rolldown -c configs/rolldown/rolldown.lib.config.mjs",
+    "build:lib": "npm run -s tsc:lib && npm run -s rolldown:lib",
+    "rolldown:lib": "rolldown -c configs/rolldown/rolldown.lib.config.mjs",
     "build:pkg:get:meta": "git rev-parse HEAD",
     "build:pkg:meta": "node -e \"import fs from 'node:fs/promises';const m=process.argv[1],f='dist/public/index.html',s=await fs.readFile(f,'utf8');await fs.writeFile(f,s.replace(/<meta\\s+name=\\\"revision\\\"[^>]*>/,'<meta name=\\\"revision\\\" content=\\\"'+m+'\\\" />'));\"",
     "build:prerender-main-memory-false": "cross-env PRERENDER_MAIN_MEMORY=false npm run -s build",

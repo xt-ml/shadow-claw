@@ -395,12 +395,6 @@ export async function createFileSystem(
   await traverse(".");
   const fs = new ShadowClawFileSystem(db, groupId, files, workspacePrefix);
 
-  try {
-    fs.mkdirSync(workspacePrefix, { recursive: true });
-  } catch {
-    // Ignore if workspace root already exists.
-  }
-
   // Ensure empty directories are visible to shell commands (ls/cd/mv destination checks).
   for (const dirPath of [...directories].sort(
     (a, b) => a.split("/").length - b.split("/").length,

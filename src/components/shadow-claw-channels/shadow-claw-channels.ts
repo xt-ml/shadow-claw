@@ -2,7 +2,7 @@ import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-
 import "../settings/shadow-claw-channel-config/shadow-claw-channel-config.js";
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
 
-import ShadowClawElement from "../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../shadow-claw-element.js";
 import shadowClawChannelsStyles from "./shadow-claw-channels.css" with { type: "css" };
 import shadowClawChannelsTemplate from "./shadow-claw-channels.html" with { type: "html" };
 
@@ -44,6 +44,4 @@ export class ShadowClawChannels extends ShadowClawElement {
   }
 }
 
-if (!customElements.get(elementName)) {
-  customElements.define(elementName, ShadowClawChannels);
-}
+defineElement(elementName, ShadowClawChannels);

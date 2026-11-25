@@ -15,6 +15,10 @@ import { isIP } from "node:net";
 
 import type { Request, Response as ExpressResponse } from "express";
 
+import {
+  getAgentfileCacheDir,
+  getLlamafileCacheDir,
+} from "../../cli/utils/model-cache-paths.js";
 import { getFirstHeaderValue } from "../utils/proxy-helpers.js";
 
 import {
@@ -847,62 +851,71 @@ export function createLlamafileManagerService(): LlamafileManagerService {
   ): Promise<
     Array<{ fileName: string; id: string; absolutePath: string; kind?: string }>
   > {
-    const candidateDirs = [
-      path.resolve(__dirname, "../../../assets/cache/llamafile"),
-      path.resolve(__dirname, "../../../../assets/cache/llamafile"),
-      path.resolve(process.cwd(), "assets/cache/llamafile"),
-    ];
+    const candidateDirs = Array.from(
+      new Set([
+        getLlamafileCacheDir(),
+        getAgentfileCacheDir(),
+        path.resolve(__dirname, "../../../assets/cache/llamafile"),
+        path.resolve(__dirname, "../../../../assets/cache/llamafile"),
+        path.resolve(process.cwd(), "assets/cache/llamafile"),
+      ]),
+    );
 
-    let resolvedDir = "";
+    const existingDirs: string[] = [];
     for (const dir of candidateDirs) {
       try {
         const info = await stat(dir);
         if (info.isDirectory()) {
-          resolvedDir = dir;
-
-          break;
+          existingDirs.push(dir);
         }
       } catch {}
     }
 
-    if (!resolvedDir) {
+    if (existingDirs.length === 0) {
       throw new Error(
         `Could not locate assets/cache/llamafile directory. Tried: ${candidateDirs.join(", ")}`,
       );
     }
 
-    const entries = await readdir(resolvedDir, { withFileTypes: true });
+    const byFileName = new Map<
+      string,
+      { fileName: string; id: string; absolutePath: string; kind?: string }
+    >();
 
-    return entries
-      .filter((entry) => {
-        if (!entry.isFile()) return false;
-        return (
-          entry.name.endsWith(LLAMAFILE_EXTENSION) ||
-          entry.name.endsWith(".agentfile")
-        );
-      })
-      .map((entry) => {
+    for (const resolvedDir of existingDirs) {
+      const entries = await readdir(resolvedDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isFile()) continue;
+        if (
+          !entry.name.endsWith(LLAMAFILE_EXTENSION) &&
+          !entry.name.endsWith(".agentfile")
+        ) {
+          continue;
+        }
         const fileName = entry.name;
+        if (byFileName.has(fileName)) {
+          continue;
+        }
         const driver = resolveBinaryDriver(fileName);
         const ext = driver?.extension ?? LLAMAFILE_EXTENSION;
         const id = fileName.endsWith(ext)
           ? fileName.slice(0, -ext.length)
           : fileName;
-
-        return {
+        const record = {
           fileName,
           id,
           kind: driver?.kind ?? "llamafile",
           absolutePath: path.resolve(resolvedDir, fileName),
         };
-      })
-      .filter((entry) => {
-        if (filterKind && entry.kind !== filterKind) {
-          return false;
+        if (!filterKind || record.kind === filterKind) {
+          byFileName.set(fileName, record);
         }
-        return true;
-      })
-      .sort((a, b) => a.fileName.localeCompare(b.fileName));
+      }
+    }
+
+    return Array.from(byFileName.values()).sort((a, b) =>
+      a.fileName.localeCompare(b.fileName),
+    );
   }
 
   async function resolveBinary(model: string): Promise<{

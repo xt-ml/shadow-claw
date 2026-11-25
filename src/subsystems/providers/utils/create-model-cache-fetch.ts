@@ -3,9 +3,17 @@ import { isCacheStorageAvailable } from "./is-cache-storage-available.js";
 import { loadModelStream } from "./load-model-stream.js";
 import { readPartialMeta } from "./read-partial-meta.js";
 import {
+  loadSharedModelCacheConfig,
+  maybeBackfillSharedDir,
+  readFallbackBrowserModel,
+  readModelFromSharedDir,
+  resolveModelCacheName,
+} from "./shared-model-cache.js";
+import {
   DEFAULT_MODEL_CACHE_NAME,
   type ModelCacheOptions,
   type ModelCacheStreamProgressCallback,
+  type SharedModelCacheConfig,
 } from "./types.js";
 
 let activeModelCacheProgressHook: ModelCacheStreamProgressCallback | null =
@@ -27,15 +35,7 @@ export function clearModelCacheProgressHook(): void {
 
 /**
  * Creates a fetch-compatible interceptor function that leverages disk-backed CacheStorage
- * for model weight and resource downloads.
- *
- * Designed to be passed into Transformers.js `(env as any).fetch` and browser AI polyfills.
- *
- * Features:
- * - Range header bypass: Passes Range probes (e.g. `bytes=0-0`) directly to native fetch with `cache: "no-store"`.
- * - Disk-backed chunk caching: Persists weights to CacheStorage in chunks without OPFS quota limits.
- * - Live streaming: Returns streaming Response with Content-Length immediately so progress callbacks update in real-time.
- * - Graceful degradation: Falls back to native fetch on non-GET methods, errors, or when CacheStorage is unavailable.
+ * (plus opt-in cross-origin shared folder and mirror server) for model weights.
  */
 export function createModelCacheFetch(
   nativeFetch: typeof fetch = globalThis.fetch
@@ -44,8 +44,6 @@ export function createModelCacheFetch(
   cacheOptions?: ModelCacheOptions,
   progressCallback?: ModelCacheStreamProgressCallback,
 ): (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> {
-  const cacheName = cacheOptions?.cacheName ?? DEFAULT_MODEL_CACHE_NAME;
-
   return async function modelCacheFetch(
     input: RequestInfo | URL,
     init?: RequestInit,
@@ -88,6 +86,16 @@ export function createModelCacheFetch(
     }
 
     try {
+      const baseConfig = await loadSharedModelCacheConfig();
+      const effectiveConfig: SharedModelCacheConfig = {
+        ...baseConfig,
+        ...(cacheOptions?.sharedConfig || {}),
+      };
+      const cacheName = resolveModelCacheName(
+        cacheOptions?.cacheName ?? DEFAULT_MODEL_CACHE_NAME,
+        effectiveConfig.scope,
+      );
+
       const meta = await readPartialMeta(urlStr, cacheName);
       if (meta?.complete) {
         progressCallback?.(urlStr, meta.received, meta.received, true);
@@ -97,7 +105,11 @@ export function createModelCacheFetch(
           meta.received,
           true,
         );
-        const stream = assembleChunkedStream(urlStr, meta, cacheName);
+        const stream = await maybeBackfillSharedDir(
+          effectiveConfig.dirHandle,
+          urlStr,
+          assembleChunkedStream(urlStr, meta, cacheName),
+        );
         return new Response(stream, {
           status: 200,
           statusText: "OK",
@@ -110,6 +122,67 @@ export function createModelCacheFetch(
         });
       }
 
+      const fallbackHit = await readFallbackBrowserModel(
+        urlStr,
+        cacheOptions?.cacheName ?? DEFAULT_MODEL_CACHE_NAME,
+        effectiveConfig.scope,
+      );
+      if (fallbackHit) {
+        progressCallback?.(
+          urlStr,
+          fallbackHit.received,
+          fallbackHit.received,
+          true,
+        );
+        activeModelCacheProgressHook?.(
+          urlStr,
+          fallbackHit.received,
+          fallbackHit.received,
+          true,
+        );
+        const stream = await maybeBackfillSharedDir(
+          effectiveConfig.dirHandle,
+          urlStr,
+          fallbackHit.stream,
+        );
+        return new Response(stream, {
+          status: 200,
+          statusText: "OK",
+          headers: {
+            "Content-Type": "application/octet-stream",
+            ...(fallbackHit.total != null && fallbackHit.total > 0
+              ? { "Content-Length": String(fallbackHit.total) }
+              : {}),
+          },
+        });
+      }
+
+      if (effectiveConfig.dirHandle) {
+        const sharedHit = await readModelFromSharedDir(
+          effectiveConfig.dirHandle,
+          urlStr,
+        );
+        if (sharedHit) {
+          progressCallback?.(urlStr, sharedHit.size, sharedHit.size, true);
+          activeModelCacheProgressHook?.(
+            urlStr,
+            sharedHit.size,
+            sharedHit.size,
+            true,
+          );
+          return new Response(sharedHit.stream, {
+            status: 200,
+            statusText: "OK",
+            headers: {
+              "Content-Type": "application/octet-stream",
+              ...(sharedHit.size > 0
+                ? { "Content-Length": String(sharedHit.size) }
+                : {}),
+            },
+          });
+        }
+      }
+
       const stream = await loadModelStream(
         urlStr,
         (received, total, complete) => {
@@ -118,8 +191,9 @@ export function createModelCacheFetch(
         },
         init?.signal ?? undefined,
         {
-          cacheName,
           ...(cacheOptions || {}),
+          cacheName,
+          sharedConfig: effectiveConfig,
         },
         nativeFetch,
       );

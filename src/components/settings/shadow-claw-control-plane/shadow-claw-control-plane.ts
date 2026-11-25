@@ -14,7 +14,7 @@ import type { Orchestrator } from "../../../core/orchestrator/orchestrator.js";
 import type { ShadowClawDatabase } from "../../../db/types.js";
 import type { AppDialogOptions } from "../../../ui/types.js";
 
-import ShadowClawElement from "../../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../../shadow-claw-element.js";
 import shadowClawControlPlaneStyles from "./shadow-claw-control-plane.css" with { type: "css" };
 import shadowClawControlPlaneTemplate from "./shadow-claw-control-plane.html" with { type: "html" };
 
@@ -457,6 +457,4 @@ export class ShadowClawControlPlane extends ShadowClawElement {
   }
 }
 
-if (!customElements.get(elementName)) {
-  customElements.define(elementName, ShadowClawControlPlane);
-}
+defineElement(elementName, ShadowClawControlPlane);

@@ -131,6 +131,10 @@ export default {
       transform: {
         "^.+\\.ts$": "<rootDir>/configs/jest/jest-ts-transform.cjs",
       },
+      moduleNameMapper: {
+        "^just-bash$":
+          "<rootDir>/node_modules/just-bash/dist/bundle/browser.js",
+      },
       testMatch: ["<rootDir>/src/shell/shell.integration.test.ts"],
     },
   ],

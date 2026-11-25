@@ -14,10 +14,21 @@ import { resetStorageDirectory } from "../../../storage/storage.js";
 import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { showError, showSuccess, showWarning } from "../../../ui/toast.js";
 import { isTruthyConfigValue } from "../../../utils/parse-boolean-config.js";
+import {
+  clearBrowserModelCaches,
+  exportBrowserModelsToSharedDir,
+  getBrowserModelCacheStats,
+  getSharedModelDirStatus,
+  migrateBrowserModelCache,
+  normalizeSharedModelMirrorUrl,
+  resetSharedModelCacheConfigCache,
+  resetSharedModelCacheDirectory,
+  selectSharedModelCacheDirectory,
+} from "../../../subsystems/providers/utils/shared-model-cache.js";
 
 import type { ShadowClawDatabase } from "../../../db/types.js";
 
-import ShadowClawElement from "../../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../../shadow-claw-element.js";
 import shadowClawStorageStyles from "./shadow-claw-storage.css" with { type: "css" };
 import shadowClawStorageTemplate from "./shadow-claw-storage.html" with { type: "html" };
 
@@ -95,6 +106,54 @@ export class ShadowClawStorage extends ShadowClawElement {
         if (target) {
           void this.onUploadAppendUlidToggle(target.checked);
         }
+      });
+
+    root
+      .querySelector('[data-setting="shared-model-cache-origin-toggle"]')
+      ?.addEventListener("change", (e: Event) => {
+        const target = e.target as HTMLInputElement;
+        if (target) {
+          void this.onSharedModelCacheOriginToggle(target.checked);
+        }
+      });
+
+    root
+      .querySelector('[data-action="select-shared-model-dir"]')
+      ?.addEventListener("click", () => {
+        void this.handleSelectSharedModelDir();
+      });
+
+    root
+      .querySelector('[data-action="sync-shared-model-dir"]')
+      ?.addEventListener("click", () => {
+        void this.handleSyncSharedModelDir();
+      });
+
+    root
+      .querySelector('[data-action="clear-shared-model-dir"]')
+      ?.addEventListener("click", () => {
+        void this.handleClearSharedModelDir();
+      });
+
+    root
+      .querySelector('[data-setting="shared-model-cache-mirror-toggle"]')
+      ?.addEventListener("change", (e: Event) => {
+        const target = e.target as HTMLInputElement;
+        if (target) {
+          void this.onSharedModelCacheMirrorToggle(target.checked);
+        }
+      });
+
+    root
+      .querySelector('[data-action="save-shared-model-cache-url"]')
+      ?.addEventListener("click", () => {
+        void this.handleSaveSharedModelCacheUrl();
+      });
+
+    root
+      .querySelector('[data-action="clear-browser-model-cache"]')
+      ?.addEventListener("click", () => {
+        void this.handleClearBrowserModelCache();
       });
   }
 
@@ -457,12 +516,273 @@ export class ShadowClawStorage extends ShadowClawElement {
           false,
         );
       }
+
+      const [modelScopeVal, mirrorEnabledVal, mirrorUrlVal] = await Promise.all(
+        [
+          getConfig(this.db, CONFIG_KEYS.SHARED_MODEL_CACHE_SCOPE),
+          getConfig(this.db, CONFIG_KEYS.SHARED_MODEL_CACHE_MIRROR_ENABLED),
+          getConfig(this.db, CONFIG_KEYS.SHARED_MODEL_CACHE_URL),
+        ],
+      );
+
+      const resolvedScope =
+        modelScopeVal === "deployment" ? "deployment" : "origin";
+
+      const originToggle = root.querySelector(
+        '[data-setting="shared-model-cache-origin-toggle"]',
+      ) as HTMLInputElement | null;
+      if (originToggle) {
+        originToggle.checked = resolvedScope === "origin";
+      }
+
+      const mirrorToggle = root.querySelector(
+        '[data-setting="shared-model-cache-mirror-toggle"]',
+      ) as HTMLInputElement | null;
+      if (mirrorToggle) {
+        mirrorToggle.checked = isTruthyConfigValue(mirrorEnabledVal, false);
+      }
+
+      const mirrorUrlInput = root.querySelector(
+        '[data-setting="shared-model-cache-url"]',
+      ) as HTMLInputElement | null;
+      if (mirrorUrlInput) {
+        mirrorUrlInput.value =
+          typeof mirrorUrlVal === "string" ? mirrorUrlVal : "";
+      }
+
+      const dirStatus = await getSharedModelDirStatus(this.db);
+      const dirStatusEl = root.querySelector(
+        '[data-info="shared-model-dir-status"]',
+      );
+      const syncDirBtn = root.querySelector(
+        '[data-action="sync-shared-model-dir"]',
+      );
+      const clearDirBtn = root.querySelector(
+        '[data-action="clear-shared-model-dir"]',
+      );
+      if (dirStatusEl) {
+        if (!dirStatus.connected) {
+          dirStatusEl.textContent = "Not connected";
+        } else if (dirStatus.permission === "granted") {
+          dirStatusEl.textContent = `Connected${dirStatus.name ? `: ${dirStatus.name}` : ""}`;
+        } else {
+          dirStatusEl.textContent = `Reconnect required (${dirStatus.name || "folder"})`;
+        }
+      }
+      syncDirBtn?.classList.toggle("hidden", !dirStatus.connected);
+      clearDirBtn?.classList.toggle("hidden", !dirStatus.connected);
+
+      const cacheStats = await getBrowserModelCacheStats(resolvedScope);
+      const cacheStatsEl = root.querySelector(
+        '[data-info="browser-model-cache-stats"]',
+      );
+      if (cacheStatsEl) {
+        cacheStatsEl.textContent = `${this.formatBytes(cacheStats.totalBytes)} cached (${cacheStats.entryCount} ${cacheStats.entryCount === 1 ? "entry" : "entries"})`;
+      }
     } catch (err) {
       console.warn("Failed to update storage info:", err);
     }
   }
+
+  async onSharedModelCacheOriginToggle(shareOrigin: boolean) {
+    if (!this.db) {
+      return;
+    }
+
+    try {
+      const fromScope = shareOrigin ? "deployment" : "origin";
+      const toScope = shareOrigin ? "origin" : "deployment";
+      const migration = await migrateBrowserModelCache(fromScope, toScope, {
+        deleteSource: shareOrigin,
+      });
+
+      const { setConfig } = await import("../../../db/set-config.js");
+      await setConfig(this.db, CONFIG_KEYS.SHARED_MODEL_CACHE_SCOPE, toScope);
+      resetSharedModelCacheConfigCache();
+
+      const migratedSuffix =
+        migration.migratedEntries > 0
+          ? ` (migrated ${migration.migratedEntries} cached entries)`
+          : "";
+      showSuccess(
+        (shareOrigin
+          ? "Browser model cache shared across apps on this domain"
+          : "Browser model cache isolated per site deployment") +
+          migratedSuffix,
+        2500,
+      );
+      await this.updateStorageInfo();
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError(`Error saving model cache scope: ${errorMsg}`, 6000);
+    }
+  }
+
+  async onSharedModelCacheMirrorToggle(enabled: boolean) {
+    if (!this.db) {
+      return;
+    }
+
+    try {
+      const { setConfig } = await import("../../../db/set-config.js");
+      await setConfig(
+        this.db,
+        CONFIG_KEYS.SHARED_MODEL_CACHE_MIRROR_ENABLED,
+        enabled ? "true" : "false",
+      );
+      resetSharedModelCacheConfigCache();
+      showSuccess(
+        enabled
+          ? "Shared Model Cache Mirror enabled"
+          : "Shared Model Cache Mirror disabled",
+        2500,
+      );
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError(`Error saving mirror toggle: ${errorMsg}`, 6000);
+    }
+  }
+
+  async handleSaveSharedModelCacheUrl() {
+    if (!this.db) {
+      return;
+    }
+
+    const root = this.shadowRoot;
+    const input = root?.querySelector(
+      '[data-setting="shared-model-cache-url"]',
+    ) as HTMLInputElement | null;
+    const raw = input?.value?.trim() || "";
+
+    if (raw && !normalizeSharedModelMirrorUrl(raw)) {
+      input?.setAttribute("aria-invalid", "true");
+      showError("Mirror URL must use http:// or https://", 5000);
+      return;
+    }
+
+    input?.removeAttribute("aria-invalid");
+    const normalized = raw ? normalizeSharedModelMirrorUrl(raw) : "";
+    if (input) {
+      input.value = normalized;
+    }
+
+    try {
+      const { setConfig } = await import("../../../db/set-config.js");
+      await setConfig(this.db, CONFIG_KEYS.SHARED_MODEL_CACHE_URL, normalized);
+      resetSharedModelCacheConfigCache();
+      showSuccess(
+        normalized
+          ? "Shared Model Cache Mirror URL saved"
+          : "Shared Model Cache Mirror URL cleared",
+        2500,
+      );
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError(`Error saving mirror URL: ${errorMsg}`, 6000);
+    }
+  }
+
+  async handleSelectSharedModelDir() {
+    if (!this.db) {
+      return;
+    }
+
+    try {
+      const selected = await selectSharedModelCacheDirectory(this.db);
+      if (selected) {
+        const [dirHandle, scopeVal] = await Promise.all([
+          getConfig(this.db, CONFIG_KEYS.SHARED_MODEL_CACHE_DIR_HANDLE),
+          getConfig(this.db, CONFIG_KEYS.SHARED_MODEL_CACHE_SCOPE),
+        ]);
+        const scope = scopeVal === "deployment" ? "deployment" : "origin";
+        let exportSuffix = "";
+        if (dirHandle) {
+          const res = await exportBrowserModelsToSharedDir(dirHandle, scope);
+          if (res.exportedFiles > 0) {
+            exportSuffix = ` (${res.exportedFiles} cached files synced)`;
+          }
+        }
+        showSuccess(`Shared Model Folder connected${exportSuffix}`, 3000);
+        await this.updateStorageInfo();
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError(`Failed to select Shared Model Folder: ${errorMsg}`, 6000);
+    }
+  }
+
+  async handleSyncSharedModelDir() {
+    if (!this.db) {
+      return;
+    }
+
+    try {
+      const [dirHandle, scopeVal] = await Promise.all([
+        getConfig(this.db, CONFIG_KEYS.SHARED_MODEL_CACHE_DIR_HANDLE),
+        getConfig(this.db, CONFIG_KEYS.SHARED_MODEL_CACHE_SCOPE),
+      ]);
+      if (!dirHandle) {
+        showWarning("Choose a Shared Model Folder first.", 3500);
+        return;
+      }
+      const scope = scopeVal === "deployment" ? "deployment" : "origin";
+      const res = await exportBrowserModelsToSharedDir(dirHandle, scope);
+      showSuccess(
+        `${res.exportedFiles} model files synced (${res.skippedFiles} already present)`,
+        3500,
+      );
+      await this.updateStorageInfo();
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError(`Failed to sync cached models: ${errorMsg}`, 6000);
+    }
+  }
+
+  async handleClearSharedModelDir() {
+    if (!this.db) {
+      return;
+    }
+
+    try {
+      await resetSharedModelCacheDirectory(this.db);
+      showSuccess("Shared Model Folder disconnected", 2500);
+      await this.updateStorageInfo();
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError(`Failed to disconnect Shared Model Folder: ${errorMsg}`, 6000);
+    }
+  }
+
+  async handleClearBrowserModelCache() {
+    if (!this.db) {
+      return;
+    }
+
+    const confirmed = await this.requestConfirmation({
+      title: "Clear Browser Model Cache",
+      message: "Remove downloaded AI model weights from browser CacheStorage?",
+      confirmLabel: "Clear Cache",
+      cancelLabel: "Cancel",
+    });
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const scopeVal = await getConfig(
+        this.db,
+        CONFIG_KEYS.SHARED_MODEL_CACHE_SCOPE,
+      );
+      await clearBrowserModelCaches(
+        scopeVal === "deployment" ? "deployment" : "origin",
+      );
+      showSuccess("Browser model cache cleared", 3000);
+      await this.updateStorageInfo();
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError(`Failed to clear browser model cache: ${errorMsg}`, 6000);
+    }
+  }
 }
 
-if (!customElements.get(elementName)) {
-  customElements.define(elementName, ShadowClawStorage);
-}
+defineElement(elementName, ShadowClawStorage);

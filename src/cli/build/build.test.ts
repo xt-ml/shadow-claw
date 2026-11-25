@@ -1202,4 +1202,128 @@ describe("build without and with pages", () => {
       await rm(tempConsumerRoot, { recursive: true, force: true });
     }
   });
+
+  it("publishes local /lib/ runtime bundles and injects base-path-aware importmap in standard consumer builds", async () => {
+    const tempConsumerRoot = await mkdtemp(
+      path.join(os.tmpdir(), "shadow-claw-local-lib-"),
+    );
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+
+    try {
+      await writeFile(
+        path.join(tempConsumerRoot, "shadow-claw.config.json"),
+        JSON.stringify({
+          site: { title: "Local Lib Hub" },
+          branding: { siteUrl: "https://example.com/my-hub/" },
+        }),
+        "utf8",
+      );
+
+      const mainDir = path.join(tempConsumerRoot, "pages/main");
+      await mkdir(mainDir, { recursive: true });
+      await writeFile(path.join(mainDir, "about.md"), "# About\n\nHi.", "utf8");
+      await writeFile(
+        path.join(tempConsumerRoot, "pages/routes.json"),
+        JSON.stringify({
+          routes: {
+            "/pages/main/about.md": { prettyPath: "/about" },
+          },
+        }),
+        "utf8",
+      );
+
+      await runConsumerBuild({
+        contentRoot: tempConsumerRoot,
+        toolchainRoot: tempProjectRoot,
+        isProduction: true,
+        basePath: "/my-hub/",
+        pagesOrigin: "https://example.com/my-hub/",
+        quiet: true,
+        stdio: "pipe",
+      });
+
+      const distDir = path.join(tempConsumerRoot, "dist/public");
+      expect(fs.existsSync(path.join(distDir, "lib/index.js"))).toBe(true);
+      expect(
+        fs.existsSync(
+          path.join(distDir, "lib/components/shadow-claw-element.js"),
+        ),
+      ).toBe(true);
+      expect(
+        fs.existsSync(
+          path.join(distDir, "lib/components/shadow-claw-resize-handle.js"),
+        ),
+      ).toBe(true);
+      expect(
+        fs.existsSync(
+          path.join(distDir, "lib/components/shadow-claw-status-bar.js"),
+        ),
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(distDir, "lib/components/base-styles.js")),
+      ).toBe(true);
+      expect(fs.existsSync(path.join(distDir, "lib/utils/signals.js"))).toBe(
+        true,
+      );
+      expect(
+        fs.existsSync(path.join(distDir, "lib/utils/page-swipe-guard.js")),
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(distDir, "lib/utils/workbench-fullscreen.js")),
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(distDir, "lib/utils/workspace-fs.js")),
+      ).toBe(true);
+      expect(
+        fs.existsSync(path.join(distDir, "lib/utils/tool-adapter-bridge.js")),
+      ).toBe(true);
+
+      const indexHtml = await readFile(
+        path.join(distDir, "index.html"),
+        "utf8",
+      );
+      const importMapIdx = indexHtml.indexOf('<script type="importmap"');
+      const moduleIdx = indexHtml.indexOf('<script type="module"');
+      expect(importMapIdx).toBeGreaterThan(-1);
+      expect(moduleIdx).toBeGreaterThan(-1);
+      expect(importMapIdx).toBeLessThan(moduleIdx);
+      expect(indexHtml).toContain('"shadow-claw": "/my-hub/lib/index.js"');
+      expect(indexHtml).toContain(
+        '"shadow-claw/components/shadow-claw-element": "/my-hub/lib/components/shadow-claw-element.js"',
+      );
+      expect(indexHtml).toContain(
+        '"shadow-claw/components/shadow-claw-resize-handle": "/my-hub/lib/components/shadow-claw-resize-handle.js"',
+      );
+      expect(indexHtml).toContain(
+        '"shadow-claw/components/shadow-claw-status-bar": "/my-hub/lib/components/shadow-claw-status-bar.js"',
+      );
+      expect(indexHtml).toContain(
+        '"shadow-claw/signals": "/my-hub/lib/utils/signals.js"',
+      );
+      expect(indexHtml).toContain(
+        '"shadow-claw/utils/page-swipe-guard": "/my-hub/lib/utils/page-swipe-guard.js"',
+      );
+      expect(indexHtml).toContain(
+        '"shadow-claw/utils/workbench-fullscreen": "/my-hub/lib/utils/workbench-fullscreen.js"',
+      );
+      expect(indexHtml).toContain(
+        '"shadow-claw/utils/workspace-fs": "/my-hub/lib/utils/workspace-fs.js"',
+      );
+      expect(indexHtml).toContain(
+        '"shadow-claw/utils/tool-adapter-bridge": "/my-hub/lib/utils/tool-adapter-bridge.js"',
+      );
+
+      const prettyAboutHtml = await readFile(
+        path.join(distDir, "about/index.html"),
+        "utf8",
+      );
+      expect(prettyAboutHtml).toContain('<script type="importmap"');
+      expect(prettyAboutHtml).toContain(
+        '"shadow-claw/signals": "/my-hub/lib/utils/signals.js"',
+      );
+    } finally {
+      logSpy.mockRestore();
+      await rm(tempConsumerRoot, { recursive: true, force: true });
+    }
+  });
 });

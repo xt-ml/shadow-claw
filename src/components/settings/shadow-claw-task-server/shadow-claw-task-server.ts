@@ -10,7 +10,7 @@ import { showError, showSuccess } from "../../../ui/toast.js";
 import type { Orchestrator } from "../../../core/orchestrator/orchestrator.js";
 import type { ShadowClawDatabase } from "../../../db/types.js";
 
-import ShadowClawElement from "../../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../../shadow-claw-element.js";
 import shadowClawTaskServerStyles from "./shadow-claw-task-server.css" with { type: "css" };
 import shadowClawTaskServerTemplate from "./shadow-claw-task-server.html" with { type: "html" };
 
@@ -155,6 +155,4 @@ export class ShadowClawTaskServer extends ShadowClawElement {
   }
 }
 
-if (!customElements.get(elementName)) {
-  customElements.define(elementName, ShadowClawTaskServer);
-}
+defineElement(elementName, ShadowClawTaskServer);

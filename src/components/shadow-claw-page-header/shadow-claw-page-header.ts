@@ -1,4 +1,4 @@
-import ShadowClawElement from "../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../shadow-claw-element.js";
 import { setSanitizedHtml } from "../../security/trusted-types.js";
 import shadowClawPageHeaderStyles from "./shadow-claw-page-header.css" with { type: "css" };
 import shadowClawPageHeaderTemplate from "./shadow-claw-page-header.html" with { type: "html" };
@@ -189,6 +189,4 @@ export class ShadowClawPageHeader extends ShadowClawElement {
   }
 }
 
-if (!customElements.get(elementName)) {
-  customElements.define(elementName, ShadowClawPageHeader);
-}
+defineElement(elementName, ShadowClawPageHeader);

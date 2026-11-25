@@ -12,7 +12,7 @@ import { resolveAccountAuthMode } from "./utils/resolve-account-auth-mode.js";
 
 import type { ServiceAccount } from "../../../subsystems/accounts/service-accounts.js";
 
-import ShadowClawElement from "../../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../../shadow-claw-element.js";
 
 import "../../common/shadow-claw-actions/shadow-claw-actions.js";
 import "../../common/shadow-claw-card/shadow-claw-card.js";
@@ -962,6 +962,4 @@ export class ShadowClawAccounts extends ShadowClawElement {
   }
 }
 
-if (!customElements.get(elementName)) {
-  customElements.define(elementName, ShadowClawAccounts);
-}
+defineElement(elementName, ShadowClawAccounts);

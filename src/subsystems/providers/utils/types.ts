@@ -30,11 +30,21 @@ export type ModelCacheStreamProgressCallback = (
   complete?: boolean,
 ) => void;
 
+export type SharedModelCacheScope = "origin" | "deployment";
+
+export interface SharedModelCacheConfig {
+  scope: SharedModelCacheScope;
+  mirrorEnabled: boolean;
+  mirrorUrl: string;
+  dirHandle: any | null;
+}
+
 export interface ModelCacheOptions {
   cacheName?: string;
   chunkSize?: number;
   maxAttempts?: number;
   headers?: Record<string, string>;
+  sharedConfig?: Partial<SharedModelCacheConfig>;
 }
 
 export const DEFAULT_MODEL_CACHE_NAME = "shadow-claw-browser-models";

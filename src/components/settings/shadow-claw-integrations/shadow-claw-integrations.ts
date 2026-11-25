@@ -29,7 +29,7 @@ import type {
   EmailCredentialRef,
 } from "../../../subsystems/email/connections.js";
 
-import ShadowClawElement from "../../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../../shadow-claw-element.js";
 import shadowClawIntegrationsStyles from "./shadow-claw-integrations.css" with { type: "css" };
 import shadowClawIntegrationsTemplate from "./shadow-claw-integrations.html" with { type: "html" };
 
@@ -1460,6 +1460,4 @@ export class ShadowClawIntegrations extends ShadowClawElement {
   }
 }
 
-if (!customElements.get(elementName)) {
-  customElements.define(elementName, ShadowClawIntegrations);
-}
+defineElement(elementName, ShadowClawIntegrations);

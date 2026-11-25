@@ -76,10 +76,19 @@ describe("IframeBroadcastProxy (Agnostic Dynamic Proxy)", () => {
       {
         code: 'const res = new BroadcastChannel("dynamic-tool-channel-2");',
       },
+      {
+        channels: ["declarative-tool-channel-3"],
+        execution: {
+          code: 'createToolAdapterBridge({ commandsChannel: "bridge-tool-channel-4", stateChannel: "bridge-state-5" });',
+        },
+      },
     ]);
 
     expect(createdChannels.has("dynamic-tool-channel-1")).toBe(true);
     expect(createdChannels.has("dynamic-tool-channel-2")).toBe(true);
+    expect(createdChannels.has("declarative-tool-channel-3")).toBe(true);
+    expect(createdChannels.has("bridge-tool-channel-4")).toBe(true);
+    expect(createdChannels.has("bridge-state-5")).toBe(true);
 
     proxy.dispose();
   });

@@ -188,3 +188,24 @@ Located at `src/server/services/llamafile-manager.ts`, `src/server/routes/llamaf
   - **I/O Channel Semantics**: Tool execution activity and progress warnings go to `stderr`, while final synthesized answers are streamed or emitted directly to `stdout`.
   - **CLI Flag Translation (`buildAgentfileArgs`)**: Automatically constructs `-p <prompt>`, `-c <ctx_size>`, `-s <system_prompt>`, `--yes` (for unattended runs), `--tools <all|none|list>`, `--tools-runtime <sandbox>`, `--searxng-url <url>`, `--session <file>`, `--trace <file>`, and `--max-iterations <N>`.
   - **Proxy & Provider Integration**: Exposes `PROVIDERS.agentfile` via `/agentfile-proxy/models`, `/agentfile-proxy/tools`, and `/agentfile-proxy/chat/completions`, with seamless fallback to headless in-process execution via `executeNodeLlamafileCompletion`.
+
+---
+
+## Shared Model Caching (Same-Origin, Cross-Origin & Local Disk)
+
+To avoid downloading multi-hundred-megabyte model weights redundantly across template apps and repositories, ShadowClaw provides three layered sharing mechanisms configured via **Settings → Storage (`🧠 Shared Model Cache`)** and CLI/server environment flags (`src/subsystems/providers/utils/shared-model-cache.ts`, `src/server/routes/model-cache.ts`, `src/cli/utils/local-models.ts`):
+
+1. **Same-Origin Browser Cache Sharing (`shared_model_cache_scope`, default `"origin"`):**
+   - Browser `CacheStorage` buckets (`shadow-claw-browser-models` for Transformers.js/Prompt API and `shadow-claw-litertlm-models` for LiteRT-LM) are keyed at the origin level by default, so apps hosted on the same domain (such as every site under `https://xt-ml.github.io/*` or `https://kherrick.github.io/*`) automatically reuse downloaded weights. Setting scope to `"deployment"` isolates buckets per deployment namespace.
+2. **Cross-Domain Zero-Server Shared Local Folder (Chromium Opt-In, `shared_model_cache_dir_handle`):**
+   - Users can choose a persistent directory handle (`showDirectoryPicker({ mode: "readwrite", id: "shadowclaw-shared-models" })`). Both `createModelCacheFetch` and `loadModelStream` check the folder before hitting the network and write downloaded Hugging Face weights through (`hf/<org>/<repo>/resolve/<rev>/<file>`), sharing weights across different domains (`xt-ml.github.io`, `kherrick.github.io`, `localhost`) without running a server.
+3. **Cross-Domain & Local Disk Model Cache Mirror (`/model-cache/hf/*`, Opt-In):**
+   - **Browser Mirror (`shared_model_cache_mirror_enabled` + `shared_model_cache_url`):** When enabled, model fetches try the configured HTTP(S) mirror first (with Chromium Private Network Access `targetAddressSpace: "loopback"` / `"private"` for local/LAN hosts) and transparently fall back to Hugging Face on misses or errors.
+   - **Server Mirror (`src/server/routes/model-cache.ts`):** Exposes `GET /model-cache/status` and `HEAD`/`GET /model-cache/hf/<org>/<repo>/resolve/<rev>/<file>` with HTTP byte `Range` (`206`) support, atomic `.part` upstream fill, and fallback lookup against `getLocalModelCacheDir()` and workspace `assets/cache/transformers.js`.
+   - **Shared CLI Disk Directory (`SHADOWCLAW_SHARED_MODEL_CACHE=true` or `SHADOWCLAW_MODEL_CACHE_DIR`):** Routes `getLocalModelCacheDir`, `getLlamafileCacheDir`, and `getAgentfileCacheDir` into `$XDG_CACHE_HOME/shadow-claw/models` (`~/.cache/shadow-claw/models`) instead of per-repo `assets/cache/`.
+
+### Zero-Redownload Migration Paths
+
+- **Same-Origin Scope Switching (`migrateBrowserModelCache`):** Switching between `"deployment"` and `"origin"` in Settings copies already-cached `CacheStorage` chunks (`shadow-claw-browser-models*` and `shadow-claw-litertlm-models*`) into the target bucket (and cleans up the redundant deployment bucket when moving to `"origin"`), while read paths (`loadModelStream` / `createModelCacheFetch`) also fall back across alternate scope buckets and legacy `transformers-cache`.
+- **Browser Cache → Cross-Domain Shared Folder (`exportBrowserModelsToSharedDir` + Background Backfill):** Connecting a Shared Model Folder automatically exports complete cached models from `CacheStorage` (`📤 Sync Cached Models to Folder` re-runs on demand), and subsequent cache hits backfill any missing files to the folder in the background.
+- **Workspace Disk Cache → Shared Disk Directory (`migrateLocalModelCache` / `shadow-claw agent model migrate`):** Moves, copies (`--copy`), or symlinks (`--link`) existing files from `assets/cache/{transformers.js,llamafile,agentfile,models/hf}` into `~/.cache/shadow-claw/models/` without copying `.part`/`.tmp` files or overwriting non-empty targets, while CLI/server lookups continue checking both shared and repo-local directories.

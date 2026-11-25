@@ -1,0 +1,28 @@
+<template>
+  <footer class="status-bar" part="bar">
+    <div class="status-bar__status" part="status">
+      <slot name="status">
+        <span
+          class="status-bar__message"
+          part="message"
+          role="status"
+          aria-live="polite"
+        ></span>
+      </slot>
+    </div>
+    <div class="status-bar__end">
+      <div class="status-bar__error-region" role="alert" aria-atomic="true">
+        <button
+          type="button"
+          class="status-bar__error"
+          part="error"
+          hidden
+        ></button>
+      </div>
+      <div class="status-bar__metrics" part="metrics">
+        <slot name="metrics"></slot>
+        <slot></slot>
+      </div>
+    </div>
+  </footer>
+</template>

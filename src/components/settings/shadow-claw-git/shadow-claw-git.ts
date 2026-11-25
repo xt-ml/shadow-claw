@@ -15,7 +15,7 @@ import { getDb, type ShadowClawDatabase } from "../../../db/db.js";
 import { detectProvider } from "../../../subsystems/git/credentials.js";
 import { orchestratorStore } from "../../../stores/orchestrator.js";
 
-import ShadowClawElement from "../../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../../shadow-claw-element.js";
 import "../../common/shadow-claw-empty-state/shadow-claw-empty-state.js";
 import "../../common/shadow-claw-actions/shadow-claw-actions.js";
 import "../../common/shadow-claw-card/shadow-claw-card.js";
@@ -1129,6 +1129,4 @@ export class ShadowClawGit extends ShadowClawElement {
   }
 }
 
-if (!customElements.get(elementName)) {
-  customElements.define(elementName, ShadowClawGit);
-}
+defineElement(elementName, ShadowClawGit);

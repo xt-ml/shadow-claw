@@ -17,7 +17,7 @@ import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-
 import "../shadow-claw-dialog/shadow-claw-dialog.js";
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
 
-import ShadowClawElement from "../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../shadow-claw-element.js";
 import shadowClawToolsStyles from "./shadow-claw-tools.css" with { type: "css" };
 import shadowClawToolsTemplate from "./shadow-claw-tools.html" with { type: "html" };
 
@@ -1322,6 +1322,4 @@ export class ShadowClawTools extends ShadowClawElement {
   }
 }
 
-if (!customElements.get(elementName)) {
-  customElements.define(elementName, ShadowClawTools);
-}
+defineElement(elementName, ShadowClawTools);

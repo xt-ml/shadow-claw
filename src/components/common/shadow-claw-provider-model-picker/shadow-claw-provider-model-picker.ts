@@ -1,4 +1,4 @@
-import ShadowClawElement from "../../shadow-claw-element.js";
+import ShadowClawElement, { defineElement } from "../../shadow-claw-element.js";
 import shadowClawProviderModelPickerStyles from "./shadow-claw-provider-model-picker.css" with { type: "css" };
 import shadowClawProviderModelPickerTemplate from "./shadow-claw-provider-model-picker.html" with { type: "html" };
 import { isLikelyInstructionModelId } from "../../settings/shadow-claw-llm/model-ranking.js";
@@ -525,6 +525,4 @@ export class ShadowClawProviderModelPicker extends ShadowClawElement {
   }
 }
 
-if (!customElements.get(elementName)) {
-  customElements.define(elementName, ShadowClawProviderModelPicker);
-}
+defineElement(elementName, ShadowClawProviderModelPicker);

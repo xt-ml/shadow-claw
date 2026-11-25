@@ -43,7 +43,7 @@ src/server/openapi/
     ├── push.ts                 # /push/*
     ├── oauth.ts                # /oauth/*
     ├── integrations.ts         # /integrations/email/*
-    ├── proxies.ts              # /*-proxy/* and /proxy, /git-proxy, /telegram
+    ├── proxies.ts              # /*-proxy/*, /model-cache/status, /model-cache/hf/*, /proxy, /git-proxy, and /telegram
     ├── diagnostics.ts          # /activity-log and /__cspreport
     └── mcp.ts                  # /mcp
 ```

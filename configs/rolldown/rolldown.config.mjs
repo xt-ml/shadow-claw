@@ -612,6 +612,51 @@ const configs = [
       }),
     ]),
   },
+  // Lazy Monaco Editor Host (loaded only when setting is enabled & text file is viewed)
+  {
+    input: "src/components/shadow-claw-file-viewer/monaco/host/monaco-host.ts",
+    output: {
+      dir: "dist/public/assets/monaco",
+      entryFileNames: "monaco-host.js",
+      chunkFileNames: "chunks/[name]-[hash].js",
+      format: "esm",
+      sourcemap: !isProduction,
+      codeSplitting: true,
+      minify: isProduction,
+    },
+    ...commonResolve("browser", [
+      copy({
+        targets: [
+          {
+            src: "src/components/shadow-claw-file-viewer/monaco/host/monaco-host.html",
+            dest: "dist/public/assets/monaco",
+          },
+          {
+            src: "src/components/shadow-claw-file-viewer/monaco/host/monaco-host.css",
+            dest: "dist/public/assets/monaco",
+          },
+          {
+            src: "node_modules/monaco-editor/min/vs/editor/editor.main.css",
+            dest: "dist/public/assets/monaco",
+          },
+        ],
+        copyOnce: true,
+      }),
+    ]),
+  },
+  // Lazy Monaco Workers
+  ...["editor", "json", "css", "html"].map((workerName) => ({
+    input: `src/components/shadow-claw-file-viewer/monaco/host/workers/${workerName}.worker.ts`,
+    output: {
+      dir: "dist/public/assets/monaco/workers",
+      entryFileNames: `${workerName}.worker.js`,
+      format: "esm",
+      sourcemap: !isProduction,
+      codeSplitting: false,
+      minify: isProduction,
+    },
+    ...commonResolve("browser"),
+  })),
   // Server
   {
     input: "src/server/server.ts",
@@ -723,6 +768,14 @@ function rolldownImportAttributes() {
 
     // process files immediately upon discovery
     load(id) {
+      if (id.includes("monaco-editor") && id.endsWith(".css")) {
+        return {
+          code: "",
+          moduleType: "js",
+          map: { mappings: "" },
+        };
+      }
+
       if (id.endsWith(".html")) {
         const rawContent = fs.readFileSync(id, "utf-8");
         const escaped = rawContent.replace(/`/g, "\\`").replace(/\${/g, "\\${");

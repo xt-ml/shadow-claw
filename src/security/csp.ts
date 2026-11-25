@@ -211,7 +211,7 @@ export function buildCspReportOnlyValue(options: CspOptions = {}): string {
 
   if (includeTrustedTypes) {
     directives.push(
-      `trusted-types ${getTrustedTypesPolicyName()} shadowclaw-sandbox dompurify default`,
+      `trusted-types ${getTrustedTypesPolicyName()} shadowclaw-sandbox shadowclaw-monaco dompurify default`,
       "require-trusted-types-for 'script'",
     );
   }

@@ -22,6 +22,7 @@ describe("csp", () => {
     expect(value).toContain("worker-src 'self' blob: data:");
     expect(value).toContain(`trusted-types ${getTrustedTypesPolicyName()}`);
     expect(value).toContain("shadowclaw-sandbox");
+    expect(value).toContain("shadowclaw-monaco");
     expect(value).toContain("dompurify");
     expect(value).toContain("require-trusted-types-for 'script'");
     expect(value).toContain("report-uri /__cspreport");

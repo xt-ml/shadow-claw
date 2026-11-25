@@ -71,6 +71,12 @@ import {
   loadApprovedCustomElementScript,
 } from "../../security/custom-element-security.js";
 import ShadowClawElement from "../shadow-claw-element.js";
+import { MonacoEditorController } from "./monaco/monaco-editor-controller.js";
+import type {
+  MonacoCustomProperties,
+  MonacoThemeName,
+} from "./monaco/types.js";
+import { getMonacoLanguage } from "./monaco/utils/monaco-language.js";
 import shadowClawFileViewerStyles from "./shadow-claw-file-viewer.css" with { type: "css" };
 import shadowClawFileViewerTemplate from "./shadow-claw-file-viewer.html" with { type: "html" };
 
@@ -137,9 +143,16 @@ export class ShadowClawFileViewer extends ShadowClawElement {
   isFullscreenMode: boolean = false;
 
   lastOpenedFileName: string = "";
+  monacoController: MonacoEditorController | null = null;
+  monacoFallbackActive: boolean = false;
+  monacoFileKey: string = "";
   previewFrameWindow: Window | null = null;
   themeObserver: MutationObserver | null = null;
   viewRenderToken: number = 0;
+
+  private boundOnEditorSettingChange = () => {
+    void this.handleEditorSettingChange();
+  };
 
   constructor() {
     super();
@@ -167,11 +180,19 @@ export class ShadowClawFileViewer extends ShadowClawElement {
 
     window.addEventListener("message", this.handleIframeMessage);
     document.addEventListener("fullscreenchange", this.handleFullscreenChange);
+    document.addEventListener(
+      "file-viewer-editor-change",
+      this.boundOnEditorSettingChange,
+    );
 
     this.themeObserver = new MutationObserver((mutations) => {
       for (const m of mutations) {
         if (m.type === "attributes" && m.attributeName === "class") {
           this.syncIframeTheme();
+          if (this.monacoController?.isMounted()) {
+            const { theme, customProperties } = this.collectThemePayload();
+            this.monacoController.setTheme(theme, customProperties);
+          }
         }
       }
     });
@@ -203,10 +224,15 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       "fullscreenchange",
       this.handleFullscreenChange,
     );
+    document.removeEventListener(
+      "file-viewer-editor-change",
+      this.boundOnEditorSettingChange,
+    );
     if (this.themeObserver) {
       this.themeObserver.disconnect();
       this.themeObserver = null;
     }
+    this.disposeMonacoController();
     this.revokeObjectUrl();
   }
 
@@ -356,7 +382,14 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       this.isEditorDirty = false;
       this.editorDraftContent = null;
       this.isFileEditMode = false;
+      if (this.monacoController?.isMounted() && fileViewerStore.file) {
+        this.monacoController.setValue(fileViewerStore.file.content || "");
+        this.monacoController.setReadOnly(true);
+      }
       await this.updateView();
+      if (editBtn instanceof HTMLButtonElement) {
+        editBtn.focus();
+      }
     });
     const editor = root.querySelector(".file-editor");
 
@@ -999,7 +1032,14 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     saveBtn?.classList.add("hidden");
 
     const editorContainer = modal.querySelector(".file-editor-container");
-    editorContainer?.classList.remove("active");
+    editorContainer?.classList.remove(
+      "active",
+      "file-editor-container--monaco",
+    );
+    this.setTextareaInert(editorContainer, false);
+    this.setEditorStatus("");
+    this.disposeMonacoController();
+    this.monacoFileKey = "";
 
     const modalBody = modal.querySelector(".modal-body");
     modalBody?.classList.remove("modal-body--editing");
@@ -1628,8 +1668,9 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     const root = this.shadowRoot;
     const saveBtn = root?.querySelector(".modal-save-btn");
     const editor = root?.querySelector(".file-editor");
+    const hasMonaco = Boolean(this.monacoController?.isMounted());
 
-    if (!(editor instanceof HTMLTextAreaElement)) {
+    if (!hasMonaco && !(editor instanceof HTMLTextAreaElement)) {
       return;
     }
 
@@ -1639,7 +1680,7 @@ export class ShadowClawFileViewer extends ShadowClawElement {
         saveBtn.textContent = "⏳ saving...";
       }
 
-      const newContent = editor.value;
+      const newContent = await this.getEditorValue();
       const filePath =
         file.path ||
         (orchestratorStore.currentPath === "."
@@ -2262,6 +2303,39 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       return;
     }
 
+    const useMonaco = canEdit && (await this.isMonacoEditorEnabled());
+    if (!this.isRenderTokenCurrent(renderToken)) {
+      return;
+    }
+
+    if (useMonaco) {
+      modalBody?.classList.toggle("modal-body--editing", this.isFileEditMode);
+
+      content.classList.add("hidden");
+      editorContainer?.classList.add("active", "file-editor-container--monaco");
+      this.setTextareaInert(editorContainer, true);
+
+      if (editBtn instanceof HTMLButtonElement) {
+        editBtn.setAttribute("aria-pressed", String(this.isFileEditMode));
+        editBtn.setAttribute(
+          "aria-label",
+          this.isFileEditMode ? "Switch to raw text view" : "Edit file",
+        );
+        editBtn.classList.remove("hidden");
+      }
+
+      this.mountOrUpdateMonaco(
+        editorContainer,
+        file,
+        workingFile,
+        !this.isFileEditMode,
+      );
+      return;
+    }
+
+    editorContainer?.classList.remove("file-editor-container--monaco");
+    this.setTextareaInert(editorContainer, false);
+
     if (this.isFileEditMode && canEdit) {
       modalBody?.classList.add("modal-body--editing");
 
@@ -2325,14 +2399,13 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     }
   }
 
-  private syncIframeTheme(): void {
-    if (!this.previewFrameWindow) {
-      return;
-    }
-
+  private collectThemePayload(): {
+    theme: MonacoThemeName;
+    customProperties: MonacoCustomProperties;
+  } {
     const isDark = document.documentElement.classList.contains("dark-mode");
     const styles = getComputedStyle(document.documentElement);
-    const customProperties: Record<string, string> = {};
+    const customProperties: MonacoCustomProperties = {};
 
     for (let i = 0; i < styles.length; i++) {
       const prop = styles[i];
@@ -2341,10 +2414,181 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       }
     }
 
+    return {
+      theme: isDark ? "dark" : "light",
+      customProperties,
+    };
+  }
+
+  private async isMonacoEditorEnabled(): Promise<boolean> {
+    if (this.monacoFallbackActive) {
+      return false;
+    }
+
+    const db = this.db ?? (await getDb());
+    if (!db || typeof (db as any).transaction !== "function") {
+      return false;
+    }
+
+    try {
+      const raw = await getConfig(db, CONFIG_KEYS.FILE_VIEWER_MONACO_ENABLED);
+      return isTruthyConfigValue(raw, false);
+    } catch {
+      return false;
+    }
+  }
+
+  private async getEditorValue(): Promise<string> {
+    if (this.monacoController?.isMounted()) {
+      return this.monacoController.getValue();
+    }
+
+    const editor = this.shadowRoot?.querySelector(".file-editor");
+    if (editor instanceof HTMLTextAreaElement) {
+      return editor.value;
+    }
+
+    return this.editorDraftContent ?? "";
+  }
+
+  private setTextareaInert(
+    editorContainer: Element | null | undefined,
+    inert: boolean,
+  ): void {
+    if (!editorContainer) {
+      return;
+    }
+
+    for (const selector of [".file-editor", ".file-editor-overlay"]) {
+      const el = editorContainer.querySelector(selector);
+      if (el instanceof HTMLElement) {
+        el.inert = inert;
+      }
+    }
+  }
+
+  private setEditorStatus(message: string): void {
+    const statusEl = this.shadowRoot?.querySelector(".file-editor-status");
+    if (statusEl instanceof HTMLElement && statusEl.textContent !== message) {
+      statusEl.textContent = message;
+    }
+  }
+
+  private disposeMonacoController(): void {
+    if (this.monacoController) {
+      this.monacoController.dispose();
+      this.monacoController = null;
+    }
+  }
+
+  private async handleEditorSettingChange(): Promise<void> {
+    if (!fileViewerStore.file || this.hasUnsavedChanges()) {
+      return;
+    }
+
+    const enabled = await this.isMonacoEditorEnabled();
+    if (!enabled) {
+      this.disposeMonacoController();
+      this.monacoFileKey = "";
+    }
+
+    await this.updateView();
+  }
+
+  private mountOrUpdateMonaco(
+    editorContainer: Element | null | undefined,
+    file: any,
+    workingFile: any,
+    readOnly: boolean,
+  ): void {
+    const monacoContainer = editorContainer?.querySelector(
+      ".file-monaco-container",
+    );
+    if (!(monacoContainer instanceof HTMLElement)) {
+      return;
+    }
+
+    if (!this.monacoController) {
+      this.monacoController = new MonacoEditorController({
+        onChange: (value) => {
+          this.editorDraftContent = value;
+          if (!this.isEditorDirty) {
+            this.isEditorDirty = true;
+            void this.updateView();
+          }
+        },
+        onSave: () => {
+          void this.handleSave();
+        },
+        onEscape: () => {
+          void this.requestCloseViewer();
+        },
+        onStatusChange: (status) => {
+          if (status === "loading") {
+            this.setEditorStatus("Loading code editor…");
+          } else if (status === "ready") {
+            this.setEditorStatus("Code editor ready");
+          } else {
+            this.setEditorStatus(
+              "Code editor failed to load; using basic editor.",
+            );
+          }
+        },
+        onFallback: () => {
+          this.monacoFallbackActive = true;
+          this.disposeMonacoController();
+          this.monacoFileKey = "";
+          showError("Code editor failed to load; using basic editor.");
+          this.setEditorStatus(
+            "Code editor failed to load; using basic editor.",
+          );
+          void this.updateView();
+        },
+      });
+    }
+
+    const fileKey = String(file.path || file.name || "");
+    const targetValue =
+      this.isEditorDirty && typeof workingFile?.content === "string"
+        ? workingFile.content
+        : file.content || "";
+    const language = getMonacoLanguage(file.name || "");
+    const { theme, customProperties } = this.collectThemePayload();
+
+    if (!this.monacoController.isMounted() || this.monacoFileKey !== fileKey) {
+      this.monacoFileKey = fileKey;
+      this.monacoController.mount(monacoContainer, {
+        value: targetValue,
+        language,
+        readOnly,
+        theme,
+        customProperties,
+        ariaLabel: `Code editor: ${file.name || "file"}`,
+        fontFamily: customProperties["--shadow-claw-font-mono"] || undefined,
+      });
+    } else {
+      this.monacoController.setReadOnly(readOnly);
+      if (!this.isEditorDirty) {
+        this.monacoController.setValue(targetValue);
+      }
+    }
+
+    if (!readOnly) {
+      this.monacoController.focus();
+    }
+  }
+
+  private syncIframeTheme(): void {
+    if (!this.previewFrameWindow) {
+      return;
+    }
+
+    const { theme, customProperties } = this.collectThemePayload();
+
     this.previewFrameWindow.postMessage(
       {
         type: "shadow-claw-theme-update",
-        theme: isDark ? "dark" : "light",
+        theme,
         customProperties,
       },
       "*",

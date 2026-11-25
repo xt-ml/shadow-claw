@@ -77,7 +77,7 @@ When to look elsewhere:
 
 ## Optional
 
-- [Subsystems](https://xt-ml.github.io/shadow-claw/docs/README.md#subsystems): CLI, control plane, MCP server, backup, Theming & Stylesheets, Shell, VM, git, channels, tools, declarative tools, Remote Tool & Skill Importer, Agent Skills, providers, local models & Hugging Face, built-in AI Task APIs, notifications, Electron, reactive UI, component library, Storybook, modular library exports, shared utilities (including SEO metadata generation), crypto, WebMCP, Web Share Target, and more
+- [Subsystems](https://xt-ml.github.io/shadow-claw/docs/README.md#subsystems): CLI, control plane, MCP server, backup, Theming & Stylesheets, Shell, VM, git, channels, tools, declarative tools, Remote Tool & Skill Importer, Agent Skills, providers, local models & Hugging Face, built-in AI Task APIs, notifications, Electron, reactive UI, component library, Storybook, modular library exports, shared utilities (including SEO metadata generation), crypto, WebMCP, Web Share Target, [Monaco Code Editor](https://xt-ml.github.io/shadow-claw/docs/subsystems/monaco-editor.md), and more
 - [Guides](https://xt-ml.github.io/shadow-claw/docs/README.md#guides): Adding a provider/tool/channel/page/shell command, server development configuration, and publishing to GitHub Pages
 - [Decisions](https://xt-ml.github.io/shadow-claw/docs/README.md#decisions): ADRs explaining bundled TypeScript, Signals, worker-isolated runtime, IndexedDB/OPFS storage, and headless CLI agent participant
 - [e2e/README.md](https://xt-ml.github.io/shadow-claw/e2e/README.md): E2E & integration test architecture

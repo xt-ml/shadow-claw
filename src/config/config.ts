@@ -1091,6 +1091,7 @@ export const CONFIG_KEYS = {
   IMESSAGE_CHAT_IDS: "imessage_chat_ids",
   IMESSAGE_SERVER_URL: "imessage_server_url",
   INTEGRATION_CONNECTIONS: "integration_connections",
+  FILE_VIEWER_MONACO_ENABLED: "file_viewer_monaco_enabled",
   MARKDOWN_FRONTMATTER_CHAT: "markdown_frontmatter_chat",
   MARKDOWN_FRONTMATTER_FILE_VIEWER: "markdown_frontmatter_file_viewer",
   MARKDOWN_FRONTMATTER_PAGES: "markdown_frontmatter_pages",

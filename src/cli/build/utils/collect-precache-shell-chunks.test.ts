@@ -267,5 +267,6 @@ describe("collectPrecacheShellChunks", () => {
       "shared-util-Cc33Dd44.js",
       "shell-dep-Ee55Ff66.js",
     ]);
+    expect(chunks.some((chunk) => chunk.includes("monaco"))).toBe(false);
   });
 });

@@ -16,6 +16,7 @@ module.exports = {
     "**/coverage/**",
     "**/node_modules/**",
     "assets/v86**/**",
+    "assets/monaco/**",
     "index.ts",
     "**service-worker**/**",
     "workbox-*.cjs",
@@ -154,6 +155,27 @@ module.exports = {
 
         expiration: {
           maxEntries: 150,
+          maxAgeSeconds: 30 * 24 * 60 * 60,
+        },
+      },
+    },
+    {
+      // Lazily cache Monaco editor host and language worker assets on demand.
+      urlPattern: ({ url, sameOrigin }) => {
+        if (typeof sameOrigin === "boolean" && !sameOrigin) {
+          return false;
+        }
+
+        return /(?:^|\/)assets\/monaco\//.test(url.pathname);
+      },
+
+      handler: "CacheFirst",
+
+      options: {
+        cacheName: "shadow-claw-monaco-cache",
+
+        expiration: {
+          maxEntries: 120,
           maxAgeSeconds: 30 * 24 * 60 * 60,
         },
       },

@@ -200,6 +200,9 @@ jest.unstable_mockModule("../../db/get-config.js", () => ({
     if (key === "allowed_iframe_host_patterns") {
       return Promise.resolve(undefined);
     }
+    if (key === "file_viewer_monaco_enabled") {
+      return Promise.resolve(undefined);
+    }
     if (key === "override_prerender_skeleton") {
       return Promise.resolve((globalThis as any)._mockOverrideSkeleton);
     }
@@ -916,6 +919,80 @@ describe("shadow-claw-settings", () => {
       "true",
     );
     expect(events).toEqual([{ enabled: true }]);
+  });
+
+  it("renders the Monaco editor toggle unchecked by default with an accessible hint", async () => {
+    const el = new ShadowClawSettings();
+    (el as any).db = {} as any;
+    document.body.appendChild(el);
+    await el.render();
+
+    const toggle = el.shadowRoot?.querySelector<HTMLInputElement>(
+      '[data-setting="file-viewer-monaco-toggle"]',
+    );
+
+    expect(toggle).not.toBeNull();
+    expect(toggle?.type).toBe("checkbox");
+    expect(toggle?.checked).toBe(false);
+
+    const describedBy = toggle?.getAttribute("aria-describedby");
+    expect(describedBy).toBeTruthy();
+    expect(el.shadowRoot?.getElementById(describedBy as string)).not.toBeNull();
+    expect(
+      el.shadowRoot?.querySelector(`label[for="${toggle?.id}"]`)?.textContent,
+    ).toContain("Monaco");
+
+    document.body.removeChild(el);
+  });
+
+  it("handles onFileViewerMonacoToggle, persists, and dispatches event", async () => {
+    (globalThis as any)._mockSetConfig.mockClear();
+
+    const el = new ShadowClawSettings() as any;
+    el.db = {};
+    const events: any[] = [];
+    el.addEventListener("file-viewer-editor-change", (e: any) => {
+      events.push({
+        detail: e.detail,
+        bubbles: e.bubbles,
+        composed: e.composed,
+      });
+    });
+
+    await el.onFileViewerMonacoToggle(true);
+
+    expect((globalThis as any)._mockSetConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      "file_viewer_monaco_enabled",
+      "true",
+    );
+    expect(events).toEqual([
+      { detail: { enabled: true }, bubbles: true, composed: true },
+    ]);
+  });
+
+  it("persists the Monaco toggle when the checkbox changes", async () => {
+    (globalThis as any)._mockSetConfig.mockClear();
+
+    const el = new ShadowClawSettings();
+    (el as any).db = {} as any;
+    document.body.appendChild(el);
+    await el.render();
+
+    const toggle = el.shadowRoot?.querySelector<HTMLInputElement>(
+      '[data-setting="file-viewer-monaco-toggle"]',
+    ) as HTMLInputElement;
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event("change", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect((globalThis as any)._mockSetConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      "file_viewer_monaco_enabled",
+      "true",
+    );
+
+    document.body.removeChild(el);
   });
 
   it("handles onPagesAutoRefreshInputChange and dispatches event", async () => {

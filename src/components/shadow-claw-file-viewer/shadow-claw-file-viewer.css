@@ -507,6 +507,66 @@ pre {
   display: block;
 }
 
+.file-editor-container.file-editor-container--monaco {
+  background-color: transparent;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  min-block-size: 12rem;
+  min-inline-size: 0;
+  overflow: hidden;
+}
+
+.file-editor-container--monaco .file-editor,
+.file-editor-container--monaco .file-editor-overlay {
+  display: none;
+}
+
+.file-monaco-container {
+  display: none;
+  flex: 1;
+  min-block-size: 0;
+  min-inline-size: 0;
+}
+
+.file-editor-container--monaco .file-monaco-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.file-monaco-frame {
+  background: transparent;
+  block-size: 100%;
+  border: 0;
+  display: block;
+  flex: 1;
+  inline-size: 100%;
+  min-block-size: 12rem;
+}
+
+.file-monaco-frame:focus-visible {
+  outline: 0.125rem solid var(--shadow-claw-accent-primary);
+  outline-offset: -0.125rem;
+}
+
+.sr-only {
+  border: 0;
+  clip: rect(0, 0, 0, 0);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+@media (max-width: 640px) {
+  .file-editor-container.file-editor-container--monaco {
+    min-block-size: 50dvh;
+  }
+}
+
 .file-editor {
   background-color: transparent;
   border: 0.0625rem solid var(--shadow-claw-border-color);

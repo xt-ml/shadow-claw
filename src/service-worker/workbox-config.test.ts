@@ -9,6 +9,7 @@ type RuntimeCachingPlugin = {
 
 type WorkboxConfigShape = {
   globPatterns?: string[];
+  globIgnores?: string[];
   navigateFallback?: string;
   navigateFallbackAllowlist?: RegExp[];
   runtimeCaching: Array<{
@@ -392,5 +393,42 @@ describe("workbox runtime caching rules", () => {
         });
       }
     }
+  });
+
+  it("excludes assets/monaco/** from precache and caches it runtime CacheFirst", () => {
+    expect(workboxConfig.globIgnores ?? []).toContain("assets/monaco/**");
+
+    const monacoRule = workboxConfig.runtimeCaching.find(
+      (rule) => rule.options?.cacheName === "shadow-claw-monaco-cache",
+    );
+    expect(monacoRule).toBeDefined();
+    expect(monacoRule?.handler).toBe("CacheFirst");
+
+    expect(
+      monacoRule?.urlPattern({
+        url: new URL("https://example.com/assets/monaco/monaco-host.html"),
+        sameOrigin: true,
+      }),
+    ).toBe(true);
+    expect(
+      monacoRule?.urlPattern({
+        url: new URL(
+          "https://example.com/assets/monaco/workers/json.worker.js",
+        ),
+        sameOrigin: true,
+      }),
+    ).toBe(true);
+    expect(
+      monacoRule?.urlPattern({
+        url: new URL("https://example.com/index.js"),
+        sameOrigin: true,
+      }),
+    ).toBe(false);
+    expect(
+      monacoRule?.urlPattern({
+        url: new URL("https://other.example/assets/monaco/monaco-host.html"),
+        sameOrigin: false,
+      }),
+    ).toBe(false);
   });
 });

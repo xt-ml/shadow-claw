@@ -55,6 +55,51 @@ jest.unstable_mockModule("../../db/db.js", () => ({
   getDb: jest.fn(async () => ({})),
 }));
 
+(globalThis as any)._mockFileViewerGetConfig = jest
+  .fn<any>()
+  .mockResolvedValue(undefined);
+jest.unstable_mockModule("../../db/get-config.js", () => ({
+  getConfig: (...args: any[]) =>
+    (globalThis as any)._mockFileViewerGetConfig(...args),
+}));
+
+const mockMonacoInstances: any[] = [];
+jest.unstable_mockModule("./monaco/monaco-editor-controller.js", () => ({
+  MonacoEditorController: jest.fn().mockImplementation((opts: any = {}) => {
+    let mounted = false;
+    let disposed = false;
+    let value = "";
+    const instance = {
+      options: opts,
+      mount: jest.fn((container: HTMLElement, init: any) => {
+        mounted = true;
+        value = init.value;
+        const fakeFrame = document.createElement("div");
+        fakeFrame.className = "file-monaco-frame";
+        container.replaceChildren(fakeFrame);
+      }),
+      setValue: jest.fn((v: string) => {
+        value = v;
+      }),
+      setReadOnly: jest.fn(),
+      setLanguage: jest.fn(),
+      setTheme: jest.fn(),
+      focus: jest.fn(),
+      getValue: jest.fn(async () => value),
+      getCachedValue: jest.fn(() => value),
+      isMounted: jest.fn(() => mounted && !disposed),
+      isReady: jest.fn(() => mounted && !disposed),
+      isDisposed: jest.fn(() => disposed),
+      dispose: jest.fn(() => {
+        disposed = true;
+        mounted = false;
+      }),
+    };
+    mockMonacoInstances.push(instance);
+    return instance;
+  }),
+}));
+
 jest.unstable_mockModule("highlight.js", () => ({
   default: {
     highlight: jest.fn(() => ({
@@ -84,6 +129,7 @@ const { setSanitizedHtml, toTrustedHtmlPresanitized } =
 const { readGroupFileBytes } =
   await import("../../storage/read-group-file-bytes.js");
 const { writeGroupFile } = await import("../../storage/write-group-file.js");
+const { showError } = await import("../../ui/toast.js");
 const { setAllowedCustomElementHostPatterns } =
   await import("../../security/custom-element-security.js");
 
@@ -3958,6 +4004,243 @@ describe("shadow-claw-file-viewer", () => {
       );
 
       document.body.removeChild(component);
+    });
+  });
+
+  describe("monaco editor integration", () => {
+    const textFile = {
+      name: "diagram.mmd",
+      path: "diagram.mmd",
+      kind: "text",
+      content: "flowchart TD\n  A --> B",
+    };
+
+    async function createComponentWithMonaco(enabled: boolean) {
+      mockMonacoInstances.length = 0;
+      (globalThis as any)._mockFileViewerGetConfig.mockImplementation(
+        async (_db: unknown, key: string) => {
+          if (key === "file_viewer_monaco_enabled") {
+            return enabled ? "true" : "false";
+          }
+          return "true";
+        },
+      );
+
+      const component = new ShadowClawFileViewer() as any;
+      document.body.appendChild(component);
+      await Promise.resolve();
+      await Promise.resolve();
+      component.db = { transaction: jest.fn() };
+      return component;
+    }
+
+    it("keeps the textarea editor when the Monaco setting is off", async () => {
+      const component = await createComponentWithMonaco(false);
+      try {
+        (fileViewerStore as any).file = { ...textFile } as any;
+        component.isFileEditMode = true;
+        await component.updateView();
+
+        expect(mockMonacoInstances.length).toBe(0);
+        const editorContainer = component.shadowRoot?.querySelector(
+          ".file-editor-container",
+        );
+        expect(
+          editorContainer?.classList.contains("file-editor-container--monaco"),
+        ).toBe(false);
+      } finally {
+        (fileViewerStore as any).file = null;
+        document.body.removeChild(component);
+      }
+    });
+
+    it("mounts read-only Monaco in raw view and switches to editable + focused in edit mode", async () => {
+      const component = await createComponentWithMonaco(true);
+      try {
+        (fileViewerStore as any).file = { ...textFile } as any;
+        await component.updateView();
+
+        expect(mockMonacoInstances.length).toBe(1);
+        const inst = mockMonacoInstances[0];
+        expect(inst.mount).toHaveBeenCalledWith(
+          expect.any(HTMLElement),
+          expect.objectContaining({
+            value: textFile.content,
+            language: "mermaid",
+            readOnly: true,
+            ariaLabel: "Code editor: diagram.mmd",
+          }),
+        );
+
+        const editorContainer = component.shadowRoot?.querySelector(
+          ".file-editor-container",
+        );
+        const textarea = component.shadowRoot?.querySelector(
+          ".file-editor",
+        ) as HTMLTextAreaElement;
+        expect(
+          editorContainer?.classList.contains("file-editor-container--monaco"),
+        ).toBe(true);
+        expect(textarea.inert).toBe(true);
+
+        // Switch to edit mode
+        component.isFileEditMode = true;
+        await component.updateView();
+        expect(inst.setReadOnly).toHaveBeenCalledWith(false);
+        expect(inst.focus).toHaveBeenCalled();
+      } finally {
+        (fileViewerStore as any).file = null;
+        document.body.removeChild(component);
+      }
+    });
+
+    it("tracks dirty state, saves via Monaco value, and handles save-request / escape / cancel", async () => {
+      const component = await createComponentWithMonaco(true);
+      try {
+        (fileViewerStore as any).file = { ...textFile } as any;
+        component.isFileEditMode = true;
+        await component.updateView();
+
+        const inst = mockMonacoInstances[0];
+        // Dirty change
+        inst.options.onChange("flowchart TD\n  A --> C");
+        expect(component.isEditorDirty).toBe(true);
+        expect(component.editorDraftContent).toBe("flowchart TD\n  A --> C");
+
+        // Save via handleSave
+        inst.getValue.mockResolvedValueOnce("flowchart TD\n  A --> C");
+        await component.handleSave();
+        expect(writeGroupFile).toHaveBeenCalledWith(
+          expect.anything(),
+          orchestratorStore.activeGroupId,
+          "diagram.mmd",
+          "flowchart TD\n  A --> C",
+        );
+        expect(component.isEditorDirty).toBe(false);
+
+        // Cancel returns focus to Edit button and resets Monaco content
+        inst.options.onChange("unsaved");
+        component.isFileEditMode = true;
+        await component.updateView();
+        const editBtn = component.shadowRoot?.querySelector(
+          ".modal-edit-btn",
+        ) as HTMLButtonElement;
+        const focusSpy = jest.spyOn(editBtn, "focus");
+        const cancelBtn = component.shadowRoot?.querySelector(
+          ".modal-cancel-btn",
+        ) as HTMLButtonElement;
+        cancelBtn.click();
+        await new Promise((r) => setTimeout(r, 0));
+        expect(component.isEditorDirty).toBe(false);
+        expect(inst.setValue).toHaveBeenCalled();
+        expect(focusSpy).toHaveBeenCalled();
+
+        // Escape triggers requestCloseViewer
+        const closeSpy = jest
+          .spyOn(component, "requestCloseViewer")
+          .mockResolvedValue(true);
+        inst.options.onEscape();
+        expect(closeSpy).toHaveBeenCalledTimes(1);
+      } finally {
+        (fileViewerStore as any).file = null;
+        document.body.removeChild(component);
+      }
+    });
+
+    it("does not mount Monaco for binary or preview mode, and disposes on resetContent", async () => {
+      const component = await createComponentWithMonaco(true);
+      try {
+        (fileViewerStore as any).file = {
+          name: "image.png",
+          kind: "binary",
+          mimeType: "image/png",
+        } as any;
+        await component.updateView();
+        expect(mockMonacoInstances.length).toBe(0);
+
+        (fileViewerStore as any).file = {
+          name: "README.md",
+          kind: "text",
+          content: "# Hi",
+        } as any;
+        component.isFilePreviewMode = true;
+        await component.updateView();
+        expect(mockMonacoInstances.length).toBe(0);
+
+        component.isFilePreviewMode = false;
+        await component.updateView();
+        expect(mockMonacoInstances.length).toBe(1);
+
+        component.resetContent();
+        expect(mockMonacoInstances[0].dispose).toHaveBeenCalledTimes(1);
+      } finally {
+        (fileViewerStore as any).file = null;
+        document.body.removeChild(component);
+      }
+    });
+
+    it("announces status in an aria-live region and falls back to textarea on error", async () => {
+      const component = await createComponentWithMonaco(true);
+      try {
+        (fileViewerStore as any).file = { ...textFile } as any;
+        component.isFileEditMode = true;
+        await component.updateView();
+
+        const statusEl = component.shadowRoot?.querySelector(
+          ".file-editor-status",
+        );
+        expect(statusEl?.getAttribute("role")).toBe("status");
+        expect(statusEl?.getAttribute("aria-live")).toBe("polite");
+
+        const inst = mockMonacoInstances[0];
+        inst.options.onStatusChange("ready");
+        expect(statusEl?.textContent).toContain("ready");
+
+        // Trigger fallback
+        inst.options.onFallback("boom");
+        await new Promise((r) => setTimeout(r, 0));
+
+        expect(showError).toHaveBeenCalledWith(
+          expect.stringContaining("basic editor"),
+        );
+        expect(statusEl?.textContent).toContain("basic editor");
+        const editorContainer = component.shadowRoot?.querySelector(
+          ".file-editor-container",
+        );
+        expect(
+          editorContainer?.classList.contains("file-editor-container--monaco"),
+        ).toBe(false);
+      } finally {
+        (fileViewerStore as any).file = null;
+        document.body.removeChild(component);
+      }
+    });
+
+    it("syncs theme updates and responds to live file-viewer-editor-change events", async () => {
+      const component = await createComponentWithMonaco(true);
+      try {
+        (fileViewerStore as any).file = { ...textFile } as any;
+        await component.updateView();
+
+        const inst = mockMonacoInstances[0];
+        document.documentElement.classList.add("dark-mode");
+        await new Promise((r) => setTimeout(r, 0));
+        expect(inst.setTheme).toHaveBeenCalledWith("dark", expect.any(Object));
+
+        // Live toggle off disposes Monaco when clean
+        (globalThis as any)._mockFileViewerGetConfig.mockResolvedValue("false");
+        document.dispatchEvent(
+          new CustomEvent("file-viewer-editor-change", {
+            detail: { enabled: false },
+          }),
+        );
+        await new Promise((r) => setTimeout(r, 0));
+        expect(inst.dispose).toHaveBeenCalled();
+      } finally {
+        document.documentElement.classList.remove("dark-mode");
+        (fileViewerStore as any).file = null;
+        document.body.removeChild(component);
+      }
     });
   });
 });

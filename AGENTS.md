@@ -53,6 +53,7 @@ ShadowClaw has been significantly deduplicated. Instead of a massive `AGENTS.md`
 | File Backup Subsystem         | [docs/subsystems/backup.md](docs/subsystems/backup.md)                                               |
 | Theming & Stylesheets         | [docs/subsystems/theming.md](docs/subsystems/theming.md)                                             |
 | OpenAPI & Discoverability     | [docs/subsystems/openapi.md](docs/subsystems/openapi.md)                                             |
+| Monaco Code Editor            | [docs/subsystems/monaco-editor.md](docs/subsystems/monaco-editor.md)                                 |
 | Server A2A Protocol (HTTP)    | [docs/decisions/server-a2a-http-binding.md](docs/decisions/server-a2a-http-binding.md)               |
 
 ## Conventions & Guardrails

@@ -290,6 +290,15 @@ export class ShadowClawSettings extends ShadowClawElement {
       });
 
     root
+      .querySelector('[data-setting="file-viewer-monaco-toggle"]')
+      ?.addEventListener("change", (e: Event) => {
+        const target = e.target as HTMLInputElement;
+        if (target) {
+          void this.onFileViewerMonacoToggle(target.checked);
+        }
+      });
+
+    root
       .querySelector('[data-setting="pages-auto-refresh-input"]')
       ?.addEventListener("change", (e: Event) => {
         const target = e.target as HTMLInputElement;
@@ -609,6 +618,39 @@ export class ShadowClawSettings extends ShadowClawElement {
         "Error saving activity log disk logging setting: " + errorMsg,
         6000,
       );
+    }
+  }
+
+  async onFileViewerMonacoToggle(enabled: boolean) {
+    if (!this.db) {
+      return;
+    }
+
+    try {
+      await setConfig(
+        this.db,
+        CONFIG_KEYS.FILE_VIEWER_MONACO_ENABLED,
+        enabled ? "true" : "false",
+      );
+
+      this.dispatchEvent(
+        new CustomEvent("file-viewer-editor-change", {
+          detail: { enabled },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+
+      showSuccess(
+        enabled
+          ? "Monaco code editor enabled for File Viewer"
+          : "Monaco code editor disabled for File Viewer",
+        2500,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+
+      showError(`Failed to update code editor setting: ${message}`);
     }
   }
 
@@ -955,6 +997,19 @@ export class ShadowClawSettings extends ShadowClawElement {
     ) as HTMLInputElement | null;
     if (chatSplitViewToggle) {
       chatSplitViewToggle.checked = chatSplitViewEnabled;
+    }
+
+    const fileViewerMonacoToggle = root.querySelector(
+      '[data-setting="file-viewer-monaco-toggle"]',
+    ) as HTMLInputElement | null;
+    if (fileViewerMonacoToggle) {
+      fileViewerMonacoToggle.checked = isTruthyConfigValue(
+        (await getConfig(
+          this.db,
+          CONFIG_KEYS.FILE_VIEWER_MONACO_ENABLED,
+        )) as unknown,
+        false,
+      );
     }
 
     const pagesAutoRefreshInput = root.querySelector(

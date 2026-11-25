@@ -40,6 +40,7 @@ e2e/
 │ └── task-crud.test.ts # Task CRUD (create, edit, toggle, delete)
 │ └── tasks.test.ts # Task interface and toggle verification
 │ └── file-viewer.test.ts # File viewer component integration coverage
+│ └── file-viewer-monaco.test.ts # Opt-in lazy Monaco editor, mobile layout, theme parity, and fallback coverage
 │ └── share-target.test.ts # Web Share Target import flow
 │ └── orchestrator.test.ts # System integration coverage
 │ └── storage.test.ts # System integration coverage

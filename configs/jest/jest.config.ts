@@ -53,6 +53,7 @@ export default {
         "/cli/",
         "/server/",
         "/notifications/",
+        "shell\\.integration\\.test\\.ts$",
       ],
     },
     {
@@ -117,6 +118,20 @@ export default {
         "^.+\\.ts$": "<rootDir>/configs/jest/jest-ts-transform.cjs",
       },
       testMatch: ["<rootDir>/src/cli/**/*.test.ts"],
+    },
+    {
+      displayName: "shell-integration",
+      rootDir: projectRoot,
+      testEnvironment: "node",
+      setupFilesAfterEnv: ["<rootDir>/configs/jest/jest-setup.ts"],
+      roots: ["<rootDir>/src/shell"],
+      resolver: "<rootDir>/configs/jest/jest-ts-resolver.cjs",
+      coveragePathIgnorePatterns,
+      extensionsToTreatAsEsm: [".ts"],
+      transform: {
+        "^.+\\.ts$": "<rootDir>/configs/jest/jest-ts-transform.cjs",
+      },
+      testMatch: ["<rootDir>/src/shell/shell.integration.test.ts"],
     },
   ],
 };

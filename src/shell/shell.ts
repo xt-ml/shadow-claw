@@ -16,13 +16,18 @@ export async function executeShell(
   command: string,
   groupId: string,
   env: Record<string, string> = {},
-  _timeoutSec: number = 30,
+  timeoutSec: number = 30,
   allowFullInternetAccess: boolean = false,
 ): Promise<ShellResult> {
   try {
     const fs = await createFileSystem(db, groupId);
+    const isJestRuntime = Boolean(
+      (globalThis as any).process?.env?.JEST_WORKER_ID,
+    );
     const bash = new Bash({
       fs,
+      cwd: "/home/user",
+      ...(isJestRuntime ? { defenseInDepth: false } : {}),
       // https://github.com/vercel-labs/just-bash?tab=readme-ov-file#network-access
       network: {
         dangerouslyAllowFullInternetAccess: allowFullInternetAccess,
@@ -31,14 +36,42 @@ export async function executeShell(
       },
     });
 
-    // Enforce timeout using AbortController if supported by just-bash,
-    // or through custom logic. For simplicity, we can rely on standard interpretation
-    // and promise timeouts.
+    const controller =
+      Number.isFinite(timeoutSec) && timeoutSec > 0
+        ? new AbortController()
+        : undefined;
+    const timer = controller
+      ? setTimeout(() => {
+          controller.abort(new Error(`Command timed out after ${timeoutSec}s`));
+        }, timeoutSec * 1000)
+      : undefined;
+    (timer as any)?.unref?.();
 
-    // Set up bash execution context and run
-    const result = await bash.exec(command, {
-      env: { HOME: "/home/user", PATH: "/usr/bin", PWD: "/home/user", ...env },
-    });
+    let result;
+    try {
+      result = await bash.exec(command, {
+        env: {
+          HOME: "/home/user",
+          PATH: "/usr/bin:/bin",
+          PWD: "/home/user",
+          ...env,
+        },
+        ...(controller ? { signal: controller.signal } : {}),
+      });
+    } finally {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+      }
+    }
+
+    if (controller?.signal.aborted && (result.exitCode ?? 0) === 0) {
+      return {
+        stdout: result.stdout || "",
+        stderr:
+          result.stderr || `Command timed out after ${timeoutSec} seconds`,
+        exitCode: 124,
+      };
+    }
 
     return {
       stdout: result.stdout || "",

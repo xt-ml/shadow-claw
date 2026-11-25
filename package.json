@@ -1,6 +1,6 @@
 {
   "name": "shadow-claw",
-  "version": "1.64.0",
+  "version": "1.64.1",
   "type": "module",
   "license": "AGPL-3.0",
   "description": "ShadowClaw - multi-runtime AI assistant.",
@@ -134,7 +134,7 @@
     "gray-matter": "^4.0.3",
     "imapflow": "^1.7.8",
     "isomorphic-git": "^1.43.1",
-    "just-bash": "^2.14.5",
+    "just-bash": "^3.6.1",
     "marked": "^18.1.0",
     "node-datachannel": "^0.33.4",
     "nodemailer": "^8.0.11",

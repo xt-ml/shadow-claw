@@ -16,6 +16,10 @@ jest.unstable_mockModule("../storage/delete-group-file.js", () => ({
   deleteGroupFile: jest.fn(),
 }));
 
+jest.unstable_mockModule("../storage/delete-group-directory.js", () => ({
+  deleteGroupDirectory: jest.fn(),
+}));
+
 jest.unstable_mockModule("../storage/list-group-files.js", () => ({
   listGroupFiles: jest.fn(() => Promise.resolve([])),
 }));
@@ -29,6 +33,8 @@ const { readGroupFileBytes } =
   await import("../storage/read-group-file-bytes.js");
 const { writeGroupFile } = await import("../storage/write-group-file.js");
 const { deleteGroupFile } = await import("../storage/delete-group-file.js");
+const { deleteGroupDirectory } =
+  await import("../storage/delete-group-directory.js");
 const { createGroupDirectory } =
   await import("../storage/create-group-directory.js");
 const { listGroupFiles } = await import("../storage/list-group-files.js");
@@ -319,6 +325,152 @@ describe("ShadowClawFileSystem", () => {
       await fs.mv("/home/user/file.pdf", "/tmp/file.pdf");
 
       expect(deleteGroupFile).toHaveBeenCalledWith(db, groupId, "file.pdf");
+      expect(writeGroupFile).not.toHaveBeenCalled();
+    });
+
+    it("cleans up source directory via deleteGroupDirectory when moving directory within /home/user", async () => {
+      const fs = new ShadowClawFileSystem(db, groupId, {});
+      let moved = false;
+      const mvSpy = jest
+        .spyOn(InMemoryFs.prototype, "mv")
+        .mockImplementation(async () => {
+          moved = true;
+        });
+      const statSpy = jest
+        .spyOn(InMemoryFs.prototype, "stat")
+        .mockImplementation(async (path: string) => {
+          if (!moved && path === "/home/user/dirA") {
+            return { isDirectory: () => true } as any;
+          }
+          if (moved && path === "/home/user/dirB") {
+            return { isDirectory: () => true } as any;
+          }
+          throw new Error(`ENOENT: ${path}`);
+        });
+
+      await fs.mv("/home/user/dirA", "/home/user/dirB");
+
+      expect(deleteGroupDirectory).toHaveBeenCalledWith(db, groupId, "dirA");
+      expect(deleteGroupFile).not.toHaveBeenCalled();
+      statSpy.mockRestore();
+      mvSpy.mockRestore();
+    });
+
+    it("cleans up source directory via deleteGroupDirectory when moving directory outside /home/user", async () => {
+      const fs = new ShadowClawFileSystem(db, groupId, {});
+      const statSpy = jest
+        .spyOn(InMemoryFs.prototype, "stat")
+        .mockImplementation(async (path: string) => {
+          if (path === "/home/user/dirA") {
+            return { isDirectory: () => true } as any;
+          }
+          throw new Error(`ENOENT: ${path}`);
+        });
+
+      await fs.mv("/home/user/dirA", "/tmp/dirA");
+
+      expect(deleteGroupDirectory).toHaveBeenCalledWith(db, groupId, "dirA");
+      statSpy.mockRestore();
+    });
+  });
+
+  describe("rm directories", () => {
+    it("deletes directory from storage via deleteGroupDirectory when inside /home/user", async () => {
+      const fs = new ShadowClawFileSystem(db, groupId, {});
+      const statSpy = jest
+        .spyOn(InMemoryFs.prototype, "stat")
+        .mockResolvedValue({ isDirectory: () => true } as any);
+
+      await fs.rm("/home/user/empty-dir", { recursive: true });
+
+      expect(deleteGroupDirectory).toHaveBeenCalledWith(
+        db,
+        groupId,
+        "empty-dir",
+      );
+      expect(deleteGroupFile).not.toHaveBeenCalled();
+      statSpy.mockRestore();
+    });
+  });
+
+  describe("createExclusive", () => {
+    it("persists an atomically created empty file inside /home/user", async () => {
+      const fs = new ShadowClawFileSystem(db, groupId, {});
+
+      await (fs as any).createExclusive("/home/user/tmp.abc", { mode: 0o600 });
+
+      expect(writeGroupFile).toHaveBeenCalledWith(
+        db,
+        groupId,
+        "tmp.abc",
+        expect.anything(),
+      );
+    });
+
+    it("persists an atomically created directory inside /home/user", async () => {
+      const fs = new ShadowClawFileSystem(db, groupId, {});
+
+      await (fs as any).createExclusive("/home/user/tmp.dir", {
+        mode: 0o700,
+        directory: true,
+      });
+
+      expect(createGroupDirectory).toHaveBeenCalledWith(db, groupId, "tmp.dir");
+    });
+
+    it("does not persist createExclusive targets outside /home/user", async () => {
+      const fs = new ShadowClawFileSystem(db, groupId, {});
+
+      await (fs as any).createExclusive("/tmp/tmp.123", { mode: 0o600 });
+
+      expect(writeGroupFile).not.toHaveBeenCalled();
+      expect(createGroupDirectory).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("link", () => {
+    it("persists hard-linked destination file inside /home/user", async () => {
+      const fs = new ShadowClawFileSystem(db, groupId, {});
+
+      await fs.link("/home/user/source.txt", "/home/user/hardlink.txt");
+
+      expect(writeGroupFile).toHaveBeenCalledWith(
+        db,
+        groupId,
+        "hardlink.txt",
+        expect.anything(),
+      );
+    });
+
+    it("does not persist hard-linked destination outside /home/user", async () => {
+      const fs = new ShadowClawFileSystem(db, groupId, {});
+
+      await fs.link("/home/user/source.txt", "/tmp/hardlink.txt");
+
+      expect(writeGroupFile).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("path normalization", () => {
+    it("normalizes trailing slashes, dot segments, and parent segments", async () => {
+      const fs = new ShadowClawFileSystem(db, groupId, {});
+
+      await fs.mkdir("/home/user/sub/");
+      expect(createGroupDirectory).toHaveBeenCalledWith(db, groupId, "sub");
+
+      await fs.writeFile("/home/user/./sub/../a.txt", "data");
+      expect(writeGroupFile).toHaveBeenCalledWith(
+        db,
+        groupId,
+        "a.txt",
+        expect.anything(),
+      );
+    });
+
+    it("does not persist paths escaping /home/user via parent traversal", async () => {
+      const fs = new ShadowClawFileSystem(db, groupId, {});
+
+      await fs.writeFile("/home/user/../tmp/escape.txt", "escape");
       expect(writeGroupFile).not.toHaveBeenCalled();
     });
   });

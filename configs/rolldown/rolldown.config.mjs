@@ -151,7 +151,10 @@ export function promptApiFirebaseAiCompatPlugin() {
     load(id) {
       if (id !== moduleId) return null;
       return `export * from "firebase/ai";
-import { AgentPlatformBackend } from "firebase/ai";
+import { AgentPlatformBackend as FirebaseAgentPlatformBackend } from "firebase/ai";
+export class AgentPlatformBackend extends FirebaseAgentPlatformBackend {
+  constructor(location = "us-central1") { super(location); }
+}
 export class VertexAIBackend extends AgentPlatformBackend {
   constructor() { super("us-central1"); }
 }`;
@@ -741,6 +744,7 @@ const configs = [
       "cors",
       "compression",
       "isomorphic-git",
+      "just-bash",
       "@w3c/webmcp-polyfill",
       "canvas",
     ],

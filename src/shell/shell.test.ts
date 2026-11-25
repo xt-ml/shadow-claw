@@ -70,4 +70,25 @@ describe("executeShell", () => {
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toBe("Bash failed");
   });
+
+  it("configures Bash cwd to /home/user", async () => {
+    await executeShell({} as any, "pwd", "group1");
+
+    expect(mockBashCtor).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cwd: "/home/user",
+      }),
+    );
+  });
+
+  it("forwards an AbortSignal to bash.exec when timeoutSec is positive", async () => {
+    await executeShell({} as any, "echo hi", "group1", {}, 5);
+
+    expect(mockExec).toHaveBeenCalledWith(
+      "echo hi",
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+      }),
+    );
+  });
 });

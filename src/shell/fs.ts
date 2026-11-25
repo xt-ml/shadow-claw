@@ -1,10 +1,27 @@
+import * as justBashNamespace from "just-bash";
 import { InMemoryFs } from "just-bash";
 import { readGroupFileBytes } from "../storage/read-group-file-bytes.js";
 import { writeGroupFile } from "../storage/write-group-file.js";
 import { deleteGroupFile } from "../storage/delete-group-file.js";
+import { deleteGroupDirectory } from "../storage/delete-group-directory.js";
 import { listGroupFiles } from "../storage/list-group-files.js";
 import { createGroupDirectory } from "../storage/create-group-directory.js";
 import type { ShadowClawDatabase } from "../db/types.js";
+
+// Look up DefenseInDepthBox dynamically so browser bundles (where it is not
+// exported) compile cleanly while Node runtimes still run storage hooks outside
+// the untrusted async defense context.
+const DEFENSE_BOX_EXPORT = "DefenseInDepthBox";
+
+async function runHostStorageOp<T>(fn: () => Promise<T>): Promise<T> {
+  const ns = justBashNamespace as Record<string, any>;
+  const box = ns[DEFENSE_BOX_EXPORT] ?? ns.default?.[DEFENSE_BOX_EXPORT];
+  if (box && typeof box.runTrustedAsync === "function") {
+    return await box.runTrustedAsync(fn);
+  }
+
+  return await fn();
+}
 
 export class ShadowClawFileSystem extends InMemoryFs {
   private db: ShadowClawDatabase;
@@ -26,118 +43,245 @@ export class ShadowClawFileSystem extends InMemoryFs {
   override async appendFile(
     path: string,
     content: string | Uint8Array,
+    options?: any,
   ): Promise<void> {
-    await super.appendFile(path, content);
+    const normalized = this._normalizePath(path);
+    await super.appendFile(path, content, options);
 
-    const dbPath = this._toDbPath(path);
-    if (dbPath !== null) {
-      const finalContent = await this._readPathContent(path);
-      await writeGroupFile(this.db, this.groupId, dbPath, finalContent);
+    const dbPath = this._toDbPath(normalized);
+    if (dbPath !== null && dbPath !== "") {
+      const finalContent = await this._readPathContent(normalized);
+      await runHostStorageOp(() =>
+        writeGroupFile(this.db, this.groupId, dbPath, finalContent),
+      );
     }
   }
 
-  // cp, mv, etc., might not call writeFile internally in InMemoryFs,
-  // so we hook them just in case to sync the destination.
+  // cp, mv, link, createExclusive, etc. may mutate InMemoryFs directly without
+  // routing through writeFile/mkdir, so hook them to keep workspace storage in sync.
 
   override async cp(src: string, dest: string, options?: any): Promise<void> {
-    await super.cp(src, dest, options);
+    const normalizedSrc = this._normalizePath(src);
+    const normalizedDest = this._normalizePath(dest);
+    let srcIsDir = false;
+    let destIsDir = false;
+    try {
+      srcIsDir = this._isDirectoryStat(await super.stat(normalizedSrc));
+    } catch {}
+    try {
+      destIsDir = this._isDirectoryStat(await super.stat(normalizedDest));
+    } catch {}
 
-    // dest should now exist in memory
-    const dbDest = this._toDbPath(dest);
-    if (dbDest !== null) {
+    let effectiveDest = normalizedDest;
+    if (!srcIsDir && destIsDir) {
+      const base = this._basename(normalizedSrc);
+      if (base) {
+        effectiveDest = this._joinPath(normalizedDest, base);
+      }
+    }
+
+    await super.cp(src, effectiveDest, options);
+
+    const dbDest = this._toDbPath(effectiveDest);
+    if (dbDest !== null && dbDest !== "") {
       try {
-        const stats = await super.stat(dest);
+        const stats = await super.stat(effectiveDest);
         if (!this._isDirectoryStat(stats)) {
-          const finalContent = await this._readPathContent(dest);
-          await writeGroupFile(this.db, this.groupId, dbDest, finalContent);
+          const finalContent = await this._readPathContent(effectiveDest);
+          await runHostStorageOp(() =>
+            writeGroupFile(this.db, this.groupId, dbDest, finalContent),
+          );
         }
       } catch {}
+    }
+  }
+
+  async createExclusive(
+    path: string,
+    options: { mode: number; directory?: boolean },
+  ): Promise<void> {
+    const normalized = this._normalizePath(path);
+    const superCreateExclusive = (InMemoryFs.prototype as any).createExclusive;
+    if (typeof superCreateExclusive === "function") {
+      await superCreateExclusive.call(this, path, options);
+    } else {
+      if (await super.exists(normalized)) {
+        const op = options.directory ? "mkdir" : "open";
+        throw new Error(`EEXIST: file already exists, ${op} '${path}'`);
+      }
+
+      if (options.directory) {
+        await super.mkdir(normalized);
+      } else {
+        await super.writeFile(normalized, new Uint8Array(0));
+      }
+
+      if (typeof super.chmod === "function") {
+        await super.chmod(normalized, options.mode);
+      }
+    }
+
+    const dbPath = this._toDbPath(normalized);
+    if (dbPath !== null && dbPath !== "") {
+      if (options.directory) {
+        await runHostStorageOp(() =>
+          createGroupDirectory(this.db, this.groupId, dbPath),
+        );
+      } else {
+        const finalContent = await this._readPathContent(normalized);
+        await runHostStorageOp(() =>
+          writeGroupFile(this.db, this.groupId, dbPath, finalContent),
+        );
+      }
+    }
+  }
+
+  override async link(existingPath: string, newPath: string): Promise<void> {
+    const normalizedDest = this._normalizePath(newPath);
+    await super.link(existingPath, newPath);
+
+    const dbPath = this._toDbPath(normalizedDest);
+    if (dbPath !== null && dbPath !== "") {
+      const finalContent = await this._readPathContent(normalizedDest);
+      await runHostStorageOp(() =>
+        writeGroupFile(this.db, this.groupId, dbPath, finalContent),
+      );
     }
   }
 
   override async mkdir(path: string, options?: any): Promise<void> {
+    const normalized = this._normalizePath(path);
     await super.mkdir(path, options);
 
-    const dbPath = this._toDbPath(path);
+    const dbPath = this._toDbPath(normalized);
     if (dbPath !== null && dbPath !== "") {
-      await createGroupDirectory(this.db, this.groupId, dbPath);
+      await runHostStorageOp(() =>
+        createGroupDirectory(this.db, this.groupId, dbPath),
+      );
     }
   }
 
   override async mv(src: string, dest: string): Promise<void> {
-    await super.mv(src, dest);
+    const normalizedSrc = this._normalizePath(src);
+    const normalizedDest = this._normalizePath(dest);
+
+    let srcWasDir = false;
+    let destExistedAsDir = false;
+    try {
+      srcWasDir = this._isDirectoryStat(await super.stat(normalizedSrc));
+    } catch {}
+    try {
+      destExistedAsDir = this._isDirectoryStat(
+        await super.stat(normalizedDest),
+      );
+    } catch {}
+
+    let effectiveDest = normalizedDest;
+    if (destExistedAsDir && normalizedDest !== normalizedSrc) {
+      const sourceName = this._basename(normalizedSrc);
+      if (sourceName) {
+        effectiveDest = this._joinPath(normalizedDest, sourceName);
+      }
+    }
+
+    await super.mv(src, effectiveDest);
 
     let persistedDestInWorkspace = false;
-    let resolvedDestPath = dest;
+    const dbDest = this._toDbPath(effectiveDest);
+    const dbSrc = this._toDbPath(normalizedSrc);
 
-    const dbDest = this._toDbPath(dest);
-    if (dbDest !== null) {
-      try {
-        const destStats = await super.stat(dest);
-        if (this._isDirectoryStat(destStats)) {
-          const sourceName = this._basename(src);
-          if (sourceName) {
-            resolvedDestPath = this._joinPath(dest, sourceName);
-          }
-        }
-
-        const finalStats = await super.stat(resolvedDestPath);
-        if (!this._isDirectoryStat(finalStats)) {
-          const dbResolvedDest = this._toDbPath(resolvedDestPath);
-          if (dbResolvedDest !== null) {
-            const finalContent = await this._readPathContent(resolvedDestPath);
-            await writeGroupFile(
-              this.db,
-              this.groupId,
-              dbResolvedDest,
-              finalContent,
-            );
+    if (srcWasDir) {
+      if (dbDest !== null) {
+        try {
+          const finalStats = await super.stat(effectiveDest);
+          if (this._isDirectoryStat(finalStats)) {
+            if (dbDest !== "") {
+              await runHostStorageOp(() =>
+                createGroupDirectory(this.db, this.groupId, dbDest),
+              );
+            }
             persistedDestInWorkspace = true;
           }
+        } catch {}
+      }
+
+      if (dbSrc !== null && dbSrc !== "") {
+        try {
+          if (dbDest === null || persistedDestInWorkspace) {
+            await runHostStorageOp(() =>
+              deleteGroupDirectory(this.db, this.groupId, dbSrc),
+            );
+          }
+        } catch {}
+      }
+      return;
+    }
+
+    if (dbDest !== null && dbDest !== "") {
+      try {
+        const finalStats = await super.stat(effectiveDest);
+        if (!this._isDirectoryStat(finalStats)) {
+          const finalContent = await this._readPathContent(effectiveDest);
+          await runHostStorageOp(() =>
+            writeGroupFile(this.db, this.groupId, dbDest, finalContent),
+          );
+          persistedDestInWorkspace = true;
         }
       } catch {}
     }
 
-    const dbSrc = this._toDbPath(src);
-    if (dbSrc !== null) {
+    if (dbSrc !== null && dbSrc !== "") {
       try {
         if (dbDest === null || persistedDestInWorkspace) {
-          await deleteGroupFile(this.db, this.groupId, dbSrc);
+          await runHostStorageOp(() =>
+            deleteGroupFile(this.db, this.groupId, dbSrc),
+          );
         }
       } catch {}
     }
   }
 
   override async rm(path: string, options?: any): Promise<void> {
+    const normalized = this._normalizePath(path);
+    let wasDirectory = false;
+    try {
+      wasDirectory = this._isDirectoryStat(await super.stat(normalized));
+    } catch {}
+
     await super.rm(path, options);
 
-    const dbPath = this._toDbPath(path);
-    if (dbPath !== null) {
+    const dbPath = this._toDbPath(normalized);
+    if (dbPath !== null && dbPath !== "") {
       try {
-        // Best-effort removal of corresponding storage file.
-        // OPFS handles directories, but we primarily care about saving/deleting files.
-        // deleteGroupFile parses the path and removes the entry inside the directory.
-        await deleteGroupFile(this.db, this.groupId, dbPath);
+        if (wasDirectory) {
+          await runHostStorageOp(() =>
+            deleteGroupDirectory(this.db, this.groupId, dbPath),
+          );
+        } else {
+          await runHostStorageOp(() =>
+            deleteGroupFile(this.db, this.groupId, dbPath),
+          );
+        }
       } catch {
-        // Ignore if it was a directory or didn't exist
+        // Ignore if entry did not exist in persistent storage
       }
     }
   }
-
-  // Hook all methods that mutate file system
 
   override async writeFile(
     path: string,
     content: string | Uint8Array,
     options?: any,
   ): Promise<void> {
+    const normalized = this._normalizePath(path);
     await super.writeFile(path, content, options);
 
-    // Read final state from in-memory and write back to DB
-    const dbPath = this._toDbPath(path);
-    if (dbPath !== null) {
-      const finalContent = await this._readPathContent(path);
-      await writeGroupFile(this.db, this.groupId, dbPath, finalContent);
+    const dbPath = this._toDbPath(normalized);
+    if (dbPath !== null && dbPath !== "") {
+      const finalContent = await this._readPathContent(normalized);
+      await runHostStorageOp(() =>
+        writeGroupFile(this.db, this.groupId, dbPath, finalContent),
+      );
     }
   }
 
@@ -164,13 +308,40 @@ export class ShadowClawFileSystem extends InMemoryFs {
     return `${normalizedDir}/${name}`;
   }
 
+  private _normalizePath(path: string): string {
+    const replaced = path.replace(/\\/g, "/");
+    const isAbsolute = replaced.startsWith("/");
+    const parts = replaced.split("/");
+    const stack: string[] = [];
+
+    for (const part of parts) {
+      if (!part || part === ".") {
+        continue;
+      }
+      if (part === "..") {
+        if (stack.length > 0 && stack[stack.length - 1] !== "..") {
+          stack.pop();
+        } else if (!isAbsolute) {
+          stack.push("..");
+        }
+      } else {
+        stack.push(part);
+      }
+    }
+
+    return isAbsolute ? `/${stack.join("/")}` : stack.join("/") || ".";
+  }
+
   /**
    * Map from absolute fs path to database path.
    */
   private _toDbPath(path: string): string | null {
-    if (path.startsWith(this.workspacePrefix + "/")) {
-      return path.slice(this.workspacePrefix.length + 1);
-    } else if (path === this.workspacePrefix) {
+    const normalized = this._normalizePath(path);
+    const prefix = this._normalizePath(this.workspacePrefix);
+
+    if (normalized.startsWith(prefix + "/")) {
+      return normalized.slice(prefix.length + 1);
+    } else if (normalized === prefix) {
       return "";
     }
 
@@ -193,7 +364,7 @@ export async function createFileSystem(
   db: ShadowClawDatabase,
   groupId: string,
 ): Promise<ShadowClawFileSystem> {
-  const files = {};
+  const files: Record<string, () => Promise<Uint8Array | string>> = {};
   const directories = new Set<string>();
   const workspacePrefix = "/home/user";
 
@@ -210,7 +381,9 @@ export async function createFileSystem(
         const fsPath = `${workspacePrefix}/${filePath}`;
         files[fsPath] = async () => {
           try {
-            return await readGroupFileBytes(db, groupId, filePath);
+            return await runHostStorageOp(() =>
+              readGroupFileBytes(db, groupId, filePath),
+            );
           } catch {
             return "";
           }
@@ -221,6 +394,12 @@ export async function createFileSystem(
 
   await traverse(".");
   const fs = new ShadowClawFileSystem(db, groupId, files, workspacePrefix);
+
+  try {
+    fs.mkdirSync(workspacePrefix, { recursive: true });
+  } catch {
+    // Ignore if workspace root already exists.
+  }
 
   // Ensure empty directories are visible to shell commands (ls/cd/mv destination checks).
   for (const dirPath of [...directories].sort(

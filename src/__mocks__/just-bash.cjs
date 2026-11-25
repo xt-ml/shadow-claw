@@ -14,26 +14,55 @@ class InMemoryFs {
   }
 
   async appendFile() {}
+  async chmod() {}
   async cp() {}
+  async createExclusive() {}
+  async exists() {
+    return false;
+  }
+  getAllPaths() {
+    return [];
+  }
+  async link() {}
+  async lstat() {
+    return { isDirectory: () => false };
+  }
   async mkdir() {}
   mkdirSync() {}
   async mv() {}
-  async rm() {}
-
+  async readdir() {
+    return [];
+  }
+  async readdirWithFileTypes() {
+    return [];
+  }
   async readFile() {
     return "";
   }
-
   async readFileBuffer() {
     return new Uint8Array();
   }
-
+  async readFileBytes() {
+    return "";
+  }
+  async readlink() {
+    return "";
+  }
+  async realpath(path) {
+    return path;
+  }
+  resolvePath(base, path) {
+    return path.startsWith("/") ? path : `${base}/${path}`;
+  }
+  async rm() {}
   async stat() {
     return { isDirectory: () => false };
   }
-
+  async symlink() {}
+  async utimes() {}
   async writeFile() {}
-
+  writeFileLazy() {}
+  writeFileSync() {}
 }
 
 exports.Bash = Bash;

@@ -37,14 +37,27 @@ export async function executeShell(
   const fs = await createFileSystem(db, groupId);
   const bash = new Bash({
     fs,
+    cwd: "/home/user",
     network: {
       dangerouslyAllowFullInternetAccess: allowFullInternetAccess,
       denyPrivateRanges: !allowFullInternetAccess,
     },
   });
 
+  const controller =
+    Number.isFinite(timeoutSec) && timeoutSec > 0
+      ? new AbortController()
+      : undefined;
+  // ...aborts controller after timeoutSec * 1000 ms
+
   const result = await bash.exec(command, {
-    env: { HOME: "/home/user", PATH: "/usr/bin", PWD: "/home/user", ...env },
+    env: {
+      HOME: "/home/user",
+      PATH: "/usr/bin:/bin",
+      PWD: "/home/user",
+      ...env,
+    },
+    ...(controller ? { signal: controller.signal } : {}),
   });
 
   return {
@@ -59,8 +72,8 @@ export async function executeShell(
 
 ShadowClaw uses a custom `ShadowClawFileSystem` (`src/shell/fs.ts`) that extends `just-bash`'s `InMemoryFs`. This bridge ensures modifications to the virtual filesystem are synchronized back to persistent OPFS storage.
 
-- **Read strategy:** On initialization, `createFileSystem` traverses the workspace and prepares file handles. Files are loaded into memory lazily when first accessed.
-- **Write strategy:** Mutating methods like `writeFile`, `appendFile`, `mkdir`, `rm`, `cp`, and `mv` are hooked. Whenever a file is modified in memory, or a directory is created, the bridge flushes the change to the storage backend.
+- **Read strategy:** On initialization, `createFileSystem` traverses the workspace and prepares file handles. Files are loaded into memory lazily when first accessed (via `DefenseInDepthBox.runTrustedAsync` in Node runtimes).
+- **Write strategy:** Mutating methods like `writeFile`, `appendFile`, `mkdir`, `createExclusive` (`mktemp`), `link` (`ln`), `rm`, `cp`, and `mv` (for both files and directories) are hooked and executed within a trusted host storage context. Whenever a file or directory is created, moved, or removed under `/home/user`, the bridge flushes the change to the storage backend.
 
 ### Directory persistence (`mkdir`)
 

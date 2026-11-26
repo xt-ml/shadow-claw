@@ -133,6 +133,20 @@ describe("inject-lib-importmap", () => {
     expect(updated).not.toContain('"/lib/index.js"');
   });
 
+  it('injectLibImportMap inserts before first <link rel="modulepreload"> in <head>', () => {
+    const html = `<!doctype html><html><head><title>Test</title><link rel="modulepreload" href="index.js" /></head><body><script type="module" src="index.js"></script></body></html>`;
+    const imports = {
+      "shadow-claw": "/lib/index.js",
+    };
+
+    const result = injectLibImportMap(html, imports);
+    const importMapIdx = result.indexOf('<script type="importmap"');
+    const preloadIdx = result.indexOf('<link rel="modulepreload"');
+    expect(importMapIdx).toBeGreaterThan(-1);
+    expect(preloadIdx).toBeGreaterThan(-1);
+    expect(importMapIdx).toBeLessThan(preloadIdx);
+  });
+
   it("copyLibToPublic copies JS bundles and excludes .d.ts and production source maps", async () => {
     const tmpRoot = await mkdtemp(path.join(os.tmpdir(), "sc-lib-copy-"));
     const srcLib = path.join(tmpRoot, "dist/lib");

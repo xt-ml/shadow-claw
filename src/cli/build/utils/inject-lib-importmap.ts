@@ -6,7 +6,8 @@ import { insertBeforeClosingHead } from "../../prerender/utils/insert-before-clo
 const HASHED_CHUNK_RE = /-[A-Za-z0-9_-]{8}\.js$/;
 const IMPORT_MAP_SCRIPT_RE =
   /[ \t]*<script\b[^>]*\btype=["']?importmap["']?[^>]*>[\s\S]*?<\/script>\r?\n?/giu;
-const FIRST_MODULE_SCRIPT_RE = /<script\b[^>]*\btype=["']?module["']?[^>]*>/iu;
+const FIRST_MODULE_OR_PRELOAD_RE =
+  /<(?:script\b[^>]*\btype=["']?module["']?|link\b[^>]*\brel=["']?modulepreload["']?)[^>]*>/iu;
 
 function normalizeBasePath(basePath = "/"): string {
   let normalized = (basePath || "/").trim();
@@ -112,7 +113,8 @@ export interface InjectLibImportMapOptions {
 
 /**
  * Injects or replaces `<script type="importmap">` in HTML, always placed before
- * the first `<script type="module">` element in `<head>` (or before `</head>`).
+ * the first `<script type="module">` or `<link rel="modulepreload">` element in
+ * `<head>` (or before `</head>`).
  */
 export function injectLibImportMap(
   html: string,
@@ -135,7 +137,7 @@ export function injectLibImportMap(
 
   const stripped = html.replace(IMPORT_MAP_SCRIPT_RE, "");
 
-  const moduleMatch = FIRST_MODULE_SCRIPT_RE.exec(stripped);
+  const moduleMatch = FIRST_MODULE_OR_PRELOAD_RE.exec(stripped);
   const headCloseIdx = stripped.search(/<\/head>/iu);
 
   if (

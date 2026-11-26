@@ -113,6 +113,11 @@ export interface SiteConfigSettings {
   defaultToolsProfile?: string;
   /** Display name shown as the assistant name in the UI. */
   assistantName?: string;
+  /**
+   * Default custom element tag name (or route-prefix map) that handles `#file=`
+   * URL parameters instead of the built-in `shadow-claw-file-viewer`.
+   */
+  defaultViewerComponents?: string | Record<string, string>;
 }
 
 export interface SiteConfigFeed {

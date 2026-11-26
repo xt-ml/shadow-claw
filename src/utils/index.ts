@@ -25,6 +25,7 @@ export * from "./seo.js";
 export * from "./signals.js";
 export * from "./tool-adapter-bridge.js";
 export * from "./ulid.js";
+export * from "./url-file-param.js";
 export * from "./utils.js";
 export * from "./workbench-fullscreen.js";
 export * from "./workspace-fs.js";

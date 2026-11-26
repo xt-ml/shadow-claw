@@ -8,6 +8,7 @@ import {
   type ShadowClawAppRoute,
 } from "../../../core/app-routes.js";
 import { getSiteConfigDefaultPinnedPage } from "../../../storage/static-main-site.js";
+import { applyFileUrlParam } from "./apply-file-url-param.js";
 import { applyRoute } from "./apply-route.js";
 
 import type { ShadowClawDatabase } from "../../../db/types.js";
@@ -94,13 +95,16 @@ export async function applyRouteFromCurrentLocation(
     }
 
     await applyRoute(shadow, shadowClaw, db, fStore, oStore, defaultRoute);
+    await applyFileUrlParam(shadow, fStore, url);
     return;
   }
 
   const parsed = await parseRouteFromUrlAsync(url, oStore.activeGroupId);
   if (!parsed) {
+    await applyFileUrlParam(shadow, fStore, url);
     return;
   }
 
   await applyRoute(shadow, shadowClaw, db, fStore, oStore, parsed);
+  await applyFileUrlParam(shadow, fStore, url);
 }

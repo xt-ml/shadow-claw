@@ -41,6 +41,34 @@ export class FileViewerStore {
     this._file.set(null);
   }
 
+  /**
+   * Open an in-memory file (e.g. decoded from a `#file=` URL parameter)
+   * without requiring a persisted OPFS entry.
+   */
+  openInMemoryFile(options: {
+    name: string;
+    content: string;
+    path?: string;
+    groupId?: string;
+    mimeType?: string;
+    kind?: "text" | "pdf" | "binary";
+    binaryContent?: Uint8Array | null;
+  }) {
+    const name = options.name || "shared-file.txt";
+    const mimeType =
+      options.mimeType || this.getPreviewBinaryMimeType(name) || "text/plain";
+
+    this._file.set({
+      name,
+      path: options.path,
+      groupId: options.groupId,
+      content: options.content,
+      kind: options.kind || "text",
+      binaryContent: options.binaryContent ?? null,
+      mimeType,
+    });
+  }
+
   get file(): FileInfo | null {
     return this._file.get();
   }

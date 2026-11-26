@@ -4,6 +4,7 @@ import { getConfig } from "../db/get-config.js";
 import { setConfig } from "../db/set-config.js";
 import { DEFAULT_MAIN_GROUP_MEMORY_CONTENT } from "./default-memory-content.mjs";
 import { groupFileExists } from "./group-file-exists.js";
+import { isShadowClawAppShell } from "./is-shadow-claw-app-shell.js";
 import { readGroupFile } from "./read-group-file.js";
 import { writeGroupFile } from "./write-group-file.js";
 
@@ -73,8 +74,7 @@ export async function ensureMainGroupMemory(
           );
           if (
             typeof existingText === "string" &&
-            (existingText.includes("<shadow-claw") ||
-              existingText.includes("data-shadow-claw-dsd"))
+            isShadowClawAppShell(existingText)
           ) {
             await writeGroupFile(
               db,
@@ -101,10 +101,7 @@ export async function ensureMainGroupMemory(
         const res = await fetch(resolveStaticMainGroupMemoryUrl());
         if (res.ok) {
           const text = await res.text();
-          if (
-            !text.includes("<shadow-claw") &&
-            !text.includes("data-shadow-claw-dsd")
-          ) {
+          if (!isShadowClawAppShell(text)) {
             content = text;
           }
         }

@@ -187,6 +187,19 @@ describe("staticMainSite", () => {
     expect(content).toBeNull();
   });
 
+  it("allows template content mentioning <shadow-claw-*> custom elements in fetchStaticMainFile", async () => {
+    const templateHtml =
+      "<shadow-claw-daw-workbench></shadow-claw-daw-workbench>";
+    mockFetch.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ "content-type": "text/html" }),
+      text: async () => templateHtml,
+    });
+
+    const content = await fetchStaticMainFile("index.html");
+    expect(content).toBe(templateHtml);
+  });
+
   it("discovers inline markdown script tags in getStaticMainManifest", async () => {
     const inlineScript = document.createElement("script");
     inlineScript.type = "text/markdown";

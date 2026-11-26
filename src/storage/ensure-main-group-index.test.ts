@@ -77,6 +77,36 @@ describe("ensureMainGroupIndex", () => {
     );
   });
 
+  it("preserves existing index.html containing template <shadow-claw-*> custom elements", async () => {
+    mockGroupFileExists.mockResolvedValue(true);
+    mockReadGroupFile.mockResolvedValue(
+      "<shadow-claw-draw-vector-workbench></shadow-claw-draw-vector-workbench>",
+    );
+
+    const res = await ensureMainGroupIndex({} as any, DEFAULT_GROUP_ID);
+    expect(res).toBe(true);
+    expect(mockWriteGroupFile).not.toHaveBeenCalled();
+  });
+
+  it("fetches and writes static template index.html containing <shadow-claw-*> custom elements", async () => {
+    const templateHtml =
+      "<shadow-claw-draw-vector-workbench></shadow-claw-draw-vector-workbench>";
+    mockGroupFileExists.mockResolvedValue(false);
+    (globalThis as any).fetch = (jest.fn() as any).mockResolvedValue({
+      ok: true,
+      text: async () => templateHtml,
+    });
+
+    const res = await ensureMainGroupIndex({} as any, DEFAULT_GROUP_ID);
+    expect(res).toBe(true);
+    expect(mockWriteGroupFile).toHaveBeenCalledWith(
+      {},
+      DEFAULT_GROUP_ID,
+      "index.html",
+      templateHtml,
+    );
+  });
+
   it("returns false if index.html is suppressed for DEFAULT_GROUP_ID", async () => {
     mockGroupFileExists.mockResolvedValue(false);
     mockGetConfig.mockResolvedValue(true);

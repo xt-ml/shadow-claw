@@ -4,6 +4,7 @@ import { getConfig } from "../db/get-config.js";
 import { setConfig } from "../db/set-config.js";
 import { DEFAULT_MAIN_GROUP_INDEX_CONTENT } from "./default-index-content.mjs";
 import { groupFileExists } from "./group-file-exists.js";
+import { isShadowClawAppShell } from "./is-shadow-claw-app-shell.js";
 import { readGroupFile } from "./read-group-file.js";
 import { writeGroupFile } from "./write-group-file.js";
 
@@ -64,8 +65,7 @@ export async function ensureMainGroupIndex(
           const existingText = await readGroupFile(db, groupId, "index.html");
           if (
             typeof existingText === "string" &&
-            (existingText.includes("<shadow-claw") ||
-              existingText.includes("data-shadow-claw-dsd"))
+            isShadowClawAppShell(existingText)
           ) {
             await writeGroupFile(
               db,
@@ -92,10 +92,7 @@ export async function ensureMainGroupIndex(
         const res = await fetch(resolveStaticMainGroupIndexUrl());
         if (res.ok) {
           const text = await res.text();
-          if (
-            !text.includes("<shadow-claw") &&
-            !text.includes("data-shadow-claw-dsd")
-          ) {
+          if (!isShadowClawAppShell(text)) {
             content = text;
           }
         }

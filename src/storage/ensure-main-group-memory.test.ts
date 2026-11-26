@@ -96,6 +96,36 @@ describe("ensureMainGroupMemory", () => {
     );
   });
 
+  it("preserves existing MEMORY.md containing template <shadow-claw-*> custom elements", async () => {
+    (mockGroupFileExists as any).mockResolvedValue(true);
+    (mockReadGroupFile as any).mockResolvedValue(
+      "Uses `<shadow-claw-draw-vector-workbench>`",
+    );
+
+    await expect(ensureMainGroupMemory({} as any)).resolves.toBe(true);
+
+    expect(mockWriteGroupFile).not.toHaveBeenCalled();
+  });
+
+  it("uses static main/MEMORY.md template even when it mentions <shadow-claw-*> custom elements", async () => {
+    const templateMemory =
+      "## Draw\nUses `<shadow-claw-draw-vector-workbench>`";
+    (mockGroupFileExists as any).mockResolvedValue(false);
+    (globalThis as any).fetch = (jest.fn() as any).mockResolvedValue({
+      ok: true,
+      text: async () => templateMemory,
+    });
+
+    await expect(ensureMainGroupMemory({} as any)).resolves.toBe(true);
+
+    expect(mockWriteGroupFile).toHaveBeenCalledWith(
+      {} as any,
+      DEFAULT_GROUP_ID,
+      DEFAULT_MAIN_GROUP_MEMORY_PATH,
+      templateMemory,
+    );
+  });
+
   it("uses static main/MEMORY.md template when available", async () => {
     (mockGroupFileExists as any).mockResolvedValue(false);
     (globalThis as any).fetch = (jest.fn() as any).mockResolvedValue({

@@ -13,6 +13,7 @@ import { setConfig } from "../db/set-config.js";
 import { deleteAllGroupFiles } from "./delete-all-group-files.js";
 import { deleteGroupDirectory } from "./delete-group-directory.js";
 import { ensureMainGroupIndex } from "./ensure-main-group-index.js";
+import { isShadowClawAppShell } from "./is-shadow-claw-app-shell.js";
 
 import {
   ensureMainGroupMemory,
@@ -184,10 +185,7 @@ export async function fetchStaticMainFile(
         return null;
       }
       const text = await res.text();
-      if (
-        text.includes("<shadow-claw") ||
-        text.includes("data-shadow-claw-dsd")
-      ) {
+      if (isShadowClawAppShell(text)) {
         return null;
       }
       return text;

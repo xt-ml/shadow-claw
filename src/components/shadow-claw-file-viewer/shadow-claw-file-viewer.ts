@@ -33,6 +33,10 @@ import { toolsStore } from "../../stores/tools.js";
 
 import { showError, showSuccess } from "../../ui/toast.js";
 import {
+  buildIframeCustomElementScriptsHtml,
+  buildIframeImportMapHtml,
+} from "../../ui/iframe-importmap.js";
+import {
   getIframeHtmlClass,
   getIframeThemeStyleHtml,
   getIframeThemeStylesheetLink,
@@ -1483,30 +1487,11 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       approvedScripts.length > 0 && hasApprovedCustomElement(safeContent);
 
     const customElementScriptsHtml = shouldInjectCustomElementScripts
-      ? approvedScripts
-          .map(({ src, hasInit }) => {
-            const isExternal =
-              src.startsWith("http://") ||
-              src.startsWith("https://") ||
-              src.startsWith("//");
-            const resolvedSrc = isExternal
-              ? src
-              : applyBasePath(
-                  src.startsWith("/")
-                    ? src
-                    : `/${src.replace(/^pages\/main\//, "")}`,
-                );
-            const tags = [
-              `<script type="module" src="${resolvedSrc}" nonce="${nonce}"></script>`,
-            ];
-            if (hasInit) {
-              tags.push(
-                `<script type="module" nonce="${nonce}">import("${resolvedSrc}").then((m) => { try { if (typeof m?.init === "function") m.init(); } catch (e) { console.error("[ShadowClaw] Error executing init for " + ${JSON.stringify(resolvedSrc)}, e); } }).catch(() => {});</script>`,
-              );
-            }
-            return tags.join("\n");
-          })
-          .join("\n")
+      ? buildIframeCustomElementScriptsHtml(approvedScripts, nonce)
+      : "";
+
+    const iframeImportMapHtml = shouldInjectCustomElementScripts
+      ? buildIframeImportMapHtml({ nonce })
       : "";
 
     const themeStylesheetLink = getIframeThemeStylesheetLink();
@@ -1518,6 +1503,7 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       `<base href="${applyBasePath(getFileRouteDirPath(orchestratorStore.activeGroupId, filePath))}" target="_blank">`,
       searchScriptHtml,
       siteConfigHtml,
+      iframeImportMapHtml,
       `<script nonce="${nonce}">${safeInlineScript(IFRAME_STORAGE_BRIDGE_SCRIPT)}</script>`,
       `<script nonce="${nonce}">${safeInlineScript(FILE_VIEWER_PREVIEW_BRIDGE_SCRIPT)}</script>`,
       getIframeThemeStyleHtml(),

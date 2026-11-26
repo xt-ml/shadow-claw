@@ -6,6 +6,10 @@ import {
 import { rewriteWorkspacePreviewHtml } from "./rewrite-workspace-preview-html.js";
 import { sanitizeSrcdocHtml } from "../../../security/trusted-types.js";
 import {
+  buildIframeCustomElementScriptsHtml,
+  buildIframeImportMapHtml,
+} from "../../../ui/iframe-importmap.js";
+import {
   getIframeHtmlClass,
   getIframeThemeStyleHtml,
   getIframeThemeStylesheetLink,
@@ -107,89 +111,12 @@ export async function buildHtmlPageSrcdoc({
     scopedScripts.length > 0 && hasApprovedCustomElement(safeContent);
 
   const customElementScriptsHtml = shouldInjectCustomElementScripts
-    ? scopedScripts
-        .map(({ src, hasInit }) => {
-          const isExternal =
-            src.startsWith("http://") ||
-            src.startsWith("https://") ||
-            src.startsWith("//");
-          const resolvedSrc = isExternal
-            ? src
-            : applyBasePath(
-                src.startsWith("/")
-                  ? src
-                  : `/${src.replace(/^pages\/main\//, "")}`,
-              );
-          const tags = [
-            `<script type="module" src="${resolvedSrc}" nonce="${nonce}"></script>`,
-          ];
-          if (hasInit) {
-            tags.push(
-              `<script type="module" nonce="${nonce}">import("${resolvedSrc}").then((m) => { try { if (typeof m?.init === "function") m.init(); } catch (e) { console.error("[ShadowClaw] Error executing init for " + ${JSON.stringify(resolvedSrc)}, e); } }).catch(() => {});</script>`,
-            );
-          }
-          return tags.join("\n");
-        })
-        .join("\n")
+    ? buildIframeCustomElementScriptsHtml(scopedScripts, nonce)
     : "";
 
-  let iframeImportMapHtml = "";
-  if (shouldInjectCustomElementScripts) {
-    const cleanOrigin =
-      typeof origin === "string" && /^https?:\/\//i.test(origin)
-        ? origin.replace(/\/+$/, "")
-        : "";
-    if (cleanOrigin) {
-      const libBase = `${cleanOrigin}${applyBasePath("/lib/")}`;
-      const imports: Record<string, string> = {
-        "shadow-claw": `${libBase}index.js`,
-        "shadow-claw/": libBase,
-        "shadow-claw/components": `${libBase}components/index.js`,
-        "shadow-claw/components/": `${libBase}components/`,
-        "shadow-claw/components/shadow-claw-element": `${libBase}components/shadow-claw-element.js`,
-        "shadow-claw/components/base-styles": `${libBase}components/base-styles.js`,
-        "shadow-claw/components/shadow-claw-resize-handle": `${libBase}components/shadow-claw-resize-handle.js`,
-        "shadow-claw/components/shadow-claw-status-bar": `${libBase}components/shadow-claw-status-bar.js`,
-        "shadow-claw/components/shadow-claw-card": `${libBase}components/shadow-claw-card.js`,
-        "shadow-claw/components/shadow-claw-dialog": `${libBase}components/shadow-claw-dialog.js`,
-        "shadow-claw/components/shadow-claw-empty-state": `${libBase}components/shadow-claw-empty-state.js`,
-        "shadow-claw/components/shadow-claw-actions": `${libBase}components/shadow-claw-actions.js`,
-        "shadow-claw/utils": `${libBase}utils/index.js`,
-        "shadow-claw/utils/": `${libBase}utils/`,
-        "shadow-claw/utils/page-swipe-guard": `${libBase}utils/page-swipe-guard.js`,
-        "shadow-claw/utils/workbench-fullscreen": `${libBase}utils/workbench-fullscreen.js`,
-        "shadow-claw/utils/workspace-fs": `${libBase}utils/workspace-fs.js`,
-        "shadow-claw/utils/tool-adapter-bridge": `${libBase}utils/tool-adapter-bridge.js`,
-        "shadow-claw/signals": `${libBase}utils/signals.js`,
-      };
-
-      if (typeof document !== "undefined") {
-        const hostImportMap = document.querySelector(
-          'script[type="importmap"][data-shadow-claw-importmap], script[type="importmap"]',
-        );
-        if (hostImportMap?.textContent) {
-          try {
-            const parsed = JSON.parse(hostImportMap.textContent);
-            if (parsed?.imports && typeof parsed.imports === "object") {
-              for (const [spec, target] of Object.entries(parsed.imports)) {
-                if (typeof target === "string") {
-                  imports[spec] = target.startsWith("/")
-                    ? `${cleanOrigin}${target}`
-                    : target;
-                }
-              }
-            }
-          } catch {}
-        }
-      }
-
-      const serializedMap = JSON.stringify({ imports }).replace(
-        /<\/script/gi,
-        "<\\/script",
-      );
-      iframeImportMapHtml = `<script type="importmap" nonce="${nonce}">${serializedMap}</script>`;
-    }
-  }
+  const iframeImportMapHtml = shouldInjectCustomElementScripts
+    ? buildIframeImportMapHtml({ origin, nonce })
+    : "";
 
   const themeStylesheetLink = getIframeThemeStylesheetLink();
 

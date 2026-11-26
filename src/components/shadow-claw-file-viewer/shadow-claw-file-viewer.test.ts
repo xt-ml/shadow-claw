@@ -130,7 +130,7 @@ const { readGroupFileBytes } =
   await import("../../storage/read-group-file-bytes.js");
 const { writeGroupFile } = await import("../../storage/write-group-file.js");
 const { showError } = await import("../../ui/toast.js");
-const { setAllowedCustomElementHostPatterns } =
+const { setAllowedCustomElementHostPatterns, setAllowedCustomElements } =
   await import("../../security/custom-element-security.js");
 
 describe("shadow-claw-file-viewer", () => {
@@ -752,6 +752,76 @@ describe("shadow-claw-file-viewer", () => {
 
     document.head.removeChild(configScript);
     setAllowedCustomElementHostPatterns([]);
+  });
+
+  it("injects a nonce-gated absolute importmap before module scripts in html iframe srcdoc", async () => {
+    const component = new ShadowClawFileViewer();
+    const configScript = document.createElement("script");
+    configScript.id = "shadow-claw-site-config";
+    configScript.type = "application/json";
+    configScript.textContent = JSON.stringify({
+      customElements: {
+        allowedElements: ["shadow-claw-draw-vector-workbench"],
+        scripts: [
+          {
+            id: "shadow-claw-draw-element",
+            name: "shadow-claw-draw-vector-workbench",
+            src: "./.agents/scripts/shadow-claw-draw-element.js",
+            global: true,
+          },
+          {
+            id: "shadow-claw-draw-adapter",
+            name: "shadow-claw-draw-adapter",
+            src: "./.agents/scripts/shadow-claw-draw-adapter.js",
+            global: true,
+            hasInit: true,
+          },
+        ],
+      },
+    });
+    document.head.appendChild(configScript);
+
+    const hostImportMap = document.createElement("script");
+    hostImportMap.type = "importmap";
+    hostImportMap.setAttribute("data-shadow-claw-importmap", "local");
+    hostImportMap.textContent = JSON.stringify({
+      imports: {
+        "shadow-claw/components/shadow-claw-element":
+          "/lib/components/shadow-claw-element.js",
+        "shadow-claw/utils/tool-adapter-bridge":
+          "/lib/utils/tool-adapter-bridge.js",
+      },
+    });
+    document.head.appendChild(hostImportMap);
+    setAllowedCustomElements(["shadow-claw-draw-vector-workbench"]);
+
+    try {
+      const srcdoc = await component.buildIframePreviewSrcdoc({
+        name: "index.html",
+        path: "pages/main/index.html",
+        content:
+          "<shadow-claw-draw-vector-workbench></shadow-claw-draw-vector-workbench>",
+      });
+
+      const importMapMatch = srcdoc.match(
+        /<script type="importmap" nonce="([a-f0-9]+)">([\s\S]*?)<\/script>/,
+      );
+      expect(importMapMatch).not.toBeNull();
+      const parsedMap = JSON.parse(importMapMatch![2]);
+      expect(
+        parsedMap.imports["shadow-claw/components/shadow-claw-element"],
+      ).toBe(`${window.location.origin}/lib/components/shadow-claw-element.js`);
+      expect(parsedMap.imports["shadow-claw/utils/tool-adapter-bridge"]).toBe(
+        `${window.location.origin}/lib/utils/tool-adapter-bridge.js`,
+      );
+      expect(srcdoc.indexOf('<script type="importmap"')).toBeLessThan(
+        srcdoc.indexOf('<script type="module"'),
+      );
+    } finally {
+      setAllowedCustomElements([]);
+      document.head.removeChild(hostImportMap);
+      document.head.removeChild(configScript);
+    }
   });
 
   it("does not inject theme stylesheet link into html iframe srcdoc when theme stylesheet is not configured", async () => {
